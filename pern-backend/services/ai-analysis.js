@@ -33,7 +33,10 @@ async function callLLM(systemPrompt, userPrompt, options = {}) {
       }),
       signal: controller.signal
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      await response.text().catch(() => {});
+      throw new Error(`HTTP ${response.status}`);
+    }
     const data = await response.json();
     return data.choices?.[0]?.message?.content || '';
   } finally {
@@ -56,7 +59,9 @@ class AIAnalysis {
   async explainAnomaly({ sensor, value, previousValue, deviceId, context }) {
     let history = [];
     try {
-      const rows = await db.getDeviceReadings(deviceId || 'all', 30);
+      const rows = deviceId
+        ? await db.getDeviceReadings(deviceId, 30)
+        : await db.getRecentReadings(30);
       history = rows.filter(r => r.sensors?.[sensor]).map(r => ({
         value: r.sensors[sensor],
         time: r.recorded_at
@@ -98,7 +103,9 @@ Context: ${JSON.stringify(context || {})}`;
   async analyzeTrend({ sensor, deviceId, period }) {
     let history = [];
     try {
-      const rows = await db.getDeviceReadings(deviceId || 'all', 100);
+      const rows = deviceId
+        ? await db.getDeviceReadings(deviceId, 100)
+        : await db.getRecentReadings(100);
       history = rows.filter(r => r.sensors?.[sensor]).map(r => r.sensors[sensor]);
     } catch { /* empty */ }
 
@@ -112,7 +119,7 @@ Context: ${JSON.stringify(context || {})}`;
     const max = Math.max(...recent);
     const variance = recent.reduce((s, v) => s + (v - avg) ** 2, 0) / recent.length;
     const stdDev = Math.sqrt(variance);
-    const cv = (stdDev / avg) * 100;
+    const cv = avg !== 0 ? (stdDev / avg) * 100 : 0;
 
     const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
     const secondHalf = recent.slice(Math.floor(recent.length / 2));

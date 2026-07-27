@@ -17,13 +17,14 @@ export default function SecurityAudit() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
     apiClient.getAuditLogs(filter ? { resourceType: filter } : {}).then((data: any) => {
       setLogs(Array.isArray(data) ? data : []);
     }).catch(() => setLogs([])).finally(() => setLoading(false));
-  }, [filter]);
+  }, [filter, refreshKey]);
 
   const getSeverityColor = (action: string) => {
     if (action.includes('delete') || action.includes('critical')) return 'text-[var(--rose)] bg-[var(--rose-dim)]';
@@ -41,7 +42,7 @@ export default function SecurityAudit() {
         right={
           <div className="flex items-center gap-2">
             <Pill tone="slate">{logs.length} events</Pill>
-            <Btn size="sm" onClick={() => setLoading(true)}>Refresh</Btn>
+            <Btn size="sm" onClick={() => setRefreshKey(k => k + 1)}>Refresh</Btn>
           </div>
         }
       />

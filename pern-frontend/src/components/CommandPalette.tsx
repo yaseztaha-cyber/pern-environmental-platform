@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Monitor, Activity, Bell, Shield, FileText, Settings, Sparkles, Map, Database, X } from 'lucide-react';
 
 interface CommandPaletteProps {
@@ -30,36 +30,61 @@ const COMMAND_ITEMS: CommandItem[] = [
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenProp, onClose: onCloseProp, onNavigate: onNavigateProp }) => {
   const [query, setQuery] = useState('');
   const [internalOpen, setInternalOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Use external props if provided, otherwise manage internally
   const isOpen = isOpenProp !== undefined ? isOpenProp : internalOpen;
-  const handleClose = onCloseProp || (() => setInternalOpen(false));
   const handleNavigate = onNavigateProp || (() => {});
+
+  const handleClose = useCallback(() => {
+    if (onCloseProp) onCloseProp();
+    else setInternalOpen(false);
+  }, [onCloseProp]);
+
+  const filtered = isOpen ? COMMAND_ITEMS.filter(item =>
+    item.title.toLowerCase().includes(query.toLowerCase()) ||
+    item.category.toLowerCase().includes(query.toLowerCase())
+  ) : [];
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [query]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         if (isOpen) handleClose();
-        else setQuery('');
+        else { setQuery(''); setSelectedIndex(0); setInternalOpen(true); }
       }
       if (e.key === 'Escape' && isOpen) {
         handleClose();
       }
+      if (isOpen && filtered.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSelectedIndex(i => (i + 1) % filtered.length);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSelectedIndex(i => (i - 1 + filtered.length) % filtered.length);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const item = filtered[selectedIndex];
+          if (item) {
+            handleNavigate(item.path);
+            handleClose();
+          }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handleClose]);
+  }, [isOpen, handleClose, filtered, selectedIndex, handleNavigate]);
 
   if (!isOpen) return null;
 
-  const filtered = COMMAND_ITEMS.filter(item =>
-    item.title.toLowerCase().includes(query.toLowerCase()) ||
-    item.category.toLowerCase().includes(query.toLowerCase())
-  );
-
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/60 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/60 backdrop-blur-sm animate-fadeIn"
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl w-full max-w-xl overflow-hidden text-slate-100">
         <div className="flex items-center px-4 border-b border-slate-800">
           <Search className="w-5 h-5 text-slate-400 mr-3" />
@@ -82,7 +107,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenPr
               No matching commands or pages found.
             </div>
           ) : (
-            filtered.map((item) => {
+            filtered.map((item, idx) => {
               const Icon = item.icon;
               return (
                 <button
@@ -91,13 +116,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenPr
                     handleNavigate(item.path);
                     handleClose();
                   }}
-                  className="w-full flex items-center px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors text-left group"
+                  className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-left group ${
+                    idx === selectedIndex ? 'bg-slate-800' : 'hover:bg-slate-800'
+                  }`}
                 >
-                  <div className="p-2 bg-slate-800 group-hover:bg-emerald-500/20 text-emerald-400 rounded-lg mr-3">
+                  <div className={`p-2 rounded-lg mr-3 ${
+                    idx === selectedIndex ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-emerald-400 group-hover:bg-emerald-500/20'
+                  }`}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-slate-200 group-hover:text-emerald-300">
+                    <div className={`text-sm font-medium ${
+                      idx === selectedIndex ? 'text-emerald-300' : 'text-slate-200 group-hover:text-emerald-300'
+                    }`}>
                       {item.title}
                     </div>
                   </div>
@@ -111,7 +142,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenPr
         </div>
 
         <div className="px-4 py-2 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500">
-          <span>Press <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300">↑</kbd> <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300">↓</kbd> to navigate</span>
+          <span>Use <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300">Enter</kbd> to select</span>
           <span>PERN Environmental Intelligence</span>
         </div>
       </div>

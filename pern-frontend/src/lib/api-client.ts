@@ -74,6 +74,10 @@ class APIClient {
           if (attempt < maxRetries) continue;
           throw new Error(`API Error: Request timed out after ${timeoutMs}ms`);
         }
+        // Don't retry on auth errors or client errors (4xx)
+        if (err?.message?.includes('401') || err?.message?.includes('API Error: 4')) {
+          throw err;
+        }
         if (attempt < maxRetries) continue;
         throw err;
       }

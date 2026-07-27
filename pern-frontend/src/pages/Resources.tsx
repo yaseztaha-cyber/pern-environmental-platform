@@ -21,6 +21,7 @@ function CodeBlock({ id, language, children }: { id: string; language: string; c
         <span className="text-[10px] text-[var(--text-disabled)] font-mono uppercase">{language}</span>
         <button
           onClick={() => copyText(children)}
+          aria-label="Copy code"
           className="text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors"
           title="Copy"
         >

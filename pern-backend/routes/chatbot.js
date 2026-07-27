@@ -15,8 +15,8 @@ router.use('/chat', rateLimiter(60000, 30));
 
 // Regular (non-streaming) chat
 router.post('/chat', async (req, res) => {
+  const { message, context, sessionId } = req.body || {};
   try {
-    const { message, context, sessionId } = req.body;
 
     const trimmed = (message || '').trim();
     if (!trimmed) {
@@ -30,9 +30,9 @@ router.post('/chat', async (req, res) => {
     const sid = sessionId || crypto.randomUUID();
 
     // Auto-create conversation if new
-    if (sessionId && !await conversationMemory.getHistory(sessionId, 1)) {
+    if (sessionId && (await conversationMemory.getHistory(sessionId, 1)).length === 0) {
       const title = conversationMemory.generateTitle(trimmed);
-      await conversationMemory.create(title, 'anonymous', 'default', undefined);
+      await conversationMemory.create(title, 'anonymous', 'default', undefined, sessionId);
     }
 
     const result = await aiRouter.chat({
@@ -45,7 +45,7 @@ router.post('/chat', async (req, res) => {
 
   } catch (error) {
     logger.error('[Chatbot Route]', { error: error.message });
-    const fallbackReply = generateFallbackReply(req.body.message, req.body.context);
+    const fallbackReply = generateFallbackReply(trimmed || '', context || {});
     res.json({
       response: fallbackReply,
       model: 'fallback',
@@ -57,8 +57,8 @@ router.post('/chat', async (req, res) => {
 
 // SSE Streaming chat
 router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
+  const { message, context, sessionId } = req.body || {};
   try {
-    const { message, context, sessionId } = req.body;
 
     const trimmed = (message || '').trim();
     if (!trimmed) {
@@ -72,9 +72,9 @@ router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
     const sid = sessionId || crypto.randomUUID();
 
     // Auto-create conversation if new
-    if (!await conversationMemory.getHistory(sid, 1)) {
+    if ((await conversationMemory.getHistory(sid, 1)).length === 0) {
       const title = conversationMemory.generateTitle(trimmed);
-      await conversationMemory.create(title, 'anonymous', 'default', undefined);
+      await conversationMemory.create(title, 'anonymous', 'default', undefined, sid);
     }
 
     // Set SSE headers
@@ -137,7 +137,7 @@ router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
     if (!res.headersSent) {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
     }
-    const fallbackReply = generateFallbackReply(req.body.message, req.body.context);
+    const fallbackReply = generateFallbackReply(message || '', context || {});
     res.write(`data: ${JSON.stringify({ type: 'chunk', content: fallbackReply })}\n\n`);
     res.write(`data: ${JSON.stringify({ type: 'done', model: 'fallback' })}\n\n`);
     res.end();

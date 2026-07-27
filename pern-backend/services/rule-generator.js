@@ -83,7 +83,12 @@ If the request cannot be converted into a valid rule, return:
         return { error: "Could not generate a valid rule from your request." };
       }
 
-      const rule = JSON.parse(jsonMatch[0]);
+      let rule;
+      try {
+        rule = JSON.parse(jsonMatch[0]);
+      } catch {
+        return { error: "Failed to parse the generated rule." };
+      }
 
       if (rule.error) {
         return { error: rule.error };

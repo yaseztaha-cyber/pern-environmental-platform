@@ -12,7 +12,7 @@ import {
   Volume2, VolumeX, CheckCircle2, AlertTriangle, XCircle,
 } from 'lucide-react';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { API_BASE } from '../lib/constants';
 
 function ls<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -108,12 +108,12 @@ export default function SettingsPage() {
   const [uptime, setUptime] = useState<number>(0);
 
   useEffect(() => {
-    fetch(`${API}/api/health`, { signal: AbortSignal.timeout(5000) })
+    fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) })
       .then(r => r.json())
       .then(d => { setHealth(d); setUptime(d.uptime || 0); })
       .catch(() => setHealth(null));
     const iv = setInterval(() => {
-      fetch(`${API}/api/health`, { signal: AbortSignal.timeout(3000) })
+      fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) })
         .then(r => r.json())
         .then(d => { setHealth(d); setUptime(d.uptime || 0); })
         .catch(() => {});

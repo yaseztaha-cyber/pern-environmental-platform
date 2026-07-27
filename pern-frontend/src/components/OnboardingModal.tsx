@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const ONBOARDING_STEPS = [
   {
@@ -23,6 +23,20 @@ export default function OnboardingModal() {
   const [show, setShow] = useState(() => !localStorage.getItem('pern_onboarded'));
   const [step, setStep] = useState(0);
 
+  const finish = () => {
+    localStorage.setItem('pern_onboarded', 'true');
+    setShow(false);
+  };
+
+  useEffect(() => {
+    if (!show) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') finish();
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [show]);
+
   if (!show) return null;
 
   const next = () => {
@@ -33,13 +47,9 @@ export default function OnboardingModal() {
     }
   };
 
-  const finish = () => {
-    localStorage.setItem('pern_onboarded', 'true');
-    setShow(false);
-  };
-
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100]" role="dialog" aria-modal="true" aria-label="Onboarding tour">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100]" role="dialog" aria-modal="true" aria-label="Onboarding tour"
+      onKeyDown={(e) => { if (e.key === 'Escape') finish(); }}>
       <div className="glass max-w-lg p-8 rounded-3xl">
         <div className="text-[var(--emerald)] text-xs tracking-widest mb-1">STEP {step + 1} / {ONBOARDING_STEPS.length}</div>
         <div className="text-2xl font-semibold tracking-tight mb-3">{ONBOARDING_STEPS[step].title}</div>

@@ -182,7 +182,7 @@ function AutomationContent() {
                 return [...filtered, newStatus].slice(-8);
               });
             }
-          });
+          }).catch(() => {});
         }
       });
     }, 8000);

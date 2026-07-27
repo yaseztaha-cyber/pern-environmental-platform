@@ -89,9 +89,9 @@ export function holtWinters(
   let level = data.slice(0, seasonLength).reduce((a, b) => a + b, 0) / seasonLength;
   let trend = (data.slice(seasonLength, seasonLength * 2).reduce((a, b) => a + b, 0) / seasonLength - level) / seasonLength;
 
-  const firstSeasonAvg = level;
+  const firstSeasonAvg = level || 1;
   for (let i = 0; i < data.length; i++) {
-    seasonal[i] = data[i] / firstSeasonAvg;
+    seasonal[i] = firstSeasonAvg > 0 ? data[i] / firstSeasonAvg : 1;
   }
 
   const smoothed: number[] = [];
@@ -110,7 +110,7 @@ export function holtWinters(
       const predictions: number[] = [];
       for (let h = 1; h <= steps; h++) {
         const seasonIdx = (data.length + h - 1) % seasonLength;
-        predictions.push(level + trend * h);
+        predictions.push((level + trend * h) * (seasonal[seasonIdx] || 1));
       }
       const predicted = predictions[0] || 0;
       const uncertainty = Math.abs(predicted) * 0.15 * Math.sqrt(steps);

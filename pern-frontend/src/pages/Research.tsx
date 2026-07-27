@@ -72,7 +72,7 @@ export default function ResearchPage() {
     const out: Record<string, number[]> = {};
     SENSOR_KEYS.forEach(k => { out[k] = []; });
     for (const reading of readings) {
-      const sensors = reading.sensors || {};
+      const sensors = typeof reading.sensors === 'string' ? (() => { try { return JSON.parse(reading.sensors); } catch { return {}; } })() : (reading.sensors || {});
       for (const k of SENSOR_KEYS) {
         if (sensors[k] !== undefined && sensors[k] !== null) {
           const v = Number(sensors[k]);

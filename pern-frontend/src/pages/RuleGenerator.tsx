@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Zap, Wand2, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
-import { Badge } from '../components/ui';
+import { Badge, Btn } from '../components/ui';
 
 interface GeneratedRule {
   name: string;
@@ -87,14 +87,16 @@ export default function RuleGenerator() {
           placeholder="e.g. When PM2.5 exceeds 50 µg/m³, turn on the fan"
           className="w-full h-28 px-4 py-3 rounded-[var(--radius-sm)] bg-[var(--surface)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] focus:outline-none focus:border-[var(--emerald)] resize-none text-sm"
         />
-        <button
+        <Btn
+          variant="primary"
           onClick={generate}
           disabled={loading || input.length < 10}
-          className="btn btn-primary mt-3 flex items-center gap-2"
+          loading={loading}
+          className="mt-3 flex items-center gap-2"
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
           {loading ? 'Generating...' : 'Generate Rule'}
-        </button>
+        </Btn>
       </div>
 
       {/* Examples */}
@@ -168,9 +170,9 @@ export default function RuleGenerator() {
 
           <div className="flex gap-2 mt-4">
             {!saved ? (
-              <button onClick={saveRule} className="btn btn-primary text-xs">
+              <Btn variant="primary" size="sm" onClick={saveRule} className="text-xs">
                 <Zap size={14} /> Save Rule
-              </button>
+              </Btn>
             ) : (
               <Badge variant="success">
                 <CheckCircle size={12} className="mr-1" /> Saved to Automation Rules

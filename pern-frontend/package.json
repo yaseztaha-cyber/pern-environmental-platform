@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -22,7 +24,6 @@
     "mqtt": "^5.15.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-grid-layout": "^2.2.3",
     "react-leaflet": "^5.0.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.1",

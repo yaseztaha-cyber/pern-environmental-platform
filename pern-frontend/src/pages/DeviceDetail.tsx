@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import { apiClient } from '../lib/api-client';
 import { SENSOR_TYPES } from '../lib/constants';
 import { PageHeader, Pill, Card } from '../components/ui';
+import { showToast } from '../components/Toast';
 import { ArrowLeft, Wifi, Clock, Cpu, MapPin, Settings, Trash2 } from 'lucide-react';
 
 export default function DeviceDetailPage() {
@@ -31,16 +32,27 @@ export default function DeviceDetailPage() {
 
   const handleSave = async () => {
     if (!deviceId) return;
-    await apiClient.updateDevice(deviceId, form);
-    setEditing(false);
-    const dev = await apiClient.getDevice(deviceId).catch(() => null);
-    setDevice(dev);
+    try {
+      await apiClient.updateDevice(deviceId, form);
+      setEditing(false);
+      const dev = await apiClient.getDevice(deviceId).catch(() => null);
+      setDevice(dev);
+      showToast('Device saved', 'success');
+    } catch (err) {
+      console.error('Failed to save device:', err);
+      showToast('Failed to save device', 'error');
+    }
   };
 
   const handleDelete = async () => {
     if (!deviceId || !confirm('Delete this device permanently?')) return;
-    await apiClient.deleteDevice(deviceId);
-    navigate('/devices');
+    try {
+      await apiClient.deleteDevice(deviceId);
+      navigate('/devices');
+    } catch (err) {
+      console.error('Failed to delete device:', err);
+      showToast('Failed to delete device', 'error');
+    }
   };
 
   if (loading) return <Card className="max-w-[900px] mx-auto mt-8 text-center py-16 text-[var(--text-disabled)]">Loading...</Card>;
@@ -56,7 +68,7 @@ export default function DeviceDetailPage() {
 
   return (
     <div className="max-w-[900px] mx-auto">
-      <button onClick={() => navigate('/devices')} className="flex items-center gap-2 text-sm text-[var(--text-disabled)] hover:text-[var(--text-primary)] mb-4">
+      <button onClick={() => navigate('/devices')} aria-label="Back to Devices" className="flex items-center gap-2 text-sm text-[var(--text-disabled)] hover:text-[var(--text-primary)] mb-4">
         <ArrowLeft size={14} /> Back to Devices
       </button>
 
@@ -68,10 +80,10 @@ export default function DeviceDetailPage() {
             <Pill tone={device.status === 'online' ? 'emerald' : device.status === 'warning' ? 'amber' : 'rose'}>
               <Wifi size={12} /> {device.status}
             </Pill>
-            <button onClick={() => setEditing(!editing)} className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--surface)] text-[var(--text-secondary)]">
+            <button onClick={() => setEditing(!editing)} aria-label="Edit device" className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--surface)] text-[var(--text-secondary)]">
               <Settings size={16} />
             </button>
-            <button onClick={handleDelete} className="p-2 rounded-[var(--radius-sm)] hover:bg-red-500/20 text-red-400">
+            <button onClick={handleDelete} aria-label="Delete device" className="p-2 rounded-[var(--radius-sm)] hover:bg-red-500/20 text-red-400">
               <Trash2 size={16} />
             </button>
           </div>
@@ -138,8 +150,8 @@ export default function DeviceDetailPage() {
           <div className="text-[var(--text-disabled)] text-sm py-4 text-center">No readings recorded yet</div>
         ) : (
           <div className="max-h-[400px] overflow-y-auto space-y-2">
-            {readings.slice(0, 50).map((r, i) => (
-              <div key={i} className="flex items-center justify-between py-2 px-3 rounded-[var(--radius-sm)] bg-[var(--surface)] text-xs">
+            {readings.slice(0, 50).map((r) => (
+              <div key={`${r.recordedAt || r.recorded_at}-${r.id || Math.random()}`} className="flex items-center justify-between py-2 px-3 rounded-[var(--radius-sm)] bg-[var(--surface)] text-xs">
                 <span className="text-[var(--text-secondary)]">{new Date(r.recordedAt || r.recorded_at).toLocaleString()}</span>
                 <span className="font-mono text-[var(--text-secondary)]">
                   {r.sensors && typeof r.sensors === 'object'

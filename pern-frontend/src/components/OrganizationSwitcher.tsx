@@ -1,14 +1,33 @@
 import { useOrganization } from '../lib/organization-context';
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function OrganizationSwitcher() {
   const { currentOrganization, organizations, switchOrganization } = useOrganization();
   const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => setIsOpen(false), []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) close();
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isOpen, close]);
 
   if (!currentOrganization) return null;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-2xl text-sm"
@@ -30,7 +49,7 @@ export default function OrganizationSwitcher() {
                 key={org.id}
                 onClick={() => {
                   switchOrganization(org);
-                  setIsOpen(false);
+                  close();
                 }}
                 className={`w-full text-left px-4 py-3 flex items-center justify-between hover:bg-white/5 ${currentOrganization.id === org.id ? 'bg-emerald-500/10' : ''}`}
               >
@@ -43,12 +62,6 @@ export default function OrganizationSwitcher() {
                 </div>
               </button>
             ))}
-          </div>
-
-          <div className="border-t border-white/10 p-3">
-            <button className="w-full text-sm text-emerald-400 hover:text-emerald-300 py-2">
-              + Create New Organization
-            </button>
           </div>
         </div>
       )}

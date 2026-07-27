@@ -38,7 +38,7 @@ async function withFallback(operation) {
   try {
     const result = await operation();
     if (!dbAvailable) {
-      console.info('[DB] Connection recovered');
+      logger.info('[DB] Connection recovered');
     }
     dbAvailable = true;
     failCount = 0;
@@ -339,6 +339,7 @@ async function saveSensorReading(reading) {
     ));
   } catch {
     memory.sensorReadings.push({ device_id: device, timestamp, sensors });
+    if (memory.sensorReadings.length > 2000) memory.sensorReadings.splice(0, memory.sensorReadings.length - 2000);
   }
 }
 
@@ -379,44 +380,56 @@ async function getReadingsByDateRange(from, to, device, limit = 500) {
 
 async function saveAutomationLog(log) {
   if (!dbAvailable) return;
-  await pool.query(
-    `INSERT INTO automation_logs (rule_id, rule_name, sensor, value) VALUES ($1, $2, $3, $4)`,
-    [log.ruleId, log.ruleName, log.sensor, log.value]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO automation_logs (rule_id, rule_name, sensor, value) VALUES ($1, $2, $3, $4)`,
+      [log.ruleId, log.ruleName, log.sensor, log.value]
+    );
+  } catch { /* no-op */ }
 }
 
 async function getAutomationLogs(limit = 30) {
   if (!dbAvailable) return [];
-  const result = await pool.query(
-    `SELECT * FROM automation_logs ORDER BY timestamp DESC LIMIT $1`,
-    [limit]
-  );
-  return result.rows;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM automation_logs ORDER BY timestamp DESC LIMIT $1`,
+      [limit]
+    );
+    return result.rows;
+  } catch {
+    return [];
+  }
 }
 
 async function getAutomationRules() {
   if (!dbAvailable) return [];
-  const result = await pool.query(`SELECT * FROM automation_rules`);
-  return result.rows;
+  try {
+    const result = await pool.query(`SELECT * FROM automation_rules`);
+    return result.rows;
+  } catch {
+    return [];
+  }
 }
 
 async function saveAutomationRule(rule) {
   const actionJson = typeof rule.action === 'object' ? JSON.stringify(rule.action) : rule.action;
   const orgId = rule.organization_id || 'default';
 
-  await pool.query(
-    `INSERT INTO automation_rules (id, name, sensor, operator, threshold, action, enabled, organization_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     ON CONFLICT (id) DO UPDATE SET
-       name = EXCLUDED.name,
-       sensor = EXCLUDED.sensor,
-       operator = EXCLUDED.operator,
-       threshold = EXCLUDED.threshold,
-       action = EXCLUDED.action,
-       enabled = EXCLUDED.enabled,
-       organization_id = EXCLUDED.organization_id`,
-    [rule.id, rule.name, rule.sensor, rule.operator, rule.threshold, actionJson, rule.enabled, orgId]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO automation_rules (id, name, sensor, operator, threshold, action, enabled, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         sensor = EXCLUDED.sensor,
+         operator = EXCLUDED.operator,
+         threshold = EXCLUDED.threshold,
+         action = EXCLUDED.action,
+         enabled = EXCLUDED.enabled,
+         organization_id = EXCLUDED.organization_id`,
+      [rule.id, rule.name, rule.sensor, rule.operator, rule.threshold, actionJson, rule.enabled, orgId]
+    );
+  } catch { /* no-op */ }
 }
 
 async function deleteAutomationRule(id) {
@@ -439,6 +452,7 @@ async function saveEHIHistory(deviceId, ehi, category) {
     ));
   } catch {
     memory.ehiHistory.push({ device_id: key, ehi, category, recorded_at: new Date() });
+    if (memory.ehiHistory.length > 2000) memory.ehiHistory.splice(0, memory.ehiHistory.length - 2000);
   }
 }
 
@@ -488,6 +502,7 @@ async function saveDeviceReading(deviceId, sensors) {
   } catch {
     if (!memory.deviceReadings[deviceId]) memory.deviceReadings[deviceId] = [];
     memory.deviceReadings[deviceId].push({ sensors, recorded_at: new Date() });
+    if (memory.deviceReadings[deviceId].length > 500) memory.deviceReadings[deviceId].splice(0, memory.deviceReadings[deviceId].length - 500);
   }
 }
 
@@ -515,15 +530,22 @@ async function saveAlert(alert) {
       created_at: new Date(),
     };
     memory.alerts.push(row);
+    if (memory.alerts.length > 1000) memory.alerts.splice(0, memory.alerts.length - 1000);
     return row;
   }
 }
 
 async function getAlerts(deviceId, limit = 50) {
   try {
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (deviceId) { conditions.push(`device_id = $${idx++}`); params.push(deviceId); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(limit);
     const result = await withFallback(() => pool.query(
-      `SELECT * FROM alerts ${deviceId ? 'WHERE device_id = $2' : ''} ORDER BY created_at DESC LIMIT ${deviceId ? '$1' : '$1'}`,
-      deviceId ? [limit, deviceId] : [limit]
+      `SELECT * FROM alerts ${where} ORDER BY created_at DESC LIMIT $${idx}`,
+      params
     ));
     return result.rows;
   } catch {
@@ -1421,15 +1443,23 @@ async function saveDeviceHealth(data) {
 }
 
 async function getLatestDeviceHealth(deviceId) {
-  const { rows } = await pool.query(`
-    SELECT * FROM device_health WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT 1
-  `, [deviceId]);
-  return rows[0] || null;
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM device_health WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT 1
+    `, [deviceId]);
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
 }
 
 async function getDeviceHealthHistory(deviceId, limit = 50) {
-  const { rows } = await pool.query(`
-    SELECT * FROM device_health WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT $2
-  `, [deviceId, limit]);
-  return rows;
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM device_health WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT $2
+    `, [deviceId, limit]);
+    return rows;
+  } catch {
+    return [];
+  }
 }

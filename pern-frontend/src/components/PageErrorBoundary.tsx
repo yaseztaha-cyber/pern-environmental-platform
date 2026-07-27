@@ -35,7 +35,7 @@ export class PageErrorBoundary extends React.Component<Props, State> {
               An error occurred in {this.props.pageName || 'this page'}.
             </p>
             <button 
-              onClick={() => this.setState({ hasError: false })}
+              onClick={() => this.setState({ hasError: false, error: undefined })}
               className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-2xl text-sm"
             >
               Try Again

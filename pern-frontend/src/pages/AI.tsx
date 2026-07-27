@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useI18n } from '../lib/i18n';
 import {
   AreaChart,
@@ -76,6 +76,9 @@ export default function AI() {
   const [aiStatus, setAiStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const [ehiHistory, setEhiHistory] = useState<number[]>([]);
 
+  const physicalRef = useRef(data.physical);
+  physicalRef.current = data.physical;
+
   const checkAIStatus = async () => {
     setAiStatus('checking');
     try {
@@ -92,7 +95,8 @@ export default function AI() {
       const newInsights: Insight[] = [];
       const ts = new Date().toISOString();
 
-      const temp = data.physical.temperature;
+      const physical = physicalRef.current;
+      const temp = physical.tmp;
       if (temp !== undefined && temp > 30) {
         newInsights.push({
           id: `temp-high-${Date.now()}`,
@@ -103,7 +107,7 @@ export default function AI() {
           sensor: 'temperature',
         });
       }
-      const co2 = data.physical.co2;
+      const co2 = physical.co2;
       if (co2 !== undefined && co2 > 1000) {
         newInsights.push({
           id: `co2-high-${Date.now()}`,
@@ -114,7 +118,7 @@ export default function AI() {
           sensor: 'co2',
         });
       }
-      const pm25 = data.physical.pm25;
+      const pm25 = physical.pm25;
       if (pm25 !== undefined && pm25 > 35) {
         newInsights.push({
           id: `pm25-high-${Date.now()}`,
@@ -143,7 +147,7 @@ export default function AI() {
     } finally {
       setLoading(false);
     }
-  }, [data.physical, toast]);
+  }, [toast]);
 
   const generateRecommendations = useCallback(async () => {
     if (aiStatus !== 'online') return;
@@ -151,7 +155,7 @@ export default function AI() {
     let id = 0;
 
     try {
-      const diag = await apiClient.diagnoseSensors({ sensorData: data.physical });
+      const diag = await apiClient.diagnoseSensors({ sensorData: physicalRef.current });
       if (Array.isArray(diag?.recommendations)) {
         for (const r of diag.recommendations) {
           recs.push({
@@ -166,7 +170,7 @@ export default function AI() {
     } catch { /* AI unavailable */ }
 
     for (const sensor of KEY_SENSORS) {
-      if (data.physical[sensor] === undefined) continue;
+      if (physicalRef.current[sensor] === undefined) continue;
       try {
         const trend = await apiClient.analyzeTrend({ sensor, period: '24h' });
         if (Array.isArray(trend?.recommendations)) {
@@ -185,7 +189,7 @@ export default function AI() {
     }
 
     setRecommendations(recs);
-  }, [aiStatus, data.physical]);
+  }, [aiStatus]);
 
   useEffect(() => {
     const from = new Date(Date.now() - 7 * 86400000).toISOString();
@@ -197,6 +201,9 @@ export default function AI() {
 
   useEffect(() => {
     checkAIStatus();
+  }, []);
+
+  useEffect(() => {
     generateInsights();
   }, [data.ehi, generateInsights]);
 

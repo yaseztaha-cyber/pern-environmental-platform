@@ -19,6 +19,10 @@ router.post('/rules', async (req, res) => {
   try {
     const { rules, organizationId } = req.body;
     
+    if (!Array.isArray(rules)) {
+      return res.status(400).json({ error: 'rules array required' });
+    }
+    
     // Save each rule to database with organization context
     for (const rule of rules) {
       await db.saveAutomationRule({
@@ -58,7 +62,7 @@ router.get('/rules', async (req, res) => {
     // Parse action JSON
     const parsedRules = rules.map(rule => ({
       ...rule,
-      action: typeof rule.action === 'string' ? JSON.parse(rule.action) : rule.action
+      action: typeof rule.action === 'string' ? (() => { try { return JSON.parse(rule.action); } catch { return rule.action; } })() : rule.action
     }));
     
     res.json(parsedRules.length > 0 ? parsedRules : []);

@@ -31,7 +31,7 @@ export default function CompliancePage() {
 
   const latestSensors: Record<string, number> = {};
   for (const r of readings.slice(0, 50)) {
-    const sensors = typeof r.sensors === 'string' ? JSON.parse(r.sensors) : (r.sensors || {});
+    const sensors = typeof r.sensors === 'string' ? (() => { try { return JSON.parse(r.sensors); } catch { return {}; } })() : (r.sensors || {});
     for (const [k, v] of Object.entries(sensors)) {
       if (typeof v === 'number' && !latestSensors[k]) latestSensors[k] = v;
     }

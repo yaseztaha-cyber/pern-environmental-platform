@@ -64,7 +64,7 @@ export default function AlertsPage() {
           source: 'history' as const,
         })));
       }
-    });
+    }).catch(() => {});
   }, [selectedDevice?.id]);
 
   // Real-time alerts via WebSocket

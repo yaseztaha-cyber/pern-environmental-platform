@@ -37,9 +37,14 @@ function PredictionsContent() {
   const noRealData = isLive && !hasRealData;
   const usingRealData = history.length >= 6;
 
+  // Compute predictions once, shared by chart + cards
+  const pred24 = useMemo(() => usingRealData ? generateAdvancedPrediction(history, 24) : null, [history, usingRealData]);
+  const pred48 = useMemo(() => usingRealData ? generateAdvancedPrediction(history, 48) : null, [history, usingRealData]);
+  const pred7d = useMemo(() => usingRealData ? generateAdvancedPrediction(history, 168) : null, [history, usingRealData]);
+
   // Build chart data with actual values + predictions
   const chartData = useMemo(() => {
-    if (!usingRealData) return [];
+    if (!usingRealData || !pred24) return [];
 
     // Historical data points
     const historical = history.map((v, i) => ({
@@ -49,11 +54,6 @@ function PredictionsContent() {
       upper: null as number | null,
       lower: null as number | null,
     }));
-
-    // Generate predictions extending from last data point
-    const pred24 = generateAdvancedPrediction(history, 24);
-    const pred48 = generateAdvancedPrediction(history, 48);
-    const pred7d = generateAdvancedPrediction(history, 168);
 
     // Add smoothed prediction line using Holt's
     const smoothed = doubleExponentialSmoothing(history);
@@ -74,7 +74,7 @@ function PredictionsContent() {
     }
 
     return historical;
-  }, [history, usingRealData]);
+  }, [history, usingRealData, pred24]);
 
   if (loading) {
     return (
@@ -102,9 +102,9 @@ function PredictionsContent() {
   }
 
   const predictions = [
-    { horizon: '24 Hours', icon: <Target size={14} />, ...generateAdvancedPrediction(history, 24) },
-    { horizon: '48 Hours', icon: <TrendingUp size={14} />, ...generateAdvancedPrediction(history, 48) },
-    { horizon: '7 Days', icon: <BarChart3 size={14} />, ...generateAdvancedPrediction(history, 168) },
+    { horizon: '24 Hours', icon: <Target size={14} />, ...pred24 },
+    { horizon: '48 Hours', icon: <TrendingUp size={14} />, ...pred48 },
+    { horizon: '7 Days', icon: <BarChart3 size={14} />, ...pred7d },
   ].map(p => ({ ...p, uncertainty: Math.round((p.upperBound - p.lowerBound) / 2) }));
 
   const validationResults = history.length >= 10 ? backtestPrediction(history, 5, 24) : [];

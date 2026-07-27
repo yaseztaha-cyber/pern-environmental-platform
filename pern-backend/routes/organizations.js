@@ -61,6 +61,7 @@ router.delete('/:id/members/:userId', async (req, res) => {
 
 router.put('/:id/members/:userId/role', async (req, res) => {
   try {
+    if (!req.body?.role) return res.status(400).json({ error: 'role required' });
     await db.updateTeamMemberRole(req.params.id, req.params.userId, req.body.role);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

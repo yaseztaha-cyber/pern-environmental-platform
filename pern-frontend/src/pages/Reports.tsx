@@ -14,43 +14,47 @@ export default function ReportsPage() {
 
   const generatePDF = async (type: string) => {
     setGenerating(type);
-    
-    const doc = new jsPDF();
-    const date = new Date().toLocaleDateString();
+    try {
+      const doc = new jsPDF();
+      const date = new Date().toLocaleDateString();
 
-    doc.setFontSize(22);
-    doc.text('PERN Environmental Report', 20, 25);
-    doc.setFontSize(12);
-    doc.text(`Generated: ${date}  •  ${data.location}`, 20, 33);
-    doc.text(`Report Type: ${type.toUpperCase()}`, 20, 40);
+      doc.setFontSize(22);
+      doc.text('PERN Environmental Report', 20, 25);
+      doc.setFontSize(12);
+      doc.text(`Generated: ${date}  •  ${data.location}`, 20, 33);
+      doc.text(`Report Type: ${type.toUpperCase()}`, 20, 40);
 
-    doc.setFontSize(16);
-    doc.text('Environmental Health Index', 20, 55);
-    doc.setFontSize(32);
-    doc.text(String(data.ehi), 20, 68);
+      doc.setFontSize(16);
+      doc.text('Environmental Health Index', 20, 55);
+      doc.setFontSize(32);
+      doc.text(String(data.ehi), 20, 68);
 
-    doc.setFontSize(14);
-    doc.text('Virtual Sensors Summary', 20, 85);
-    
-    let y = 95;
-    data.virtualSensors.slice(0, 8).forEach((vs, i) => {
-      doc.setFontSize(11);
-      doc.text(`${vs.name}: ${vs.value} ${vs.unit} (${vs.category})`, 25, y + (i * 7));
-    });
+      doc.setFontSize(14);
+      doc.text('Virtual Sensors Summary', 20, 85);
+      
+      let y = 95;
+      data.virtualSensors.slice(0, 8).forEach((vs, i) => {
+        doc.setFontSize(11);
+        doc.text(`${vs.name}: ${vs.value} ${vs.unit} (${vs.category})`, 25, y + (i * 7));
+      });
 
-    doc.setFontSize(14);
-    doc.text('Key Physical Readings', 20, 165);
-    y = 175;
-    Object.entries(data.physical).slice(0, 6).forEach(([key, val], i) => {
-      doc.setFontSize(11);
-      doc.text(`${key.toUpperCase()}: ${val}`, 25, y + (i * 7));
-    });
+      doc.setFontSize(14);
+      doc.text('Key Physical Readings', 20, 165);
+      y = 175;
+      Object.entries(data.physical).slice(0, 6).forEach(([key, val], i) => {
+        doc.setFontSize(11);
+        doc.text(`${key.toUpperCase()}: ${val}`, 25, y + (i * 7));
+      });
 
-    doc.setFontSize(10);
-    doc.text('STEM Gharbiya • PERN Platform v2.7 • 2026', 20, 280);
+      doc.setFontSize(10);
+      doc.text('STEM Gharbiya • PERN Platform v2.7 • 2026', 20, 280);
 
-    doc.save(`PERN-${type}-Report-${date.replace(/\//g, '-')}.pdf`);
-    setGenerating(null);
+      doc.save(`PERN-${type}-Report-${date.replace(/\//g, '-')}.pdf`);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+    } finally {
+      setGenerating(null);
+    }
   };
 
   const downloadCSV = (type: 'readings' | 'alerts') => {

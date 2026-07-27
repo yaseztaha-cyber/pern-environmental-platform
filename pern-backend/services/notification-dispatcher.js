@@ -25,8 +25,8 @@ function sendEmail(title, message, severity) {
   if (!smtpHost) {
     return { channel: 'email', success: false, reason: 'not-configured' };
   }
-  logger.info('[NotificationDispatcher] email', { title, severity });
-  return { channel: 'email', success: true };
+  logger.info('[NotificationDispatcher] email (stub — not implemented)', { title, severity });
+  return { channel: 'email', success: false, reason: 'not-implemented' };
 }
 
 function sendSlack(title, message, severity) {
@@ -34,8 +34,8 @@ function sendSlack(title, message, severity) {
   if (!slackUrl) {
     return { channel: 'slack', success: false, reason: 'not-configured' };
   }
-  logger.info('[NotificationDispatcher] slack', { title, severity });
-  return { channel: 'slack', success: true };
+  logger.info('[NotificationDispatcher] slack (stub — not implemented)', { title, severity });
+  return { channel: 'slack', success: false, reason: 'not-implemented' };
 }
 
 function getWsClientCount() {

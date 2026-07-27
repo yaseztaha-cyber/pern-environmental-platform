@@ -76,6 +76,7 @@ export default function HistoryPage() {
         <div className="flex bg-[var(--surface)] rounded-[var(--radius-sm)] p-1">
           {(['24h', '7d', '30d'] as const).map(range => (
             <button key={range} onClick={() => setTimeRange(range)}
+              aria-pressed={timeRange === range}
               className={`px-5 py-1.5 rounded-[var(--radius-md)] text-sm font-medium transition-all ${timeRange === range ? 'bg-[var(--emerald)] text-white shadow-[0_0_12px_rgba(16,185,129,0.3)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'}`}>
               {range}
             </button>

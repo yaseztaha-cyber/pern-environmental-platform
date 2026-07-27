@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Calendar, ChevronDown } from 'lucide-react';
 
 const PRESETS = [
@@ -18,6 +18,23 @@ interface DateRangePickerProps {
 
 export default function DateRangePicker({ from, to, onChange, className = '' }: DateRangePickerProps) {
   const [showPresets, setShowPresets] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPresets) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShowPresets(false);
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowPresets(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [showPresets]);
 
   const applyPreset = (preset: typeof PRESETS[0]) => {
     const f = preset.from().toISOString().slice(0, 10);
@@ -28,7 +45,7 @@ export default function DateRangePicker({ from, to, onChange, className = '' }: 
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="relative">
+      <div className="relative" ref={ref}>
         <button
           onClick={() => setShowPresets(!showPresets)}
           className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-sm)] text-sm bg-[var(--surface)] hover:bg-[var(--surface-hover)] border border-[var(--border)]"

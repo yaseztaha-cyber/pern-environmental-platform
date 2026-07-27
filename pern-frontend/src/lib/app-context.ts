@@ -30,8 +30,8 @@ export function getCurrentContext(): AppContext {
     } catch { /* corrupt localStorage, fall through */ }
   }
 
-  // Fallback to individual user
-  const user = localStorage.getItem('pern_demo_user');
+  // Fallback to individual user (check sessionStorage first, then localStorage for legacy)
+  const user = sessionStorage.getItem('pern_demo_user') || localStorage.getItem('pern_demo_user');
   if (user) {
     try {
       const parsed = JSON.parse(user);

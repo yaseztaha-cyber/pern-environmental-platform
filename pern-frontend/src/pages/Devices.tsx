@@ -55,17 +55,25 @@ export default function DevicesPage() {
 
   const handleCreate = async () => {
     if (!newDevice.id) return;
-    await apiClient.saveDevice({ id: newDevice.id, name: newDevice.name || newDevice.id, type: newDevice.type, status: 'online' });
-    setNewDevice({ id: '', name: '', type: 'Generic' });
-    setShowCreate(false);
-    loadDevices();
+    try {
+      await apiClient.saveDevice({ id: newDevice.id, name: newDevice.name || newDevice.id, type: newDevice.type, status: 'online' });
+      setNewDevice({ id: '', name: '', type: 'Generic' });
+      setShowCreate(false);
+      loadDevices();
+    } catch (err) {
+      console.error('Failed to create device:', err);
+    }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm(`Delete device ${id}?`)) return;
-    await apiClient.deleteDevice(id);
-    loadDevices();
+    try {
+      await apiClient.deleteDevice(id);
+      loadDevices();
+    } catch (err) {
+      console.error('Failed to delete device:', err);
+    }
   };
 
   const timeSince = (dateStr: string) => {

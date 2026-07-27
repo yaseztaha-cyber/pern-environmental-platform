@@ -84,21 +84,23 @@ export default function FirmwarePage() {
   const performUpdate = async (deviceId: string, targetVersion: string) => {
     setUpdating(deviceId);
     setUpdateProgress(0);
+    let interval: ReturnType<typeof setInterval> | null = null;
     try {
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         setUpdateProgress(p => {
-          if (p >= 95) { clearInterval(interval); return 95; }
+          if (p >= 95) { if (interval) clearInterval(interval); return 95; }
           return p + Math.random() * 12 + 3;
         });
       }, 500);
 
       await apiClient.updateDeviceFirmware(deviceId, targetVersion);
 
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
       setUpdateProgress(100);
       showToast(`Firmware updated to ${targetVersion}`, 'success');
       await loadData();
     } catch {
+      if (interval) clearInterval(interval);
       showToast('Firmware update failed', 'error');
     } finally {
       setTimeout(() => { setUpdating(null); setUpdateProgress(0); }, 800);
@@ -107,17 +109,25 @@ export default function FirmwarePage() {
 
   const createRelease = async () => {
     if (!newRelease.version) { showToast('Version is required', 'error'); return; }
-    await apiClient.createFirmwareVersion(newRelease);
-    showToast('Firmware release created', 'success');
-    setNewRelease({ device_type: 'ESP32', version: '', changelog: '', download_url: '' });
-    setShowReleaseForm(false);
-    await loadData();
+    try {
+      await apiClient.createFirmwareVersion(newRelease);
+      showToast('Firmware release created', 'success');
+      setNewRelease({ device_type: 'ESP32', version: '', changelog: '', download_url: '' });
+      setShowReleaseForm(false);
+      await loadData();
+    } catch {
+      showToast('Failed to create release', 'error');
+    }
   };
 
   const deleteRelease = async (id: number) => {
-    await apiClient.deleteFirmwareVersion(id);
-    showToast('Release deleted', 'success');
-    await loadData();
+    try {
+      await apiClient.deleteFirmwareVersion(id);
+      showToast('Release deleted', 'success');
+      await loadData();
+    } catch {
+      showToast('Failed to delete release', 'error');
+    }
   };
 
   const upToDate = devices.filter(d => !d.updateAvailable).length;

@@ -32,30 +32,41 @@ export default function TeamMembers() {
     setLoading(true);
     apiClient.getUsers().then((data: any) => {
       setMembers(data);
-      setLoading(false);
-    });
+    }).catch(() => {}).finally(() => setLoading(false));
   };
 
   useEffect(() => { fetchMembers(); }, []);
 
   const handleInvite = async () => {
     if (!inviteEmail || !inviteName) return;
-    await apiClient.post('/users', { name: inviteName, email: inviteEmail, role: inviteRole });
-    setInviteName('');
-    setInviteEmail('');
-    setInviteRole('operator');
-    setShowInvite(false);
-    fetchMembers();
+    try {
+      await apiClient.post('/users', { name: inviteName, email: inviteEmail, role: inviteRole });
+      setInviteName('');
+      setInviteEmail('');
+      setInviteRole('operator');
+      setShowInvite(false);
+      fetchMembers();
+    } catch (err) {
+      console.error('Failed to invite member:', err);
+    }
   };
 
   const handleRemove = async (id: string) => {
-    await apiClient.delete(`/users/${id}`);
-    setMembers((prev) => prev.filter((m) => m.id !== id));
+    try {
+      await apiClient.delete(`/users/${id}`);
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+    } catch (err) {
+      console.error('Failed to remove member:', err);
+    }
   };
 
   const handleRoleChange = async (id: string, role: string) => {
-    await apiClient.put(`/users/${id}`, { role });
-    setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)));
+    try {
+      await apiClient.put(`/users/${id}`, { role });
+      setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)));
+    } catch (err) {
+      console.error('Failed to change role:', err);
+    }
   };
 
   if (loading) return <LoadingState label="Loading team members..." />;

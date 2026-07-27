@@ -91,6 +91,7 @@ export default function DigitalTwinPage() {
   const resetAll = () => setSensors(PRESETS[1].values);
 
   const ehiColor = ehi >= 70 ? 'var(--emerald)' : ehi >= 40 ? 'var(--amber)' : 'var(--rose)';
+  const ehiColorHex = ehi >= 70 ? '#10b981' : ehi >= 40 ? '#f59e0b' : '#ef4444';
   const ehiLabel = ehi >= 70 ? 'Good' : ehi >= 40 ? 'Moderate' : 'Poor';
   const ehiPillTone = ehi >= 70 ? 'emerald' as const : ehi >= 40 ? 'amber' as const : 'rose' as const;
 
@@ -165,7 +166,7 @@ export default function DigitalTwinPage() {
                   <XAxis dataKey="t" tick={{ fontSize: 9 }} />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
                   <Tooltip />
-                  <Area type="monotone" dataKey="ehi" stroke={ehiColorFn(ehi)} fill={ehiColorFn(ehi)} fillOpacity={0.2} />
+                  <Area type="monotone" dataKey="ehi" stroke={ehiColorHex} fill={ehiColorHex} fillOpacity={0.2} />
                 </AreaChart>
               </ResponsiveContainer>
             </Card>
@@ -189,5 +190,3 @@ export default function DigitalTwinPage() {
     </div>
   );
 }
-
-function ehiColorFn(ehi: number) { return ehi >= 70 ? '#10b981' : ehi >= 40 ? '#f59e0b' : '#ef4444'; }

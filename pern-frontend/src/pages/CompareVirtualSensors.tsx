@@ -89,7 +89,7 @@ export default function CompareVirtualSensors() {
       {comparison && (
         <div className="grid md:grid-cols-2 gap-6">
           {/* PERN Data */}
-          <div className="card">
+          <Card hover={false}>
             <h3 className="font-semibold mb-4">PERN Virtual Sensors</h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
@@ -109,10 +109,10 @@ export default function CompareVirtualSensors() {
                 <span className="font-mono">{comparison.pern.pm25 ? `${comparison.pern.pm25} µg/m³` : 'N/A'}</span>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Real Data */}
-          <div className="card">
+          <Card hover={false}>
             <h3 className="font-semibold mb-4">Real-World Data</h3>
             <div className="space-y-3 text-sm">
               {comparison.openaq && (
@@ -134,7 +134,7 @@ export default function CompareVirtualSensors() {
                 </div>
               )}
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </div>

@@ -137,7 +137,7 @@ export function calculateWQI(readings: Record<string, number>): VirtualSensorRes
   const dO = readings.dO;
 
   let wqi = 0;
-  wqi += Math.abs(ph - 7.5) * 18;
+  if (ph !== undefined) wqi += Math.abs(ph - 7.5) * 18;
   if (tds !== undefined) wqi += tds > 500 ? (tds - 500) * 0.085 : 0;
   if (tb !== undefined) wqi += tb * 7.5;
   if (dO !== undefined) wqi += dO < 6 ? (6 - dO) * 12 : 0;

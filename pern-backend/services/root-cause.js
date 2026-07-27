@@ -18,7 +18,7 @@ class RootCauseAnalyzer {
 
     let recentContext = [];
     try {
-      const rows = await db.getDeviceReadings('all', 50);
+      const rows = await db.getRecentReadings(50);
       recentContext = rows.filter(r => r.sensors && r.sensors[sensor]).slice(0, 20);
     } catch { /* use empty context */ }
 
@@ -79,7 +79,11 @@ Provide root cause analysis.`;
     const content = data.choices?.[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        return { rootCause: content, factors: [], confidence: 0, recommendations: [] };
+      }
     }
     return { rootCause: content || 'Unable to determine root cause', factors: [], confidence: 0, recommendations: [] };
   }

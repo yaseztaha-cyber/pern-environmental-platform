@@ -41,21 +41,25 @@ export default function OrganizationSettings() {
         setEmailEnabled(prefs.email ?? true);
         setSlackEnabled(prefs.slack ?? false);
       }
-      setLoading(false);
-    });
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const handleSave = async () => {
     if (!selectedOrg) return;
     setSaving(true);
-    const payload = {
-      name,
-      description,
-      dataRetentionDays: retentionDays,
-      alertPreferences: { ntfy: ntfyEnabled, email: emailEnabled, slack: slackEnabled },
-    };
-    await apiClient.put(`/organizations/${selectedOrg.id}`, payload);
-    setSaving(false);
+    try {
+      const payload = {
+        name,
+        description,
+        dataRetentionDays: retentionDays,
+        alertPreferences: { ntfy: ntfyEnabled, email: emailEnabled, slack: slackEnabled },
+      };
+      await apiClient.put(`/organizations/${selectedOrg.id}`, payload);
+    } catch (err) {
+      console.error('Failed to save org settings:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <LoadingState label="Loading organization settings..." />;

@@ -8,17 +8,19 @@
 const mqtt = require('mqtt');
 const logger = require('./utils/logger');
 
-const client = mqtt.connect('mqtt://localhost:1883');
+const client = mqtt.connect(process.env.MQTT_BROKER || 'mqtt://localhost:1883');
 
 const devices = [
   { id: 'ESP32-Cairo-001', region: 'Giza' },
   { id: 'NodeMCU-Delta-02', region: 'Cairo' },
 ];
 
+let intervalId = null;
+
 client.on('connect', () => {
   logger.info('[Simulator] Connected to MQTT broker');
   
-  setInterval(() => {
+  intervalId = setInterval(() => {
     devices.forEach(device => {
       const data = {
         device: device.id,
@@ -43,3 +45,13 @@ client.on('connect', () => {
     });
   }, 4500);
 });
+
+function stop() {
+  if (intervalId) clearInterval(intervalId);
+  client.end();
+}
+
+process.on('SIGINT', () => { stop(); process.exit(0); });
+process.on('SIGTERM', () => { stop(); process.exit(0); });
+
+module.exports = { stop };

@@ -89,6 +89,9 @@ Automation & Devices:
    * Main chat method with Tool Calling capability
    */
   async chat({ message, context, sessionId = 'default' }) {
+    if (!OPENROUTER_API_KEY) {
+      throw new Error('AI service unavailable — OPENROUTER_API_KEY not configured');
+    }
     try {
       const systemPrompt = this.buildSystemPrompt(context);
       const history = await this.getConversation(sessionId);

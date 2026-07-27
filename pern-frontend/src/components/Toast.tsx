@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { X, AlertTriangle, CheckCircle2, Info, AlertCircle } from 'lucide-react';
 
 interface Toast {
@@ -35,10 +35,20 @@ let globalToastFn: ((message: string, type?: Toast['type'], sound?: boolean) => 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const recentMessages = useRef<Map<string, number>>(new Map());
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(t => clearTimeout(t));
+      timersRef.current.clear();
+      recentMessages.current.clear();
+    };
+  }, []);
 
   const dismiss = useCallback((id: number) => {
     setToasts(prev => prev.map(t => t.id === id ? { ...t, exiting: true } : t));
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 300);
+    const timer = setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 300);
+    timersRef.current.set(id + 0.5, timer);
   }, []);
 
   const toast = useCallback((message: string, type: Toast['type'] = 'info', sound = false) => {
@@ -46,9 +56,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const last = recentMessages.current.get(message);
     if (last && now - last < 3000) return;
     recentMessages.current.set(message, now);
-    setTimeout(() => recentMessages.current.delete(message), 3000);
 
     const id = nextId++;
+    const cleanupTimer = setTimeout(() => recentMessages.current.delete(message), 3000);
+    timersRef.current.set(id + 0.2, cleanupTimer);
+
     setToasts(prev => {
       const trimmed = prev.length >= 5 ? prev.slice(-4) : prev;
       return [...trimmed, { id, message, type, sound }];
@@ -56,10 +68,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (sound) {
       try { new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH+Jk42LhH1wa3V+iZGQjIZ/d3B0fImRkI2GfnRwdH2JkZCNh4B4cXR9iZGQjYaAeXF0fYmRkI2HgXpydH2JkZCNh4F6cnR9iZGQjYeBenJ0fYmRkI2HgXpydH2JkZCNh4B5cXR9iZGQjYOAeXF0fYmRkI2DgHlxdH2JkZCNg4B5cXR9iZGQjYOAeXF0fYmRkI2DgHlxdH2JkZCNh4F6cnR9iZGQjYeBenJ0fYmRkI2HgXpydH2JkZCNh4F6cnR9iZGQjYeBenJ0fYmRkI2DgHlxdH2JkZCNh4F6cnR9iZGQjYOAeXF0fYmRkI2DgHlxdH2JkZCNh4F6cnR9iZGQjYOAeXF0fYg=').play().catch(() => {}); } catch {}
     }
-    setTimeout(() => dismiss(id), 4000);
+    const timer = setTimeout(() => dismiss(id), 4000);
+    timersRef.current.set(id, timer);
   }, [dismiss]);
 
-  globalToastFn = toast;
+  useEffect(() => {
+    globalToastFn = toast;
+    return () => { globalToastFn = null; };
+  }, [toast]);
 
   return (
     <ToastContext.Provider value={{ toast }}>

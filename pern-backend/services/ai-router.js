@@ -117,21 +117,29 @@ class AIRouter {
     ];
 
     const fetch = require('node-fetch');
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://pern.app',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 1000,
-        stream: true
-      })
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    let response;
+    try {
+      response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://pern.app',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 1000,
+          stream: true
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       throw new Error(`OpenRouter HTTP ${response.status}`);
@@ -166,8 +174,8 @@ class AIRouter {
     this.cache.clear();
   }
 
-  clearConversation(sessionId) {
-    aiService.clearConversation(sessionId);
+  async clearConversation(sessionId) {
+    await aiService.clearConversation(sessionId);
   }
 }
 

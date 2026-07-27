@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { loginWithLogto } from '../lib/auth';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../lib/auth-context';
 import { Loader2, Shield, Zap, ChevronRight } from 'lucide-react';
+import { showToast } from '../components/Toast';
 
 const isLogtoConfigured = import.meta.env.VITE_LOGTO_ENDPOINT &&
   import.meta.env.VITE_LOGTO_ENDPOINT !== 'http://localhost:3001' &&
@@ -20,22 +20,23 @@ export default function Login() {
       await login();
     } catch (error) {
       console.error('Login failed:', error);
-      alert('Login failed. Please try again.');
+      showToast('Login failed. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDemoLogin = () => {
-    localStorage.setItem('pern_demo_user', JSON.stringify({
+    sessionStorage.setItem('pern_demo_user', JSON.stringify({
       id: 'demo-user',
       name: 'Demo User',
       email: 'demo@pern.dev',
       role: 'supervisor',
     }));
-    localStorage.setItem('pern_auth_token', 'demo-token');
+    sessionStorage.setItem('pern_auth_token', 'demo-token');
     window.location.hash = '#/';
     window.location.reload();
+    navigate('/');
   };
 
   return (

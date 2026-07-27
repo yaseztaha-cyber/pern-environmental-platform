@@ -49,7 +49,6 @@ function setCooldown(ruleId) {
 
 class AlertEngine {
   constructor() {
-    this.lastTriggered = new Map();
     this.COOLDOWN_MS = 30000;
   }
 
@@ -119,7 +118,10 @@ class AlertEngine {
 
   startEscalationChecker(intervalMs = 60000) {
     return setInterval(() => {
-      this.COOLDOWN_MS = Math.max(15000, this.COOLDOWN_MS);
+      const cutoff = Date.now() - 60000;
+      for (const [key, ts] of cooldowns.entries()) {
+        if (ts < cutoff) cooldowns.delete(key);
+      }
     }, intervalMs);
   }
 }

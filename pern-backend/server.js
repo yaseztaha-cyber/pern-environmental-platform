@@ -253,6 +253,8 @@ async function sendNtfyNotification(notification) {
   const topic = process.env.NTFY_TOPIC || 'pern-platform-alerts-2026';
   const url = `https://ntfy.sh/${topic}`;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
   try {
     await fetch(url, {
       method: 'POST',
@@ -262,9 +264,12 @@ async function sendNtfyNotification(notification) {
         'Tags': notification.tags?.join(',') || 'automation',
       },
       body: notification.message,
+      signal: controller.signal,
     });
   } catch (err) {
     logger.error('[ntfy] Failed to send', { error: err.message });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -574,8 +579,12 @@ app.get('/api/automation/logs', async (req, res) => {
 });
 
 app.post('/api/notifications/send', coreWriteLimiter, async (req, res) => {
-  await sendNtfyNotification(req.body);
-  res.json({ success: true });
+  try {
+    await sendNtfyNotification(req.body);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ---- Actuator commands routed through backend (audit trail) ----

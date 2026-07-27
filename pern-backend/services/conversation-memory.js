@@ -10,17 +10,22 @@ const logger = require('../utils/logger');
 class ConversationMemory {
   constructor() {
     this.inMemoryStore = new Map();
+    this.MAX_CONVERSATIONS = 100;
   }
 
   /**
    * Create a new conversation
    */
-  async create(title, userId, orgId, model) {
-    const id = crypto.randomUUID();
-    await db.createConversation(id, title, userId, orgId, model);
-    this.inMemoryStore.set(id, { title, history: [] });
-    logger.info('[ConvMem] Created conversation', { id, title });
-    return id;
+  async create(title, userId, orgId, model, id) {
+    const convId = id || crypto.randomUUID();
+    await db.createConversation(convId, title, userId, orgId, model);
+    this.inMemoryStore.set(convId, { title, history: [] });
+    if (this.inMemoryStore.size > this.MAX_CONVERSATIONS) {
+      const oldest = this.inMemoryStore.keys().next().value;
+      this.inMemoryStore.delete(oldest);
+    }
+    logger.info('[ConvMem] Created conversation', { id: convId, title });
+    return convId;
   }
 
   /**

@@ -30,7 +30,7 @@ function GuideSection({ title, icon, defaultOpen = false, children }: {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)] transition-colors">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)] transition-colors">
         {icon}
         <span className="font-medium text-sm flex-1">{title}</span>
         {open ? <ChevronDown size={16} className="text-[var(--text-tertiary)]" /> : <ChevronRight size={16} className="text-[var(--text-tertiary)]" />}

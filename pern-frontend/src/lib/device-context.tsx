@@ -152,7 +152,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 function persistDevice(device: ConnectedDevice) {
   apiClient.saveDevice({
     id: device.id, name: device.name, type: device.type, status: device.status, lastSeen: device.lastSeen,
-  });
+  }).catch(() => {});
 }
 
 function inferType(id: string): string {

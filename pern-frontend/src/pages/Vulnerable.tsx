@@ -36,7 +36,7 @@ export default function VulnerablePage() {
   const latestSensors = useMemo(() => {
     const sensors: Record<string, number> = {};
     for (const r of readings.slice(0, 20)) {
-      const s = typeof r.sensors === 'string' ? JSON.parse(r.sensors) : (r.sensors || {});
+      const s = typeof r.sensors === 'string' ? (() => { try { return JSON.parse(r.sensors); } catch { return {}; } })() : (r.sensors || {});
       for (const [k, v] of Object.entries(s)) {
         if (typeof v === 'number' && !sensors[k]) sensors[k] = v;
       }
