@@ -50,7 +50,10 @@ export default function DeviceLifecyclePage() {
             daysSinceLastSeen < 0.5 ? 'online' :
             daysSinceLastSeen < 2 ? 'warning' : 'offline';
 
-          const recentReadings = readings.slice(-8).map((r: any) => r.pm25 || r.value || 50);
+          const recentReadings = readings.slice(-8).map((r: any) => {
+            const sensors = typeof r.sensors === 'string' ? JSON.parse(r.sensors) : (r.sensors || {});
+            return sensors.pm25 ?? sensors.tmp ?? r.pm25 ?? r.value ?? null;
+          }).filter((v): v is number => v !== null);
 
           results.push({
             id: d.id,

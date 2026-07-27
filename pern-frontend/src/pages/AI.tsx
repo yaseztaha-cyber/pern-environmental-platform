@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useI18n } from '../lib/i18n';
 import {
   AreaChart,
@@ -8,7 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
+  ReferenceLine,
 } from 'recharts';
 import {
   Brain,
@@ -57,47 +57,25 @@ const INSIGHT_COLORS: Record<string, string> = {
   error: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
 };
 
-const RECOMMENDATIONS: Recommendation[] = [
-  {
-    id: 'rec-1',
-    category: 'Energy',
-    priority: 'high',
-    title: 'Optimize HVAC Scheduling',
-    description: 'Analysis shows HVAC runs 23% longer than needed during off-peak hours. Consider implementing schedule-based automation to reduce energy consumption.',
-  },
-  {
-    id: 'rec-2',
-    category: 'Air Quality',
-    priority: 'medium',
-    title: 'PM2.5 Filtration Alert',
-    description: 'PM2.5 levels have exceeded WHO guidelines 3 times this week. Recommend increasing ventilation rate when levels exceed 35 µg/m³.',
-  },
-  {
-    id: 'rec-3',
-    category: 'Maintenance',
-    priority: 'medium',
-    title: 'Sensor Calibration Due',
-    description: 'CO sensor readings have shown increasing deviation from expected values. Calibration recommended within the next 7 days.',
-  },
-  {
-    id: 'rec-4',
-    category: 'Comfort',
-    priority: 'low',
-    title: 'Temperature Stability',
-    description: 'Indoor temperature variance has improved by 15% over the past week. Current automation rules are working well.',
-  },
-];
+const PRIORITY_COLORS: Record<string, string> = {
+  high: 'text-red-600 bg-red-50 dark:bg-red-900/20',
+  medium: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20',
+  low: 'text-green-600 bg-green-50 dark:bg-green-900/20',
+};
+
+const KEY_SENSORS = ['pm25', 'co2', 'tmp', 'hum', 'no2'] as const;
 
 export default function AI() {
   const { t } = useI18n();
   const { data } = useData();
   const toast = useToast();
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [aiStatus, setAiStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+  const [ehiHistory, setEhiHistory] = useState<number[]>([]);
 
-  // Check AI status
   const checkAIStatus = async () => {
     setAiStatus('checking');
     try {
@@ -108,14 +86,12 @@ export default function AI() {
     }
   };
 
-  // Generate insights from sensor data
-  const generateInsights = async () => {
+  const generateInsights = useCallback(async () => {
     setLoading(true);
     try {
       const newInsights: Insight[] = [];
       const ts = new Date().toISOString();
 
-      // Rule-based insights from physical readings
       const temp = data.physical.temperature;
       if (temp !== undefined && temp > 30) {
         newInsights.push({
@@ -160,59 +136,101 @@ export default function AI() {
         });
       }
 
-      // Try AI insights
-      if (aiStatus === 'online') {
-        try {
-          const aiResult = await apiClient.diagnoseSensors({ sensorData: data.physical });
-          if (aiResult?.diagnosis) {
-            newInsights.push({
-              id: `ai-diag-${Date.now()}`,
-              type: 'info',
-              title: 'AI Diagnosis',
-              message: aiResult.diagnosis,
-              timestamp: new Date().toISOString(),
-            });
-          }
-        } catch { /* AI unavailable, use rule-based only */ }
-      }
-
       setInsights(newInsights);
       setLastRefresh(new Date());
-    } catch (err: any) {
+    } catch {
       toast.toast('Failed to generate insights', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [data.physical, toast]);
+
+  const generateRecommendations = useCallback(async () => {
+    if (aiStatus !== 'online') return;
+    const recs: Recommendation[] = [];
+    let id = 0;
+
+    try {
+      const diag = await apiClient.diagnoseSensors({ sensorData: data.physical });
+      if (Array.isArray(diag?.recommendations)) {
+        for (const r of diag.recommendations) {
+          recs.push({
+            id: `diag-${++id}`,
+            category: 'Diagnostics',
+            priority: id <= 1 ? 'high' : 'medium',
+            title: typeof r === 'string' ? r.slice(0, 80) : 'Recommendation',
+            description: typeof r === 'string' ? r : JSON.stringify(r),
+          });
+        }
+      }
+    } catch { /* AI unavailable */ }
+
+    for (const sensor of KEY_SENSORS) {
+      if (data.physical[sensor] === undefined) continue;
+      try {
+        const trend = await apiClient.analyzeTrend({ sensor, period: '24h' });
+        if (Array.isArray(trend?.recommendations)) {
+          for (const r of trend.recommendations) {
+            recs.push({
+              id: `trend-${sensor}-${++id}`,
+              category: `${sensor.toUpperCase()} Trend`,
+              priority: 'medium',
+              title: typeof r === 'string' ? r.slice(0, 80) : `${sensor} recommendation`,
+              description: typeof r === 'string' ? r : JSON.stringify(r),
+            });
+          }
+        }
+      } catch { /* skip */ }
+      if (recs.length >= 10) break;
+    }
+
+    setRecommendations(recs);
+  }, [aiStatus, data.physical]);
+
+  useEffect(() => {
+    const from = new Date(Date.now() - 7 * 86400000).toISOString();
+    apiClient.getEHIHistory(undefined, from).then((raw: any) => {
+      const values = (Array.isArray(raw) ? raw : []).map((r: any) => Number(r.ehi ?? 0)).filter((v: number) => v > 0);
+      setEhiHistory(values);
+    }).catch(() => setEhiHistory([]));
+  }, []);
 
   useEffect(() => {
     checkAIStatus();
     generateInsights();
-  }, [data.ehi]);
+  }, [data.ehi, generateInsights]);
 
-  // EHI trend chart data
+  useEffect(() => {
+    generateRecommendations();
+  }, [aiStatus, generateRecommendations]);
+
   const chartData = useMemo(() => {
-    const values = Array.from({ length: 24 }, (_, i) => {
-      const base = data.ehi || 50;
-      return Math.round((base + Math.sin(i * 0.3) * 20 + (Math.random() - 0.5) * 10) * 10) / 10;
-    });
-    const pred = generateAdvancedPrediction(values, 12);
-    return values.map((v, i) => ({ time: `T-${24 - i}`, ehi: v }))
-      .concat(Array.from({ length: 6 }, (_, i) => ({
-        time: `T+${i + 1}`,
-        ehi: Math.round((pred.value + (Math.random() - 0.5) * 5) * 10) / 10,
-      })));
-  }, [data.ehi]);
+    if (ehiHistory.length === 0) {
+      return [{ time: 'Now', ehi: data.ehi || 0, predicted: null as number | null }];
+    }
 
-  const priorityColors: Record<string, string> = {
-    high: 'text-red-600 bg-red-50 dark:bg-red-900/20',
-    medium: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20',
-    low: 'text-green-600 bg-green-50 dark:bg-green-900/20',
-  };
+    const historical = ehiHistory.map((v, i) => ({
+      time: `T-${ehiHistory.length - i}`,
+      ehi: v,
+      predicted: null as number | null,
+    }));
+
+    if (ehiHistory.length >= 3) {
+      const pred = generateAdvancedPrediction(ehiHistory, 6);
+      for (let i = 1; i <= 6; i++) {
+        historical.push({
+          time: `T+${i}`,
+          ehi: Math.round((pred.value + (i / 6) * (pred.upperBound - pred.value) * 0.5) * 10) / 10,
+          predicted: Math.round((pred.value + (i / 6) * (pred.upperBound - pred.value) * 0.5) * 10) / 10,
+        });
+      }
+    }
+
+    return historical;
+  }, [ehiHistory, data.ehi]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -232,7 +250,7 @@ export default function AI() {
             }`} />
             AI {aiStatus === 'online' ? 'Online' : aiStatus === 'offline' ? 'Offline' : 'Checking...'}
           </div>
-          <button onClick={generateInsights} disabled={loading}
+          <button onClick={() => { generateInsights(); generateRecommendations(); }} disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50">
             {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Refresh
@@ -240,11 +258,11 @@ export default function AI() {
         </div>
       </div>
 
-      {/* EHI Trend Chart */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border shadow-sm">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <TrendingUp size={18} />
           EHI Trend & Forecast
+          {ehiHistory.length === 0 && <span className="text-xs font-normal text-gray-400 ml-2">Awaiting real EHI data</span>}
         </h3>
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={chartData}>
@@ -252,12 +270,15 @@ export default function AI() {
             <XAxis dataKey="time" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
             <Tooltip />
-            <Area type="monotone" dataKey="ehi" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} strokeWidth={2} />
+            {ehiHistory.length >= 3 && (
+              <ReferenceLine x={`T+1`} stroke="#8b5cf6" strokeDasharray="3 3" label={{ value: 'Forecast →', position: 'insideTopRight', fontSize: 10 }} />
+            )}
+            <Area type="monotone" dataKey="ehi" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} strokeWidth={2} connectNulls={false} />
+            <Area type="monotone" dataKey="predicted" stroke="#c084fc" fill="#c084fc" fillOpacity={0.1} strokeWidth={2} strokeDasharray="5 5" connectNulls={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Insights Grid */}
       <div>
         <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
           <Zap size={18} />
@@ -288,26 +309,42 @@ export default function AI() {
         </div>
       </div>
 
-      {/* AI Recommendations */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border shadow-sm">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Lightbulb size={18} className="text-yellow-500" />
           AI Recommendations
         </h3>
-        <div className="space-y-3">
-          {RECOMMENDATIONS.map((rec) => (
-            <div key={rec.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${priorityColors[rec.priority]}`}>
-                  {rec.priority.toUpperCase()}
-                </span>
-                <span className="text-xs text-gray-500">{rec.category}</span>
+        {aiStatus === 'offline' ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-gray-500">AI recommendations require the backend to be online with OPENROUTER_API_KEY configured.</p>
+            <p className="text-xs text-gray-400 mt-1">Configure the API key in pern-backend/.env and restart the server.</p>
+          </div>
+        ) : recommendations.length === 0 ? (
+          <div className="text-center py-8">
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                <Loader2 size={14} className="animate-spin" /> Generating recommendations…
               </div>
-              <div className="font-medium text-sm">{rec.title}</div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{rec.description}</p>
-            </div>
-          ))}
-        </div>
+            ) : (
+              <p className="text-sm text-gray-500">No recommendations yet. Click Refresh to analyze current sensor data.</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {recommendations.map((rec) => (
+              <div key={rec.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[rec.priority]}`}>
+                    {rec.priority.toUpperCase()}
+                  </span>
+                  <span className="text-xs text-gray-500">{rec.category}</span>
+                </div>
+                <div className="font-medium text-sm">{rec.title}</div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{rec.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
