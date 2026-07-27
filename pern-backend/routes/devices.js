@@ -15,9 +15,30 @@ router.get('/locations/all', async (req, res) => {
     const locations = [];
     for (const d of devices) {
       const meta = await db.getDeviceMetadata(d.id);
-      if (meta && meta.location_lat && meta.location_lng) {
-        locations.push({ id: d.id, name: d.name, lat: meta.location_lat, lng: meta.location_lng, status: d.status });
-      }
+      let lat = meta?.location_lat || null;
+      let lng = meta?.location_lng || null;
+
+      // If no explicit coordinates, try to get latest sensor reading for context
+      let latestReading = null;
+      try {
+        const readings = await db.getDeviceReadings(d.id, 1);
+        if (readings.length > 0) latestReading = readings[0];
+      } catch { /* skip */ }
+
+      // Still include devices without coordinates — frontend can show them in list
+      locations.push({
+        id: d.id,
+        name: d.name || d.id,
+        type: d.type || 'unknown',
+        status: d.status || 'unknown',
+        lat: lat ? Number(lat) : null,
+        lng: lng ? Number(lng) : null,
+        description: meta?.description || '',
+        firmware: meta?.firmware_version || '',
+        tags: meta?.tags || [],
+        hasCoordinates: lat != null && lng != null,
+        latestReading: latestReading?.sensors || null,
+      });
     }
     res.json(locations);
   } catch { res.json([]); }
@@ -80,6 +101,27 @@ router.get('/:id/metadata', async (req, res) => {
 router.post('/:id/metadata', limiter, async (req, res) => {
   try {
     await db.upsertDeviceMetadata({ device_id: req.params.id, ...req.body });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Set device location (lat/lng)
+router.put('/:id/location', limiter, async (req, res) => {
+  const { lat, lng } = req.body;
+  if (lat == null || lng == null) {
+    return res.status(400).json({ error: 'lat and lng required' });
+  }
+  try {
+    const existing = await db.getDeviceMetadata(req.params.id);
+    await db.upsertDeviceMetadata({
+      device_id: req.params.id,
+      firmware_version: existing?.firmware_version || '',
+      location_lat: Number(lat),
+      location_lng: Number(lng),
+      description: existing?.description || '',
+      tags: existing?.tags || [],
+      config: existing?.config || {},
+    });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

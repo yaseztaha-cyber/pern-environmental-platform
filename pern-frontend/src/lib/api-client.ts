@@ -112,6 +112,9 @@ class APIClient {
   updateDevice(id: string, device: any) { return this.put<any>(`/devices/${id}`, device); }
   deleteDevice(id: string) { return this.delete<any>(`/devices/${id}`); }
   getDeviceLocations() { return this.get<any[]>('/devices/locations/all'); }
+  saveDeviceLocation(id: string, lat: number, lng: number) {
+    return this.put<any>(`/devices/${id}/location`, { lat, lng });
+  }
   getDeviceReadings(id: string, limit = 50) { return this.get<any[]>(`/devices/${id}/readings?limit=${limit}`); }
   getDeviceLatestReading(id: string) { return this.get<any>(`/devices/${id}/readings?limit=1`); }
   getDeviceHealth(id: string) { return this.get<any>(`/devices/${id}/health`); }
