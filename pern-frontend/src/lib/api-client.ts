@@ -114,6 +114,11 @@ class APIClient {
   getDeviceLocations() { return this.get<any[]>('/devices/locations/all'); }
   getDeviceReadings(id: string, limit = 50) { return this.get<any[]>(`/devices/${id}/readings?limit=${limit}`); }
   getDeviceLatestReading(id: string) { return this.get<any>(`/devices/${id}/readings?limit=1`); }
+  getDeviceHealth(id: string) { return this.get<any>(`/devices/${id}/health`); }
+  getDeviceHealthHistory(id: string, limit = 50) { return this.get<any[]>(`/devices/${id}/health/history?limit=${limit}`); }
+  sendActuatorCommand(id: string, actuator: string, action: string) {
+    return this.post<any>(`/devices/${id}/actuator`, { actuator, action });
+  }
 
   // ===================== Sensors =====================
   getSensorReadings(limit = 100, device?: string) {

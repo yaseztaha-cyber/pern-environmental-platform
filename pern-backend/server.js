@@ -114,9 +114,13 @@ mqttClient.on('connect', () => {
   logger.info('[MQTT] Connected to Mosquitto');
   mqttClient.subscribe('pern/sensors/+/data');
   mqttClient.subscribe('pern/devices/+/status');
+  mqttClient.subscribe('pern/devices/+/heartbeat');
   mqttClient.subscribe('pern/devices/+/actuators/+/status');
   mqttClient.subscribe('pern/actuator-status');
 });
+
+// Make MQTT client available to routes
+app.set('mqttClient', mqttClient);
 
 mqttClient.on('error', (err) => {
   logger.error('[MQTT] Connection error', { error: err.message });
@@ -206,6 +210,33 @@ mqttClient.on('message', async (topic, message) => {
           status: payload.status || 'online',
           lastSeen: Date.now(),
         }).catch(() => {});
+      }
+    }
+
+    // Handle device heartbeat (ESP32 health data)
+    if (topic.includes('/devices/') && topic.includes('/heartbeat')) {
+      const deviceId = topic.split('/')[2];
+      if (deviceId) {
+        db.saveDeviceHealth({
+          deviceId,
+          rssi: payload.rssi,
+          freeHeap: payload.freeHeap,
+          uptime: payload.uptime,
+          firmwareVersion: payload.fwVersion,
+          ip: payload.ip,
+          wifiChannel: payload.wifiChannel,
+          cpuFreq: payload.cpuFreq,
+          actuators: payload.actuators || {},
+        }).catch(e => logger.error('[DB] Save device health failed', { error: e.message }));
+
+        // Broadcast heartbeat to frontend via WebSocket
+        if (wss) {
+          wss.clients.forEach(client => {
+            if (client.readyState === 1) {
+              client.send(JSON.stringify({ type: 'device-heartbeat', payload }));
+            }
+          });
+        }
       }
     }
 

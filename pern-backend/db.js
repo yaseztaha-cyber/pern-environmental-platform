@@ -280,6 +280,21 @@ async function initDatabase() {
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMP DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS device_health (
+        id SERIAL PRIMARY KEY,
+        device_id VARCHAR(100) REFERENCES devices(id) ON DELETE CASCADE,
+        rssi INTEGER,
+        free_heap INTEGER,
+        uptime_seconds BIGINT,
+        firmware_version VARCHAR(50),
+        ip_address VARCHAR(45),
+        wifi_channel INTEGER,
+        cpu_freq INTEGER,
+        actuators JSONB DEFAULT '{}',
+        recorded_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_device_health_device_ts ON device_health (device_id, recorded_at DESC);
     `);
 
     // Performance indexes
@@ -1365,4 +1380,56 @@ module.exports = {
   getMessages,
   getRecentMessages,
   searchConversations,
+
+  // Device Health
+  saveDeviceHealth,
+  getLatestDeviceHealth,
+  getDeviceHealthHistory,
 };
+
+// ============================================================
+//  Device Health Functions
+// ============================================================
+
+async function saveDeviceHealth(data) {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      INSERT INTO device_health (device_id, rssi, free_heap, uptime_seconds, firmware_version, ip_address, wifi_channel, cpu_freq, actuators)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      data.deviceId,
+      data.rssi ?? null,
+      data.freeHeap ?? null,
+      data.uptime ?? null,
+      data.firmwareVersion ?? null,
+      data.ip ?? null,
+      data.wifiChannel ?? null,
+      data.cpuFreq ?? null,
+      JSON.stringify(data.actuators || {}),
+    ]);
+
+    // Also upsert device status
+    await client.query(`
+      INSERT INTO devices (id, name, type, status, last_seen)
+      VALUES ($1, $1, 'ESP32', 'online', NOW())
+      ON CONFLICT (id) DO UPDATE SET status = 'online', last_seen = NOW()
+    `, [data.deviceId]);
+  } finally {
+    client.release();
+  }
+}
+
+async function getLatestDeviceHealth(deviceId) {
+  const { rows } = await pool.query(`
+    SELECT * FROM device_health WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT 1
+  `, [deviceId]);
+  return rows[0] || null;
+}
+
+async function getDeviceHealthHistory(deviceId, limit = 50) {
+  const { rows } = await pool.query(`
+    SELECT * FROM device_health WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT $2
+  `, [deviceId, limit]);
+  return rows;
+}

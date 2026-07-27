@@ -84,4 +84,39 @@ router.post('/:id/metadata', limiter, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Device health
+router.get('/:id/health', async (req, res) => {
+  try {
+    const health = await db.getLatestDeviceHealth(req.params.id);
+    res.json(health || {});
+  } catch { res.json({}); }
+});
+
+router.get('/:id/health/history', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const history = await db.getDeviceHealthHistory(req.params.id, limit);
+    res.json(history);
+  } catch { res.json([]); }
+});
+
+// Actuator command (publishes via MQTT if available)
+router.post('/:id/actuator', limiter, async (req, res) => {
+  const { actuator, action } = req.body;
+  if (!actuator || !action) {
+    return res.status(400).json({ error: 'actuator and action required' });
+  }
+  try {
+    const mqttClient = req.app.get('mqttClient');
+    if (mqttClient) {
+      const topic = `pern/actuators/${req.params.id}/command`;
+      const payload = JSON.stringify({ actuator, action, source: 'api', timestamp: Date.now() });
+      mqttClient.publish(topic, payload);
+      res.json({ success: true, topic, payload: JSON.parse(payload) });
+    } else {
+      res.status(503).json({ error: 'MQTT not available' });
+    }
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
