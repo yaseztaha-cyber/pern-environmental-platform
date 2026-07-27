@@ -47,7 +47,7 @@ function PredictionsContent() {
       actual: v,
       predicted: null as number | null,
       upper: null as number | null,
-      lower: null as null,
+      lower: null as number | null,
     }));
 
     // Generate predictions extending from last data point

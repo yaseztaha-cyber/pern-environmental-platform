@@ -228,7 +228,7 @@ function AutomationContent() {
   const testNtfy = async () => {
     const success = await sendNtfyNotification({
       title: '🧪 PERN Automation Test',
-      message: t('automation.ntfy.testMessage', { ehi: data.ehi }),
+      message: t('automation.ntfy.testMessage', undefined, { ehi: data.ehi }),
       priority: 4,
       tags: ['test', 'automation'],
       topic: ntfyTopic

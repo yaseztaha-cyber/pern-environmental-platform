@@ -258,7 +258,7 @@ export default function Knowledge() {
     setAiError(null);
     setAiAnswer('');
     try {
-      const result = await apiClient.chat({ message: aiQuestion, context: 'knowledge-base' });
+      const result = await apiClient.chat(aiQuestion, 'knowledge-base');
       setAiAnswer(result?.reply || result?.response || 'No answer available. Please try rephrasing your question.');
     } catch (err: any) {
       setAiError(err?.message || 'Failed to get AI response. The AI service may be offline.');

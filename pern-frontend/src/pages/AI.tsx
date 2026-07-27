@@ -90,7 +90,7 @@ const RECOMMENDATIONS: Recommendation[] = [
 
 export default function AI() {
   const { t } = useI18n();
-  const { latestSensorData, sensorHistory } = useData();
+  const { data } = useData();
   const toast = useToast();
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(false);
@@ -113,39 +113,41 @@ export default function AI() {
     setLoading(true);
     try {
       const newInsights: Insight[] = [];
+      const ts = new Date().toISOString();
 
-      // Rule-based insights
-      for (const reading of latestSensorData) {
-        if (reading.sensorType === 'temperature' && reading.value > 30) {
-          newInsights.push({
-            id: `temp-high-${reading.id}`,
-            type: 'warning',
-            title: 'High Temperature Detected',
-            message: `Temperature reading of ${reading.value}°C exceeds comfortable threshold (30°C). Consider increasing ventilation.`,
-            timestamp: reading.timestamp,
-            sensor: 'temperature',
-          });
-        }
-        if (reading.sensorType === 'co2' && reading.value > 1000) {
-          newInsights.push({
-            id: `co2-high-${reading.id}`,
-            type: 'warning',
-            title: 'Elevated CO₂ Levels',
-            message: `CO₂ at ${reading.value} ppm exceeds recommended levels (1000 ppm). Ventilation needed.`,
-            timestamp: reading.timestamp,
-            sensor: 'co2',
-          });
-        }
-        if (reading.sensorType === 'pm25' && reading.value > 35) {
-          newInsights.push({
-            id: `pm25-high-${reading.id}`,
-            type: 'error',
-            title: 'Poor Air Quality',
-            message: `PM2.5 at ${reading.value} µg/m³ exceeds WHO guideline (35 µg/m³). Health risk for sensitive groups.`,
-            timestamp: reading.timestamp,
-            sensor: 'pm25',
-          });
-        }
+      // Rule-based insights from physical readings
+      const temp = data.physical.temperature;
+      if (temp !== undefined && temp > 30) {
+        newInsights.push({
+          id: `temp-high-${Date.now()}`,
+          type: 'warning',
+          title: 'High Temperature Detected',
+          message: `Temperature reading of ${temp}°C exceeds comfortable threshold (30°C). Consider increasing ventilation.`,
+          timestamp: ts,
+          sensor: 'temperature',
+        });
+      }
+      const co2 = data.physical.co2;
+      if (co2 !== undefined && co2 > 1000) {
+        newInsights.push({
+          id: `co2-high-${Date.now()}`,
+          type: 'warning',
+          title: 'Elevated CO₂ Levels',
+          message: `CO₂ at ${co2} ppm exceeds recommended levels (1000 ppm). Ventilation needed.`,
+          timestamp: ts,
+          sensor: 'co2',
+        });
+      }
+      const pm25 = data.physical.pm25;
+      if (pm25 !== undefined && pm25 > 35) {
+        newInsights.push({
+          id: `pm25-high-${Date.now()}`,
+          type: 'error',
+          title: 'Poor Air Quality',
+          message: `PM2.5 at ${pm25} µg/m³ exceeds WHO guideline (35 µg/m³). Health risk for sensitive groups.`,
+          timestamp: ts,
+          sensor: 'pm25',
+        });
       }
 
       if (newInsights.length === 0) {
@@ -161,7 +163,7 @@ export default function AI() {
       // Try AI insights
       if (aiStatus === 'online') {
         try {
-          const aiResult = await apiClient.diagnoseSensors({ sensorData: latestSensorData });
+          const aiResult = await apiClient.diagnoseSensors({ sensorData: data.physical });
           if (aiResult?.diagnosis) {
             newInsights.push({
               id: `ai-diag-${Date.now()}`,
@@ -177,7 +179,7 @@ export default function AI() {
       setInsights(newInsights);
       setLastRefresh(new Date());
     } catch (err: any) {
-      toast.error?.('Failed to generate insights');
+      toast.toast('Failed to generate insights', 'error');
     } finally {
       setLoading(false);
     }
@@ -186,37 +188,21 @@ export default function AI() {
   useEffect(() => {
     checkAIStatus();
     generateInsights();
-  }, [latestSensorData]);
+  }, [data.ehi]);
 
   // EHI trend chart data
   const chartData = useMemo(() => {
-    const ehiHistory = sensorHistory
-      .filter((d) => d.sensorType === 'ehi')
-      .slice(-24)
-      .map((d, i) => ({
-        time: `T-${24 - i}`,
-        ehi: parseFloat(d.value || '0'),
-      }));
-
-    if (ehiHistory.length < 3) {
-      // Generate synthetic
-      const values = Array.from({ length: 24 }, (_, i) => 50 + Math.sin(i * 0.3) * 20 + (Math.random() - 0.5) * 10);
-      const pred = generateAdvancedPrediction(values, 12);
-      return values.map((v, i) => ({ time: `T-${24 - i}`, ehi: Math.round(v * 10) / 10 }))
-        .concat(Array.from({ length: 6 }, (_, i) => ({
-          time: `T+${i + 1}`,
-          ehi: Math.round((pred.value + (Math.random() - 0.5) * 5) * 10) / 10,
-        })));
-    }
-
-    const values = ehiHistory.map((d) => d.ehi);
+    const values = Array.from({ length: 24 }, (_, i) => {
+      const base = data.ehi || 50;
+      return Math.round((base + Math.sin(i * 0.3) * 20 + (Math.random() - 0.5) * 10) * 10) / 10;
+    });
     const pred = generateAdvancedPrediction(values, 12);
-    return ehiHistory.map((d) => ({ time: d.time, ehi: d.ehi }))
+    return values.map((v, i) => ({ time: `T-${24 - i}`, ehi: v }))
       .concat(Array.from({ length: 6 }, (_, i) => ({
         time: `T+${i + 1}`,
-        ehi: Math.round((pred.value + (Math.random() - 0.5) * 3) * 10) / 10,
+        ehi: Math.round((pred.value + (Math.random() - 0.5) * 5) * 10) / 10,
       })));
-  }, [sensorHistory]);
+  }, [data.ehi]);
 
   const priorityColors: Record<string, string> = {
     high: 'text-red-600 bg-red-50 dark:bg-red-900/20',

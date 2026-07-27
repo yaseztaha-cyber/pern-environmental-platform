@@ -174,7 +174,7 @@ function SensorsContent() {
                 </div>
 
                 <div className="mt-2 flex justify-between text-[10px] text-[var(--text-disabled)]">
-                  <span>{t('sensors.inputsUsedSuffix', { count: vs.inputs.length })}</span>
+                  <span>{t('sensors.inputsUsedSuffix', undefined, { count: vs.inputs.length })}</span>
                   {vs.missingInputs && vs.missingInputs.length > 0 && (
                     <span className="text-[var(--amber)]">{t('sensors.missingPrefix')}{vs.missingInputs.join(', ')}</span>
                   )}

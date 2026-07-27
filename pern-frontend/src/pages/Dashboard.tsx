@@ -185,7 +185,7 @@ export default function Dashboard() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] animate-fade-in">
           <div className="glass rounded-[var(--radius-lg)] px-6 py-4 flex items-center gap-3">
             <Loader2 size={18} className="animate-spin text-[var(--emerald)]" />
-            <span className="text-sm font-medium">{t('dashboard.switchingMode', { mode: isLive ? t('dashboard.mode.live') : t('dashboard.mode.simulation') })}</span>
+            <span className="text-sm font-medium">{t('dashboard.switchingMode', undefined, { mode: isLive ? t('dashboard.mode.live') : t('dashboard.mode.simulation') })}</span>
           </div>
         </div>
       )}

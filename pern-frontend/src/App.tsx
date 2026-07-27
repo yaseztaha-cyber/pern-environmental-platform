@@ -94,7 +94,7 @@ const navSections: NavSection[] = [
       { path: '/sensors', label: 'Live Sensors', icon: Gauge },
       { path: '/devices', label: 'Devices', icon: Cpu },
       { path: '/device-connection', label: 'Connect Device', icon: Cable },
-      { path: '/device-setup-guide', label: 'Setup Guide', icon: BookOpen },
+      { path: '/device-setup-guide', label: 'Setup Guide', icon: BookOpenCheck },
       { path: '/history', label: 'History', icon: History },
       { path: '/map', label: 'Map', icon: Map },
     ],

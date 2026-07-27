@@ -2,13 +2,13 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 
 export type Locale = 'en' | 'ar';
 
-/** Simple interpolation: t('key', { name: 'World' }) → replaces {name} in the string */
+/** Simple interpolation: t('key', 'fallback', { name: 'World' }) → replaces {name} in the string */
 export type Interpolation = Record<string, string | number>;
 
 interface I18nContextType {
   locale: Locale;
   setLocale: (l: Locale) => void;
-  t: (key: string, params?: Interpolation) => string;
+  t: (key: string, fallback?: string, params?: Interpolation) => string;
   dir: 'ltr' | 'rtl';
 }
 
@@ -706,8 +706,9 @@ export function useI18n() {
   const ctx = useContext(I18nContext);
   if (!ctx) throw new Error('useI18n must be used within I18nProvider');
   const tWithInterp = useCallback(
-    (key: string, params?: Interpolation) => {
+    (key: string, fallback?: string, params?: Interpolation) => {
       let str = lookup(dictionaries[ctx.locale], key);
+      if (str === key && fallback) str = fallback;
       if (params) {
         for (const [k, v] of Object.entries(params)) {
           str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));

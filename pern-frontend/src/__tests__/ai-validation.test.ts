@@ -52,7 +52,7 @@ describe('Prediction Engine', () => {
     expect(result.value).toBeGreaterThan(60);
     expect(result.confidence).toBeGreaterThan(40);
     expect(result.lowerBound).toBeLessThan(result.upperBound);
-    expect(result.method).toContain('Exponential');
+    expect(result.method).toContain('Ensemble');
   });
 
   it('should return low confidence with insufficient data', () => {
