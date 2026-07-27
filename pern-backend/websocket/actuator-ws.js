@@ -161,6 +161,20 @@ function broadcastAlert(alert) {
   });
 }
 
+function broadcastDeviceHeartbeat(payload) {
+  const message = JSON.stringify({
+    type: 'device-heartbeat',
+    ...payload,
+    timestamp: Date.now(),
+  });
+
+  clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
 function getClientCount() {
   return clients.size;
 }
@@ -172,5 +186,6 @@ module.exports = {
   broadcastNotification,
   broadcastSensorReading,
   broadcastAlert,
+  broadcastDeviceHeartbeat,
   getClientCount,
 };

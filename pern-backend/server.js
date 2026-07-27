@@ -37,7 +37,7 @@ const reportRoutes = require('./routes/reports');
 const alertEngine = require('./services/alert-engine');
 const notificationDispatcher = require('./services/notification-dispatcher');
 const anomalyDetector = require('./services/anomaly-detector');
-const { startActuatorWebSocket, stopActuatorWebSocket, broadcastNotification, broadcastSensorReading, broadcastAlert, broadcastActuatorStatus, getClientCount } = require('./websocket/actuator-ws');
+const { startActuatorWebSocket, stopActuatorWebSocket, broadcastNotification, broadcastSensorReading, broadcastAlert, broadcastActuatorStatus, broadcastDeviceHeartbeat, getClientCount } = require('./websocket/actuator-ws');
 const protocolManager = require('./protocols/protocol-manager');
 const deviceSimulator = require('./device-simulator');
 
@@ -230,13 +230,7 @@ mqttClient.on('message', async (topic, message) => {
         }).catch(e => logger.error('[DB] Save device health failed', { error: e.message }));
 
         // Broadcast heartbeat to frontend via WebSocket
-        if (wss) {
-          wss.clients.forEach(client => {
-            if (client.readyState === 1) {
-              client.send(JSON.stringify({ type: 'device-heartbeat', payload }));
-            }
-          });
-        }
+        broadcastDeviceHeartbeat(payload);
       }
     }
 

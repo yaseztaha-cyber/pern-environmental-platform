@@ -9,6 +9,7 @@ import {
   calculateRealHealthScore, type RealDeviceHealth,
   getRssiQuality, getHeapHealth, getUptimeQuality, getHealthLabel,
 } from '../lib/device-health';
+import { connectActuatorWebSocket, onDeviceHeartbeat, type DeviceHeartbeat } from '../lib/actuator-ws';
 import { PageHeader, Card, StatCard, Pill, ProgressRing, Btn, LoadingState, fmt } from '../components/ui';
 
 type ViewMode = 'overview' | 'comparison' | 'alerts';
@@ -182,6 +183,40 @@ export default function DeviceHealthDashboard() {
     const interval = setInterval(loadHealth, 30000);
     return () => clearInterval(interval);
   }, [loadHealth]);
+
+  // Real-time heartbeat updates via WebSocket
+  useEffect(() => {
+    connectActuatorWebSocket();
+    const unsub = onDeviceHeartbeat((hb: DeviceHeartbeat) => {
+      setDevices(prev => prev.map(d => {
+        if (d.id !== hb.device) return d;
+        const rssiQuality = getRssiQuality(hb.rssi);
+        const heapHealth = getHeapHealth(hb.freeHeap);
+        const uptimeQuality = getUptimeQuality(hb.uptime);
+        const healthScore = calculateRealHealthScore(rssiQuality, heapHealth, uptimeQuality);
+        const updated: EnrichedDevice = {
+          ...d,
+          rssi: hb.rssi,
+          freeHeap: hb.freeHeap,
+          uptimeSeconds: hb.uptime,
+          firmwareVersion: hb.fwVersion || d.firmwareVersion,
+          ipAddress: hb.ip || d.ipAddress,
+          wifiChannel: hb.wifiChannel ?? d.wifiChannel,
+          cpuFreq: hb.cpuFreq ?? d.cpuFreq,
+          rssiQuality,
+          heapHealth,
+          uptimeQuality,
+          healthScore,
+          lastSeen: new Date(hb.timestamp).toISOString(),
+          recordedAt: new Date(hb.timestamp).toISOString(),
+          status: 'online',
+        };
+        updated.alerts = buildAlerts(updated);
+        return updated;
+      }));
+    });
+    return unsub;
+  }, []);
 
   const allAlerts = useMemo(() =>
     devices.flatMap(d => d.alerts.map(a => ({ ...a, deviceId: d.id, deviceName: d.name }))),

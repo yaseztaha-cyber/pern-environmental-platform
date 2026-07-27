@@ -1,5 +1,5 @@
 /**
- * WebSocket Client for Real Actuator Feedback
+ * WebSocket Client for Real Actuator Feedback + Device Heartbeat
  */
 
 export interface ActuatorStatusUpdate {
@@ -16,6 +16,8 @@ export interface ActuatorStatusUpdate {
 let ws: WebSocket | null = null;
 const listeners: Array<(status: ActuatorStatusUpdate) => void> = [];
 const alertListeners: Array<(alert: any) => void> = [];
+const heartbeatListeners: Array<(heartbeat: DeviceHeartbeat) => void> = [];
+const sensorReadingListeners: Array<(reading: SensorReadingUpdate) => void> = [];
 
 export interface AlertUpdate {
   type: 'alert';
@@ -25,6 +27,27 @@ export interface AlertUpdate {
   title: string;
   detail: string;
   alertId?: number;
+  timestamp: number;
+}
+
+export interface DeviceHeartbeat {
+  type: 'device-heartbeat';
+  device: string;
+  rssi: number;
+  freeHeap: number;
+  uptime: number;
+  fwVersion: string;
+  ip: string;
+  wifiChannel: number;
+  cpuFreq: number;
+  actuators: Record<string, boolean>;
+  timestamp: number;
+}
+
+export interface SensorReadingUpdate {
+  type: 'sensor-reading';
+  device: string;
+  sensors: Record<string, number>;
   timestamp: number;
 }
 
@@ -45,6 +68,12 @@ export function connectActuatorWebSocket(url = 'ws://localhost:8081') {
       }
       if (data.type === 'alert') {
         alertListeners.forEach(cb => cb(data));
+      }
+      if (data.type === 'device-heartbeat') {
+        heartbeatListeners.forEach(cb => cb(data));
+      }
+      if (data.type === 'sensor-reading') {
+        sensorReadingListeners.forEach(cb => cb(data));
       }
     } catch (err) {
       if (import.meta.env.DEV) console.error('[ActuatorWS] Parse error:', err);
@@ -74,6 +103,22 @@ export function onAlert(callback: (alert: AlertUpdate) => void) {
   return () => {
     const index = alertListeners.indexOf(callback);
     if (index > -1) alertListeners.splice(index, 1);
+  };
+}
+
+export function onDeviceHeartbeat(callback: (heartbeat: DeviceHeartbeat) => void) {
+  heartbeatListeners.push(callback);
+  return () => {
+    const index = heartbeatListeners.indexOf(callback);
+    if (index > -1) heartbeatListeners.splice(index, 1);
+  };
+}
+
+export function onSensorReading(callback: (reading: SensorReadingUpdate) => void) {
+  sensorReadingListeners.push(callback);
+  return () => {
+    const index = sensorReadingListeners.indexOf(callback);
+    if (index > -1) sensorReadingListeners.splice(index, 1);
   };
 }
 

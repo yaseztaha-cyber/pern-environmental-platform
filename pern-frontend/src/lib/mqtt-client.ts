@@ -28,6 +28,19 @@ export interface DiscoveredDevice {
   timestamp: number;
 }
 
+export interface DeviceHeartbeat {
+  device: string;
+  rssi: number;
+  freeHeap: number;
+  uptime: number;
+  fwVersion: string;
+  ip: string;
+  wifiChannel: number;
+  cpuFreq: number;
+  actuators: Record<string, boolean>;
+  timestamp: number;
+}
+
 export class PERN_MQTT_Client {
   private client: MqttClient | null = null;
   private connected: boolean = false;
@@ -37,6 +50,7 @@ export class PERN_MQTT_Client {
   private listeners: Array<(data: SensorData) => void> = [];
   private actuatorListeners: Array<(status: ActuatorStatus) => void> = [];
   private deviceListeners: Array<(device: DiscoveredDevice) => void> = [];
+  private heartbeatListeners: Array<(heartbeat: DeviceHeartbeat) => void> = [];
   private statusListeners: Array<(status: boolean) => void> = [];
   private reconnectingListeners: Array<(reconnecting: boolean, attempt: number) => void> = [];
 
@@ -87,6 +101,7 @@ export class PERN_MQTT_Client {
           // Subscribe to sensor data topics
           this.client?.subscribe('pern/sensors/+/data', { qos: 0 });
           this.client?.subscribe('pern/devices/+/status', { qos: 0 });
+          this.client?.subscribe('pern/devices/+/heartbeat', { qos: 0 });
           
           this.notifyStatus(true);
           this.notifyReconnecting(false, 0);
@@ -120,6 +135,24 @@ export class PERN_MQTT_Client {
                 timestamp: payload.timestamp || Date.now()
               };
               this.notifyActuatorListeners(actuatorStatus);
+            }
+
+            // Device heartbeat (health data)
+            if (topic.includes('/devices/') && topic.includes('/heartbeat')) {
+              const deviceId = topic.split('/')[2] || payload.device;
+              const heartbeat: DeviceHeartbeat = {
+                device: deviceId,
+                rssi: payload.rssi,
+                freeHeap: payload.freeHeap,
+                uptime: payload.uptime,
+                fwVersion: payload.fwVersion,
+                ip: payload.ip,
+                wifiChannel: payload.wifiChannel,
+                cpuFreq: payload.cpuFreq,
+                actuators: payload.actuators || {},
+                timestamp: payload.timestamp || Date.now(),
+              };
+              this.notifyHeartbeatListeners(heartbeat);
             }
           } catch (e) {
             if (import.meta.env.DEV) console.warn('[MQTT] Parse error:', e);
@@ -242,6 +275,13 @@ export class PERN_MQTT_Client {
     };
   }
 
+  onDeviceHeartbeat(callback: (heartbeat: DeviceHeartbeat) => void) {
+    this.heartbeatListeners.push(callback);
+    return () => {
+      this.heartbeatListeners = this.heartbeatListeners.filter(cb => cb !== callback);
+    };
+  }
+
   private notifyListeners(data: SensorData) {
     this.listeners.forEach(cb => cb(data));
   }
@@ -252,6 +292,10 @@ export class PERN_MQTT_Client {
 
   private notifyDeviceListeners(device: DiscoveredDevice) {
     this.deviceListeners.forEach(cb => cb(device));
+  }
+
+  private notifyHeartbeatListeners(heartbeat: DeviceHeartbeat) {
+    this.heartbeatListeners.forEach(cb => cb(heartbeat));
   }
 
   private notifyStatus(status: boolean) {
