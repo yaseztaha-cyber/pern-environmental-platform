@@ -1,0 +1,189 @@
+import { useData } from '../lib/data-provider';
+import { SENSOR_TYPES } from '../lib/constants';
+import { exportToCSV, exportToExcel } from '../lib/export-utils';
+import { showToast } from '../components/Toast';
+import { PageErrorBoundary } from '../components/PageErrorBoundary';
+import { useI18n } from '../lib/i18n';
+import { PageHeader, Card, Pill, Btn, Badge, fmt } from '../components/ui';
+import { Download, FileSpreadsheet, Activity, Cpu } from 'lucide-react';
+
+export default function SensorsPage() {
+  return (
+    <PageErrorBoundary pageName="Sensors">
+      <SensorsContent />
+    </PageErrorBoundary>
+  );
+}
+
+function SensorsContent() {
+  const { data, updatePhysicalReading, isLive } = useData();
+  const { t } = useI18n();
+
+  const totalVirtual = data.virtualSensors.length;
+  const avgConfidence = totalVirtual > 0
+    ? Math.round(data.virtualSensors.reduce((s, v) => s + v.confidence, 0) / totalVirtual)
+    : 0;
+
+  return (
+    <div className="max-w-[1400px] mx-auto">
+      <PageHeader
+        title={t('sensors.title')}
+        subtitle={t('sensors.subtitle')}
+        right={
+          <div className="flex items-center gap-2">
+            <Pill tone={isLive ? 'emerald' : 'slate'}>
+              {isLive ? t('sensors.badge.liveFromMqtt') : t('sensors.badge.simulationMode')}
+            </Pill>
+            <Btn variant="ghost" size="sm" onClick={() => { exportToCSV(data, 'pern-sensors'); showToast(t('sensors.toast.csvExportSuccess'), 'success'); }}>
+              <Download size={13} /> .csv
+            </Btn>
+            <Btn variant="primary" size="sm" onClick={() => { exportToExcel(data, 'pern-sensors'); showToast(t('sensors.toast.excelExportSuccess'), 'success'); }}>
+              <FileSpreadsheet size={13} /> .xlsx
+            </Btn>
+          </div>
+        }
+      />
+
+      {/* Summary Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8 grid-entrance">
+        <div className="rounded-[var(--radius-md)] p-4 bg-[var(--emerald-dim)] border-l-[3px] border-l-[var(--emerald)]">
+          <div className="section-label">{t('sensors.section.physicalSensors')}</div>
+          <div className="text-2xl font-bold stat-number text-[var(--emerald)]">{Object.keys(data.physical).length}</div>
+        </div>
+        <div className="rounded-[var(--radius-md)] p-4 bg-[var(--cyan-dim)] border-l-[3px] border-l-[var(--cyan)]">
+          <div className="section-label">{t('sensors.section.virtualSensors')}</div>
+          <div className="text-2xl font-bold stat-number text-[var(--cyan)]">{totalVirtual}</div>
+        </div>
+        <div className="rounded-[var(--radius-md)] p-4 bg-[rgba(167,139,250,0.08)] border-l-[3px] border-l-[var(--violet)]">
+          <div className="section-label">{t('sensors.label.confidence')}</div>
+          <div className="text-2xl font-bold stat-number text-[var(--violet)]">{avgConfidence}%</div>
+        </div>
+        <div className="rounded-[var(--radius-md)] p-4 bg-[var(--amber-dim)] border-l-[3px] border-l-[var(--amber)]">
+          <div className="section-label">Status</div>
+          <div className="flex items-center gap-2 mt-1">
+            <div className={`w-2.5 h-2.5 rounded-full ${isLive ? 'bg-[var(--emerald)] animate-pulse-glow' : 'bg-white/20'}`} />
+            <span className="text-sm font-medium">{isLive ? 'Streaming' : 'Static'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Physical Sensors */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <Cpu size={16} className="text-[var(--emerald)]" />
+          <h3 className="font-semibold">{t('sensors.section.physicalSensors')}</h3>
+          <div className="h-px flex-1 bg-[var(--border)]" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 grid-entrance">
+          {Object.entries(data.physical).map(([key, value]) => {
+            const meta = SENSOR_TYPES[key as keyof typeof SENSOR_TYPES];
+            if (!meta) return null;
+
+            const inRange = value >= meta.safeRange[0] && value <= meta.safeRange[1];
+            const pct = Math.min(100, Math.max(0, ((value - meta.safeRange[0]) / (meta.safeRange[1] - meta.safeRange[0])) * 100));
+
+            return (
+              <Card key={key} hover={false} className="!p-0 overflow-hidden">
+                <div className={`h-1 ${inRange ? 'bg-[var(--emerald)]' : 'bg-[var(--amber)]'}`} />
+                <div className="p-5">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-medium">{meta.name}</div>
+                      <div className="text-[36px] font-bold tabular-nums tracking-tighter leading-none mt-2 text-[var(--text-primary)]">
+                        {fmt(value)}
+                      </div>
+                      <div className="text-xs text-[var(--text-tertiary)] mt-1">{meta.unit}</div>
+                    </div>
+                    <Pill tone={inRange ? 'emerald' : 'amber'}>{inRange ? 'Safe' : 'Check'}</Pill>
+                  </div>
+
+                  {/* Range bar */}
+                  <div className="mt-4">
+                    <div className="flex justify-between text-[10px] text-[var(--text-disabled)] mb-1 font-mono">
+                      <span>{meta.safeRange[0]}</span>
+                      <span>{meta.safeRange[1]}</span>
+                    </div>
+                    <div className="h-1.5 bg-white/5 rounded-full overflow-hidden relative">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${inRange ? 'bg-[var(--emerald)]' : 'bg-[var(--amber)]'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {!isLive && (
+                    <input
+                      type="range"
+                      min={meta.safeRange[0]}
+                      max={meta.safeRange[1] + 20}
+                      step="0.1"
+                      value={value}
+                      onChange={(e) => updatePhysicalReading(key, parseFloat(e.target.value))}
+                      className="mt-3 w-full"
+                    />
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Virtual Sensors */}
+      <div>
+        <div className="flex items-center gap-3 mb-4">
+          <Activity size={16} className="text-[var(--violet)]" />
+          <h3 className="font-semibold">{t('sensors.section.virtualSensors')}</h3>
+          <Pill tone="violet">{t('sensors.badge.computed')}</Pill>
+          <div className="h-px flex-1 bg-[var(--border)]" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 grid-entrance">
+          {data.virtualSensors.map((vs, index) => (
+            <Card key={index} hover={false} className="!p-0 overflow-hidden">
+              <div className="h-1" style={{ background: vs.color }} />
+              <div className="p-5">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-medium">{vs.name}</div>
+                    <div className="text-[36px] font-bold tabular-nums tracking-tighter mt-2 leading-none">
+                      {fmt(vs.value)}
+                      <span className="text-lg align-baseline font-normal text-[var(--text-tertiary)] ml-1">{vs.unit}</span>
+                    </div>
+                  </div>
+                  <Badge category={vs.category} />
+                </div>
+
+                <div className="mt-4 text-xs text-[var(--text-tertiary)] border-t border-[var(--border)] pt-3 font-mono">
+                  {vs.formula}
+                </div>
+
+                {/* Confidence Bar */}
+                <div className="mt-3">
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span className="text-[var(--emerald)]">{t('sensors.label.confidence')}</span>
+                    <span className="font-mono text-[var(--text-secondary)]">{vs.confidence}%</span>
+                  </div>
+                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden progress-bar">
+                    <div
+                      className="h-full bg-[var(--emerald)] rounded-full transition-all duration-700"
+                      style={{ width: `${vs.confidence}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-2 flex justify-between text-[10px] text-[var(--text-disabled)]">
+                  <span>{t('sensors.inputsUsedSuffix', { count: vs.inputs.length })}</span>
+                  {vs.missingInputs && vs.missingInputs.length > 0 && (
+                    <span className="text-[var(--amber)]">{t('sensors.missingPrefix')}{vs.missingInputs.join(', ')}</span>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
