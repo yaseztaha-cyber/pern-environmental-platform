@@ -3,6 +3,7 @@ import { useData } from '../lib/data-provider';
 import { fetchOpenAQData } from '../lib/openaq-service';
 import { getAverageReading } from '../lib/sensor-community-service';
 import { PageHeader, Card, EmptyState } from '../components/ui';
+import { showToast } from '../components/Toast';
 import { GitCompareArrows } from 'lucide-react';
 
 export default function CompareVirtualSensors() {
@@ -37,6 +38,7 @@ export default function CompareVirtualSensors() {
       });
     } catch (error) {
       console.error('Comparison failed:', error);
+      showToast('Failed to fetch comparison data. Check your network and try again.', 'error');
     } finally {
       setLoading(false);
     }

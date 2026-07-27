@@ -55,7 +55,7 @@ function AutomationContent() {
 
   // Load rules from backend API, fallback to localStorage
   useEffect(() => {
-    apiClient.getAutomationRules().then(rows => {
+      apiClient.getAutomationRules().then(rows => {
       if (Array.isArray(rows) && rows.length > 0) {
         const parsed = rows
           .filter((r: any) => r.enabled)
@@ -83,6 +83,11 @@ function AutomationContent() {
         if (saved) {
           try { setRules(JSON.parse(saved)); } catch { /* empty */ }
         }
+      }
+    }).catch(() => {
+      const saved = localStorage.getItem(`pern_${orgId}_automation_rules`);
+      if (saved) {
+        try { setRules(JSON.parse(saved)); } catch { /* empty */ }
       }
     });
   }, [orgId]);

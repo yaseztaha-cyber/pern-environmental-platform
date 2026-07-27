@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useData } from '../lib/data-provider';
 import { generateValidationReport } from '../lib/validation-service';
 import { PageHeader, Card, Btn, SectionTitle, EmptyState } from '../components/ui';
+import { showToast } from '../components/Toast';
 import { ShieldCheck } from 'lucide-react';
 
 export default function RealDataValidation() {
@@ -20,6 +21,7 @@ export default function RealDataValidation() {
       setResults(report);
     } catch (error) {
       console.error('Validation failed:', error);
+      showToast('Validation failed. Please try again.', 'error');
     } finally {
       setLoading(false);
     }

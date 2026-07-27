@@ -64,7 +64,7 @@ export default function DevicesPage() {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm(`Delete device ${id}?`)) return;
-    await fetch(`/api/devices/${id}`, { method: 'DELETE' });
+    await apiClient.deleteDevice(id);
     loadDevices();
   };
 

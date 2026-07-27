@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 're
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { PageHeader, Card, Pill, SectionTitle, Btn } from '../components/ui';
+import { showToast } from '../components/Toast';
 import { MapPin, Crosshair, AlertTriangle } from 'lucide-react';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -101,6 +102,7 @@ export default function MapPage() {
       await loadLocations();
     } catch (err) {
       console.error('Failed to save location:', err);
+      showToast('Failed to save device location.', 'error');
     }
   };
 
