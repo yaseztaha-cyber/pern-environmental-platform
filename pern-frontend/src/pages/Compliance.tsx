@@ -61,7 +61,7 @@ export default function CompliancePage() {
           <div className="flex items-center gap-3">
             <ProgressRing value={score} size={44} strokeWidth={4} accent={score >= 80 ? 'emerald' : score >= 50 ? 'amber' : 'rose'} />
             <Pill tone={score >= 80 ? 'emerald' : score >= 50 ? 'amber' : 'rose'}>{score}% compliant</Pill>
-            <Btn variant="ghost" size="sm" onClick={() => apiClient.exportReadingsCSV()} aria-label="Export compliance data">
+            <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }} aria-label="Export compliance data">
               <Download size={14} /> Export
             </Btn>
           </div>

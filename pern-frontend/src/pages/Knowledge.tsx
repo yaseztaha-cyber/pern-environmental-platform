@@ -294,7 +294,7 @@ export default function Knowledge() {
             className="flex-1 border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--violet)]"
           />
           <Btn variant="primary" size="sm" loading={aiLoading} onClick={askAI} disabled={!aiQuestion.trim()}>
-            {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {!aiLoading && <Send size={14} />}
             Ask
           </Btn>
         </div>

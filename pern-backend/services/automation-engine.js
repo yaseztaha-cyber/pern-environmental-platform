@@ -50,7 +50,7 @@ class AutomationEngine {
         .filter(r => r.enabled)
         .map(rule => ({
           ...rule,
-          threshold: Number(rule.threshold),
+          threshold: String(rule.threshold),
           action: parseAction(rule.action)
         }));
       logger.info(`Loaded ${this.rules.length} automation rules from database`);
@@ -72,7 +72,7 @@ class AutomationEngine {
   }
 
   async evaluateRules(sensorData) {
-    const { device, sensors } = sensorData;
+    const { device, sensors = {} } = sensorData;
 
     for (const rule of this.rules) {
       try {
@@ -137,13 +137,16 @@ class AutomationEngine {
       const topic = process.env.NTFY_TOPIC || 'pern-platform-alerts-2026';
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 5000);
-      await fetch(`https://ntfy.sh/${topic}`, {
-        method: 'POST',
-        headers: { 'Title': `Automation: ${rule.name}`, 'Priority': '4', 'Tags': 'automation,pern' },
-        body: message,
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
+      try {
+        await fetch(`https://ntfy.sh/${topic}`, {
+          method: 'POST',
+          headers: { 'Title': `Automation: ${rule.name}`, 'Priority': '4', 'Tags': 'automation,pern' },
+          body: message,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
     } catch (err) {
       logger.error('[AutomationEngine] ntfy failed', { error: err.message });
     }

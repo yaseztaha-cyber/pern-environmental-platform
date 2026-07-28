@@ -77,7 +77,7 @@ export default function AnalyticsPage() {
         subtitle={t('analytics.subtitle')}
         right={<div className="flex items-center gap-2">
           {noRealData ? <Pill tone="amber">Awaiting real data</Pill> : undefined}
-          <Btn variant="ghost" size="sm" onClick={() => apiClient.exportReadingsCSV()} aria-label="Export analytics data">
+          <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }} aria-label="Export analytics data">
             <Download size={12} /> Export CSV
           </Btn>
         </div>}

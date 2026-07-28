@@ -62,7 +62,7 @@ export async function executeAutomationRule(rule: AutomationRule, currentValue: 
   const topic = `pern/actuators/${rule.action.device}/command`;
   const payload = {
     actuator: rule.action.actuator,
-    state: rule.action.command === 'on' ? 'on' : 'off',
+    state: rule.action.command === 'on' ? 'on' : rule.action.command === 'off' ? 'off' : 'on',
     source: rule.id,
     timestamp: now,
     ...(rule.action.command === 'pulse' && { duration: rule.action.duration })
@@ -74,7 +74,7 @@ export async function executeAutomationRule(rule: AutomationRule, currentValue: 
   pendingCommands.unshift({
     device: rule.action.device,
     actuator: rule.action.actuator,
-    state: rule.action.command === 'on' ? 'on' : 'off',
+    state: rule.action.command === 'on' ? 'on' : rule.action.command === 'off' ? 'off' : 'on',
     source: rule.name,
     timestamp: now
   });

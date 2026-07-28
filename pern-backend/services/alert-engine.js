@@ -74,7 +74,10 @@ class AlertEngine {
   }
 
   async evaluateAlertRules(sensorData) {
-    if (rules.length === 0) await this.loadRules();
+    if (rules.length === 0 && Date.now() - this._lastEmptyLoad > 60000) {
+      this._lastEmptyLoad = Date.now();
+      await this.loadRules();
+    }
 
     const { device, sensors } = sensorData;
 

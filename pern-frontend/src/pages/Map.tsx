@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useI18n } from '../lib/i18n';
 import { apiClient } from '../lib/api-client';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 'react-leaflet';
@@ -138,7 +138,7 @@ export default function MapPage() {
                   <MapClickHandler onPick={(lat, lng) => setPickedCoords({ lat, lng })} />
                 )}
                 {locatedDevices.map((loc) => (
-                  <div key={loc.id}>
+                  <Fragment key={loc.id}>
                     <Marker
                       position={[loc.lat!, loc.lng!]}
                       eventHandlers={{ click: () => setSelected(loc) }}
@@ -169,7 +169,7 @@ export default function MapPage() {
                         fillOpacity: 0.15,
                       }}
                     />
-                  </div>
+                  </Fragment>
                 ))}
                 {settingLocation && pickedCoords && (
                   <Marker position={[pickedCoords.lat, pickedCoords.lng]} />

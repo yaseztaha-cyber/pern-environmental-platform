@@ -57,6 +57,10 @@ class ConversationMemory {
 
     // Also update in-memory for fast access
     if (!this.inMemoryStore.has(conversationId)) {
+      if (this.inMemoryStore.size >= 100) {
+        const oldest = this.inMemoryStore.keys().next().value;
+        this.inMemoryStore.delete(oldest);
+      }
       this.inMemoryStore.set(conversationId, { history: [] });
     }
     const mem = this.inMemoryStore.get(conversationId);

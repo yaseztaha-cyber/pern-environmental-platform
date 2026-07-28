@@ -17,7 +17,7 @@ export interface SketchConfig {
 }
 
 const PIN_MAP: Record<string, number> = {
-  tmp: 34, hum: 35, pm25: 32, co2: 36, ph: 33, tds: 35, sm: 39,
+  tmp: 34, hum: 35, pm25: 32, co2: 36, ph: 33, tds: 39, sm: 14,
 };
 
 const RELAY_PINS: Record<string, number> = {

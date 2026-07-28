@@ -161,7 +161,7 @@ export default function ResearchPage() {
         subtitle={`Pearson coefficients · ${readings.length} readings · Statistical summaries`}
         right={<div className="flex items-center gap-2">
           {readings.length === 0 ? <Pill tone="amber">No data</Pill> : <Pill tone="emerald">{readings.length} readings</Pill>}
-          <Btn variant="ghost" size="sm" onClick={() => apiClient.exportReadingsCSV()}>
+          <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}>
             <Download size={12} /> Export
           </Btn>
         </div>}

@@ -138,7 +138,7 @@ export default function AlertsPage() {
         right={
           <div className="flex items-center gap-2">
             {noRealData ? <Pill tone="amber">Awaiting real data</Pill> : undefined}
-            <button onClick={() => apiClient.exportAlertsCSV()} className="px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--surface)] text-xs flex items-center gap-1.5 border border-[var(--border)]" aria-label="Export alerts"><Download size={12} /> Export</button>
+            <button onClick={() => { const url = apiClient.exportAlertsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }} className="px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--surface)] text-xs flex items-center gap-1.5 border border-[var(--border)]" aria-label="Export alerts"><Download size={12} /> Export</button>
             <Btn variant="ghost" onClick={() => setShowThresholds(true)}>
               <SlidersHorizontal size={15} /> Thresholds
             </Btn>

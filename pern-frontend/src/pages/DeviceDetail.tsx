@@ -151,7 +151,7 @@ export default function DeviceDetailPage() {
         ) : (
           <div className="max-h-[400px] overflow-y-auto space-y-2">
             {readings.slice(0, 50).map((r) => (
-              <div key={`${r.recordedAt || r.recorded_at}-${r.id || Math.random()}`} className="flex items-center justify-between py-2 px-3 rounded-[var(--radius-sm)] bg-[var(--surface)] text-xs">
+              <div key={`${r.recordedAt || r.recorded_at}-${r.id || r.index || Math.random()}`} className="flex items-center justify-between py-2 px-3 rounded-[var(--radius-sm)] bg-[var(--surface)] text-xs">
                 <span className="text-[var(--text-secondary)]">{new Date(r.recordedAt || r.recorded_at).toLocaleString()}</span>
                 <span className="font-mono text-[var(--text-secondary)]">
                   {r.sensors && typeof r.sensors === 'object'

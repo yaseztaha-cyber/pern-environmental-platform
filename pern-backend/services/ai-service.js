@@ -58,7 +58,7 @@ class AIService {
 
 === CURRENT ENVIRONMENTAL STATE ===
 Location: ${context.location || 'Unknown'}
-EHI Score: ${context.ehi || 'N/A'} (${context.ehi >= 80 ? 'Excellent' : context.ehi >= 60 ? 'Good' : context.ehi >= 40 ? 'Moderate' : 'Poor'})
+EHI Score: ${context.ehi ?? 'N/A'} (${(context.ehi ?? 0) >= 80 ? 'Excellent' : (context.ehi ?? 0) >= 60 ? 'Good' : (context.ehi ?? 0) >= 40 ? 'Moderate' : 'Poor'})
 
 Physical Sensors:
 - PM2.5: ${context.pm25 || 'N/A'} µg/m³
@@ -190,8 +190,12 @@ Automation & Devices:
         }
       }
 
-      await this.addMessage(sessionId, 'user', message);
-      await this.addMessage(sessionId, 'assistant', reply);
+      try {
+        await this.addMessage(sessionId, 'user', message);
+        await this.addMessage(sessionId, 'assistant', reply);
+      } catch (saveErr) {
+        logger.warn('[AI Service] Failed to save conversation', { error: saveErr.message });
+      }
 
       return {
         response: reply,
