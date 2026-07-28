@@ -25,7 +25,7 @@ export async function validatePM25(pernPM25: number, city: string = 'Cairo'): Pr
   }
 
   const difference = Math.abs(pernPM25 - realData.pm25);
-  const accuracy = Math.max(0, 100 - (difference / realData.pm25) * 100);
+  const accuracy = realData.pm25 === 0 ? (pernPM25 === 0 ? 100 : 0) : Math.max(0, 100 - (difference / realData.pm25) * 100);
 
   return {
     parameter: 'PM2.5',

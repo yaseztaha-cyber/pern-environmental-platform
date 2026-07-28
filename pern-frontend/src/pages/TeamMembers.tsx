@@ -11,13 +11,14 @@ interface TeamMember {
   joinedAt?: string;
 }
 
-const ROLE_OPTIONS = ['admin', 'supervisor', 'operator', 'viewer'] as const;
+const ROLE_OPTIONS = ['admin', 'supervisor', 'operator', 'viewer', 'researcher'] as const;
 
 const ROLE_TONES: Record<string, 'emerald' | 'cyan' | 'violet' | 'amber' | 'slate'> = {
   admin: 'emerald',
   supervisor: 'cyan',
   operator: 'violet',
   viewer: 'slate',
+  researcher: 'amber',
 };
 
 export default function TeamMembers() {
@@ -31,7 +32,7 @@ export default function TeamMembers() {
   const fetchMembers = () => {
     setLoading(true);
     apiClient.getUsers().then((data: any) => {
-      setMembers(data);
+      setMembers(Array.isArray(data) ? data : []);
     }).catch(() => {}).finally(() => setLoading(false));
   };
 

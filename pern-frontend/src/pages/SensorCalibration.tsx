@@ -20,12 +20,17 @@ export default function SensorCalibration() {
   const [loading, setLoading] = useState(true);
 
   const loadDevices = useCallback(async () => {
-    const devs = await apiClient.getDevices();
-    setDevices(devs);
-    if (devs.length > 0 && !selectedDevice) {
-      setSelectedDevice(devs[0].id);
+    try {
+      const devs = await apiClient.getDevices();
+      setDevices(Array.isArray(devs) ? devs : []);
+      if (devs.length > 0 && !selectedDevice) {
+        setSelectedDevice(devs[0].id);
+      }
+    } catch {
+      setDevices([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [selectedDevice]);
 
   const loadCalibration = useCallback(async () => {

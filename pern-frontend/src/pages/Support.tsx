@@ -114,7 +114,7 @@ export default function Support() {
         ].map((metric, i) => (
           <Card key={i} hover={false} className="text-center">
             <div className="text-xs text-[var(--text-secondary)]">{metric.label}</div>
-            <div className="text-3xl font-semibold tracking-tighter text-[var(--emerald)] mt-1 stat-number">{fmt(metric.value)}</div>
+            <div className="text-3xl font-semibold tracking-tighter text-[var(--emerald)] mt-1 stat-number">{typeof metric.value === 'number' ? fmt(metric.value) : metric.value}</div>
             <div className="text-[10px] text-[var(--text-tertiary)] mt-1">{metric.detail}</div>
           </Card>
         ))}

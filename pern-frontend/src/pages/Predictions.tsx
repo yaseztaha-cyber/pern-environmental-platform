@@ -102,9 +102,9 @@ function PredictionsContent() {
   }
 
   const predictions = [
-    { horizon: '24 Hours', icon: <Target size={14} />, ...pred24 },
-    { horizon: '48 Hours', icon: <TrendingUp size={14} />, ...pred48 },
-    { horizon: '7 Days', icon: <BarChart3 size={14} />, ...pred7d },
+    { horizon: '24 Hours', icon: <Target size={14} />, ...(pred24 ?? { value: 0, upperBound: 0, lowerBound: 0, confidence: 0, rSquared: 0 }) },
+    { horizon: '48 Hours', icon: <TrendingUp size={14} />, ...(pred48 ?? { value: 0, upperBound: 0, lowerBound: 0, confidence: 0, rSquared: 0 }) },
+    { horizon: '7 Days', icon: <BarChart3 size={14} />, ...(pred7d ?? { value: 0, upperBound: 0, lowerBound: 0, confidence: 0, rSquared: 0 }) },
   ].map(p => ({ ...p, uncertainty: Math.round((p.upperBound - p.lowerBound) / 2) }));
 
   const validationResults = history.length >= 10 ? backtestPrediction(history, 5, 24) : [];

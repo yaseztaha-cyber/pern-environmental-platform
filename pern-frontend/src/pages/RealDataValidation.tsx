@@ -15,7 +15,7 @@ export default function RealDataValidation() {
     setLoading(true);
     try {
       const report = await generateValidationReport({
-        pm25: data.physical.pm25,
+        pm25: data.physical.pm25 ?? 0,
         city: city
       });
       setResults(report);

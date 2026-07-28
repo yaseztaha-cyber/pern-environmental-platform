@@ -30,9 +30,10 @@ export default function OrganizationSettings() {
 
   useEffect(() => {
     apiClient.getOrganizations().then((data: any) => {
-      setOrgs(data);
-      if (data.length > 0) {
-        const org = data[0];
+      const list = Array.isArray(data) ? data : [];
+      setOrgs(list);
+      if (list.length > 0) {
+        const org = list[0];
         setSelectedOrg(org);
         setName(org.name || '');
         setDescription(org.description || '');
