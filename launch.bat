@@ -162,8 +162,8 @@ echo [OK] Backend starting on http://localhost:3000
 
 timeout /t 3 /nobreak >nul
 
-start "PERN Frontend" cmd /k "cd /d %ROOT%pern-frontend && npx vite --host"
-echo [OK] Frontend starting on http://localhost:5173
+start "PERN Frontend" cmd /k "cd /d %ROOT%pern-frontend && npm run dev -- --host"
+echo [OK] Frontend starting on http://localhost:5174
 
 echo.
 echo ============================================
@@ -173,7 +173,7 @@ echo.
 echo   Postgres      -^> localhost:5432
 echo   MQTT Broker   -^> localhost:1883
 echo   Backend API   -^> localhost:3000
-echo   Frontend UI   -^> localhost:5173
+echo   Frontend UI   -^> http://localhost:5174
 echo   Arduino USB   -^> Plug in, then run: cd arduino ^& node bridge.js
 echo.
 echo   Close this window anytime. Servers run in their own windows.
