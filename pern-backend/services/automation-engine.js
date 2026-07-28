@@ -75,6 +75,7 @@ class AutomationEngine {
     const { device, sensors } = sensorData;
 
     for (const rule of this.rules) {
+      try {
       if (!rule.enabled) continue;
 
       const sensorValue = sensors[rule.sensor];
@@ -120,6 +121,9 @@ class AutomationEngine {
         }).catch(() => {});
 
         await this.executeAction(rule, numericValue, device);
+      }
+      } catch (e) {
+        logger.error(`[AutomationEngine] Rule ${rule.id} evaluation failed`, { error: e.message });
       }
     }
   }

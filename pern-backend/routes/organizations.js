@@ -31,6 +31,15 @@ router.post('/', requireRole('admin'), async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.put('/:id', async (req, res) => {
+  try {
+    const existing = await db.getOrganization(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Organization not found' });
+    await db.upsertOrganization({ id: req.params.id, ...existing, ...req.body, settings: { ...existing.settings, ...req.body.settings } });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
     await db.deleteOrganization(req.params.id);

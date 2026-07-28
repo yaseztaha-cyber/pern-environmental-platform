@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Bell, Database, Mail, Hash, Save } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
 import { PageHeader, Card, Pill, LoadingState, Toggle } from '../components/ui';
+import { showToast } from '../components/Toast';
 
 interface OrgSettings {
   id: string;
@@ -55,8 +56,10 @@ export default function OrganizationSettings() {
         alertPreferences: { ntfy: ntfyEnabled, email: emailEnabled, slack: slackEnabled },
       };
       await apiClient.put(`/organizations/${selectedOrg.id}`, payload);
+      showToast('Organization settings saved', 'success');
     } catch (err) {
       console.error('Failed to save org settings:', err);
+      showToast('Failed to save settings', 'error');
     } finally {
       setSaving(false);
     }

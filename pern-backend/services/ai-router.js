@@ -137,6 +137,10 @@ class AIRouter {
         }),
         signal: controller.signal,
       });
+    } catch (err) {
+      clearTimeout(timeout);
+      logger.error('[AI Router] chatStream fetch failed', { error: err.message });
+      throw err;
     } finally {
       clearTimeout(timeout);
     }

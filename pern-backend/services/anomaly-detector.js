@@ -3,6 +3,7 @@
  */
 
 const windowSize = 50;
+const maxKeys = 500;
 
 class AnomalyDetector {
   constructor() {
@@ -12,6 +13,10 @@ class AnomalyDetector {
   analyze(deviceId, sensor, value) {
     const key = `${deviceId}:${sensor}`;
     if (!this.deviceWindows.has(key)) {
+      if (this.deviceWindows.size >= maxKeys) {
+        const oldest = this.deviceWindows.keys().next().value;
+        this.deviceWindows.delete(oldest);
+      }
       this.deviceWindows.set(key, []);
     }
     const window = this.deviceWindows.get(key);

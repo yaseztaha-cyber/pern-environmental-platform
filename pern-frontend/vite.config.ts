@@ -25,7 +25,7 @@ export default defineConfig({
             if (id.includes('recharts') || id.includes('d3-')) return 'charts';
             if (id.includes('leaflet') || id.includes('react-leaflet')) return 'maps';
             if (id.includes('framer-motion')) return 'motion';
-            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('dompurify')) return 'pdf';
+            if (id.includes('jspdf')) return 'pdf';
             if (id.includes('xlsx') || id.includes('SheetJS')) return 'xlsx';
             if (id.includes('mqtt')) return 'mqtt';
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router') || id.includes('scheduler')) return 'react-vendor';

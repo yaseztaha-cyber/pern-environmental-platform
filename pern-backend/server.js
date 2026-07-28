@@ -364,6 +364,28 @@ app.use('/api/export', require('./routes/export'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/seed', require('./routes/seed'));
 
+// Support tickets (in-memory store for demo, would be DB-backed in production)
+const supportTickets = [];
+app.get('/api/support/tickets', (req, res) => {
+  res.json(supportTickets.slice(-50).reverse());
+});
+app.post('/api/support/ticket', (req, res) => {
+  const { name, email, subject, message, priority } = req.body;
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: 'name, email, and message are required' });
+  }
+  const ticket = {
+    id: 'st-' + Date.now(),
+    subject: subject || 'No Subject',
+    status: 'open',
+    priority: priority || 'medium',
+    name, email, message,
+    createdAt: new Date().toISOString(),
+  };
+  supportTickets.push(ticket);
+  res.json({ success: true, ticket });
+});
+
 // OpenAQ proxy — avoids CORS issues when frontend calls external API
 app.get('/api/openaq', async (req, res) => {
   const { city, parameter } = req.query;
