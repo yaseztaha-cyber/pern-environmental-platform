@@ -45,7 +45,7 @@ router.get('/:id/members', async (req, res) => {
   } catch { res.json([]); }
 });
 
-router.post('/:id/members', async (req, res) => {
+router.post('/:id/members', requireRole('admin', 'manager'), async (req, res) => {
   try {
     await db.addTeamMember({ orgId: req.params.id, ...req.body });
     res.json({ success: true });

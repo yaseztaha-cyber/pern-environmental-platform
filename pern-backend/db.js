@@ -790,17 +790,22 @@ async function saveAlertRule(rule) {
     : JSON.stringify(rule.notification_channels || ['ntfy']);
   const orgId = rule.organization_id || 'default';
 
-  await pool.query(
-    `INSERT INTO alert_rules (id, name, sensor, operator, threshold, severity, notification_channels, enabled, organization_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     ON CONFLICT (id) DO UPDATE SET
-       name = EXCLUDED.name, sensor = EXCLUDED.sensor, operator = EXCLUDED.operator,
-       threshold = EXCLUDED.threshold, severity = EXCLUDED.severity,
-       notification_channels = EXCLUDED.notification_channels, enabled = EXCLUDED.enabled,
-       organization_id = EXCLUDED.organization_id`,
-    [rule.id, rule.name, rule.sensor, rule.operator, rule.threshold,
-     rule.severity || 'warning', channelsJson, rule.enabled !== false, orgId]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO alert_rules (id, name, sensor, operator, threshold, severity, notification_channels, enabled, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name, sensor = EXCLUDED.sensor, operator = EXCLUDED.operator,
+         threshold = EXCLUDED.threshold, severity = EXCLUDED.severity,
+         notification_channels = EXCLUDED.notification_channels, enabled = EXCLUDED.enabled,
+         organization_id = EXCLUDED.organization_id`,
+      [rule.id, rule.name, rule.sensor, rule.operator, rule.threshold,
+       rule.severity || 'warning', channelsJson, rule.enabled !== false, orgId]
+    );
+  } catch (err) {
+    logger.error('[DB] saveAlertRule failed', { error: err.message });
+    throw err;
+  }
 }
 
 async function deleteAlertRule(id) {

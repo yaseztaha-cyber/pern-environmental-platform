@@ -26,10 +26,8 @@ export function logAuditEvent(
   const log: AuditLog = {
     id: Date.now().toString(36) + Math.random().toString(36).substr(2),
     timestamp: new Date().toISOString(),
-    userId: localStorage.getItem('pern_demo_user') ? 
-      JSON.parse(localStorage.getItem('pern_demo_user')!).id : 'anonymous',
-    organizationId: localStorage.getItem('pern_current_organization') ? 
-      JSON.parse(localStorage.getItem('pern_current_organization')!).id : undefined,
+    userId: (() => { try { const v = localStorage.getItem('pern_demo_user'); return v ? JSON.parse(v).id : 'anonymous'; } catch { return 'anonymous'; } })(),
+    organizationId: (() => { try { const v = localStorage.getItem('pern_current_organization'); return v ? JSON.parse(v).id : undefined; } catch { return undefined; } })(),
     action,
     resource,
     details,

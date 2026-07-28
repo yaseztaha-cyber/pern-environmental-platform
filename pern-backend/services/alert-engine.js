@@ -22,11 +22,15 @@ function evaluateCondition(value, operator, threshold) {
     case '==': return Math.abs(num - thr) < 0.01;
     case '!=': return Math.abs(num - thr) >= 0.01;
     case 'between': {
-      const [lo, hi] = String(threshold).split(',').map(Number);
+      const parts = String(threshold).split(',');
+      if (parts.length < 2) return false;
+      const lo = Number(parts[0]), hi = Number(parts[1]);
       return num >= lo && num <= hi;
     }
     case 'outside': {
-      const [lo, hi] = String(threshold).split(',').map(Number);
+      const parts = String(threshold).split(',');
+      if (parts.length < 2) return false;
+      const lo = Number(parts[0]), hi = Number(parts[1]);
       return num < lo || num > hi;
     }
     default: return false;

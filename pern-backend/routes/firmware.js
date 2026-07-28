@@ -5,6 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { requireRole } = require('../middleware/rbac');
 
 router.get('/', async (req, res) => {
   try {
@@ -20,14 +21,14 @@ router.get('/latest/:deviceType', async (req, res) => {
   } catch { res.json(null); }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireRole('admin', 'manager'), async (req, res) => {
   try {
     await db.saveFirmwareVersion(req.body);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
     await db.deleteFirmwareVersion(req.params.id);
     res.json({ success: true });

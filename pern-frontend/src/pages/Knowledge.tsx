@@ -13,6 +13,7 @@ import {
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiClient } from '../lib/api-client';
+import { PageHeader, Card, Btn, Pill, EmptyState } from '../components/ui';
 
 interface Article {
   id: string;
@@ -268,25 +269,19 @@ export default function Knowledge() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <BookOpen className="text-blue-600" size={28} />
-          {t('knowledge.title', 'Knowledge Base')}
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {t('knowledge.subtitle', 'Articles, guides, and AI-powered answers about environmental monitoring')}
-        </p>
-      </div>
+    <div className="max-w-[1100px] mx-auto space-y-6">
+      <PageHeader
+        title={t('knowledge.title', 'Knowledge Base')}
+        subtitle={t('knowledge.subtitle', 'Articles, guides, and AI-powered answers about environmental monitoring')}
+      />
 
       {/* AI Q&A Section */}
-      <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl p-6 border border-purple-200 dark:border-purple-800">
-        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-          <MessageCircle size={18} className="text-purple-600" />
-          Ask EcoSentinel AI
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+      <Card hover={false}>
+        <div className="flex items-center gap-2 mb-3">
+          <MessageCircle size={18} className="text-[var(--violet)]" />
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Ask EcoSentinel AI</h3>
+        </div>
+        <p className="text-sm text-[var(--text-secondary)] mb-4">
           Ask any question about environmental monitoring, sensors, automation, or the platform.
         </p>
         <div className="flex gap-2">
@@ -296,56 +291,49 @@ export default function Knowledge() {
             onChange={(e) => setAiQuestion(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') askAI(); }}
             placeholder="e.g., What PM2.5 level is considered safe for indoor use?"
-            className="flex-1 border rounded-lg px-4 py-2.5 text-sm bg-white dark:bg-gray-900 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="flex-1 border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--violet)]"
           />
-          <button
-            onClick={askAI}
-            disabled={!aiQuestion.trim() || aiLoading}
-            className="px-5 py-2.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-          >
+          <Btn variant="primary" size="sm" loading={aiLoading} onClick={askAI} disabled={!aiQuestion.trim()}>
             {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             Ask
-          </button>
+          </Btn>
         </div>
 
         {aiAnswer && (
-          <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg border prose prose-sm dark:prose-invert max-w-none">
+          <div className="mt-4 p-4 bg-[var(--bg-tertiary)] rounded-[var(--radius-sm)] border border-[var(--border)] prose prose-sm dark:prose-invert max-w-none">
             <Markdown remarkPlugins={[remarkGfm]}>{aiAnswer}</Markdown>
           </div>
         )}
         {aiError && (
-          <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-lg text-sm text-red-700 dark:text-red-400 flex items-center gap-2">
+          <div className="mt-4 p-3 bg-[var(--rose-dim)] border border-[var(--rose)]/20 rounded-[var(--radius-sm)] text-sm text-[var(--rose)] flex items-center gap-2">
             <X size={14} />
             {aiError}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Search & Filter */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('knowledge.search', 'Search articles...')}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-700"
+            className="w-full pl-10 pr-4 py-2 border border-[var(--border)] rounded-[var(--radius-sm)] text-sm bg-[var(--bg-primary)] text-[var(--text-primary)]"
           />
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {CATEGORIES.map((cat) => (
-            <button
+            <Btn
               key={cat}
+              variant={selectedCategory === cat ? 'primary' : 'ghost'}
+              size="sm"
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 text-xs rounded-full border whitespace-nowrap transition-colors ${
-                selectedCategory === cat
-                  ? 'bg-blue-600 text-white border-transparent'
-                  : 'bg-white dark:bg-gray-800 text-gray-600 border-gray-200 dark:border-gray-700 hover:border-blue-300'
-              }`}
             >
               {cat}
-            </button>
+            </Btn>
           ))}
         </div>
       </div>
@@ -353,45 +341,44 @@ export default function Knowledge() {
       {/* Articles */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredArticles.map((article) => (
-          <div
-            key={article.id}
-            className="bg-white dark:bg-gray-800 rounded-xl p-5 border shadow-sm hover:shadow-md transition-shadow"
-          >
+          <Card key={article.id}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                {article.category}
-              </span>
-              <Lightbulb size={14} className="text-yellow-500" />
+              <Pill tone="cyan">{article.category}</Pill>
+              <Lightbulb size={14} className="text-[var(--amber)]" />
             </div>
-            <h3 className="font-semibold text-sm mb-1">{article.title}</h3>
-            <p className="text-xs text-gray-500 mb-3">{article.summary}</p>
+            <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-1">{article.title}</h3>
+            <p className="text-xs text-[var(--text-secondary)] mb-3">{article.summary}</p>
             <div className="flex flex-wrap gap-1 mb-3">
               {article.tags.map((tag) => (
-                <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-500">
+                <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-tertiary)]">
                   #{tag}
                 </span>
               ))}
             </div>
-            <button
+            <Btn
+              variant="ghost"
+              size="sm"
               onClick={() => setExpandedArticle(expandedArticle === article.id ? null : article.id)}
-              className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
             >
               {expandedArticle === article.id ? 'Collapse' : 'Read more'} <ExternalLink size={10} />
-            </button>
+            </Btn>
             {expandedArticle === article.id && (
-              <div className="mt-3 pt-3 border-t text-xs text-gray-600 dark:text-gray-400 whitespace-pre-line prose prose-sm dark:prose-invert max-w-none">
+              <div className="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--text-secondary)] whitespace-pre-line prose prose-sm dark:prose-invert max-w-none">
                 <Markdown remarkPlugins={[remarkGfm]}>{article.content}</Markdown>
               </div>
             )}
-          </div>
+          </Card>
         ))}
       </div>
 
       {filteredArticles.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          <BookOpen size={48} className="mx-auto mb-4 opacity-50" />
-          <p className="text-sm">No articles found matching your search.</p>
-        </div>
+        <Card hover={false}>
+          <EmptyState
+            icon={<BookOpen size={22} />}
+            title="No articles found"
+            message="No articles match your search. Try different keywords."
+          />
+        </Card>
       )}
     </div>
   );

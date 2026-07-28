@@ -18,7 +18,6 @@ import {
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiClient } from '../lib/api-client';
-import { API_BASE } from '../lib/constants';
 import { useAuth } from '../lib/auth-context';
 import { Card, Btn, SectionTitle } from '../components/ui';
 
@@ -123,7 +122,7 @@ export default function Chatbot() {
     setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date().toISOString() }]);
 
     try {
-      const response = await fetch(`${API_BASE}/chatbot/stream`, {
+      const response = await fetch('/api/chatbot/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ message: text, conversationId: currentConversationId }),

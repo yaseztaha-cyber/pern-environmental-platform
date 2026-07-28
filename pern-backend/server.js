@@ -74,7 +74,7 @@ app.use(helmet({
 // CORS — restrict origins in all environments
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:80', 'http://localhost:8080'];
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:80', 'http://localhost:8080'];
 
 app.use(cors({
   origin: ALLOWED_ORIGINS,

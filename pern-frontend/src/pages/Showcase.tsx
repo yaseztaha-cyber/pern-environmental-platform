@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Cpu, Activity, Bell, Clock, Users, Rocket, Target } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
-import { API_BASE } from '../lib/constants';
 import { PageHeader, Card, Pill, StatCard, LoadingState, SectionTitle } from '../components/ui';
 
 interface TeamPerson {
@@ -45,7 +44,7 @@ export default function ShowcasePage() {
       apiClient.getDevices(),
       apiClient.getSensorReadings(1),
       apiClient.getAlertStats(),
-      fetch(`${API_BASE}/health`).then((r) => r.json()).catch(() => ({})),
+      apiClient.getHealth().catch(() => ({})),
     ]).then(([devices, readings, alerts, health]) => {
       setDeviceCount(Array.isArray(devices) ? devices.length : 0);
       setTotalReadings(Array.isArray(readings) ? readings.length : 0);

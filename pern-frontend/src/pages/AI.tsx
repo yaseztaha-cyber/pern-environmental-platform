@@ -25,6 +25,7 @@ import { useData } from '../lib/data-provider';
 import { useToast } from '../components/Toast';
 import { apiClient } from '../lib/api-client';
 import { generateAdvancedPrediction } from '../lib/prediction-engine';
+import { PageHeader, Card, Btn, Pill, SectionTitle } from '../components/ui';
 
 interface Insight {
   id: string;
@@ -50,17 +51,17 @@ const INSIGHT_ICONS: Record<string, any> = {
   error: AlertTriangle,
 };
 
-const INSIGHT_COLORS: Record<string, string> = {
-  warning: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800',
-  info: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-  success: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-  error: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+const INSIGHT_TONES: Record<string, 'amber' | 'cyan' | 'emerald' | 'rose'> = {
+  warning: 'amber',
+  info: 'cyan',
+  success: 'emerald',
+  error: 'rose',
 };
 
-const PRIORITY_COLORS: Record<string, string> = {
-  high: 'text-red-600 bg-red-50 dark:bg-red-900/20',
-  medium: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20',
-  low: 'text-green-600 bg-green-50 dark:bg-green-900/20',
+const PRIORITY_TONES: Record<string, 'rose' | 'amber' | 'emerald'> = {
+  high: 'rose',
+  medium: 'amber',
+  low: 'emerald',
 };
 
 const KEY_SENSORS = ['pm25', 'co2', 'tmp', 'hum', 'no2'] as const;
@@ -236,123 +237,127 @@ export default function AI() {
     return historical;
   }, [ehiHistory, data.ehi]);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Brain className="text-purple-600" size={28} />
-            {t('ai.title', 'AI Intelligence Center')}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {t('ai.subtitle', 'Real-time AI-powered environmental analysis and recommendations')}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
-            aiStatus === 'online' ? 'bg-green-50 text-green-700' : aiStatus === 'offline' ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'
-          }`}>
-            <div className={`w-2 h-2 rounded-full ${
-              aiStatus === 'online' ? 'bg-green-500' : aiStatus === 'offline' ? 'bg-red-500' : 'bg-gray-400 animate-pulse'
-            }`} />
-            AI {aiStatus === 'online' ? 'Online' : aiStatus === 'offline' ? 'Offline' : 'Checking...'}
-          </div>
-          <button onClick={() => { generateInsights(); generateRecommendations(); }} disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Refresh
-          </button>
-        </div>
-      </div>
+  const aiStatusTone = aiStatus === 'online' ? 'emerald' : aiStatus === 'offline' ? 'rose' : 'slate' as const;
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border shadow-sm">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <TrendingUp size={18} />
-          EHI Trend & Forecast
-          {ehiHistory.length === 0 && <span className="text-xs font-normal text-gray-400 ml-2">Awaiting real EHI data</span>}
-        </h3>
+  return (
+    <div className="max-w-[1100px] mx-auto space-y-6">
+      <PageHeader
+        title={t('ai.title', 'AI Intelligence Center')}
+        subtitle={t('ai.subtitle', 'Real-time AI-powered environmental analysis and recommendations')}
+        right={
+          <div className="flex items-center gap-3">
+            <Pill tone={aiStatusTone}>
+              <span className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${aiStatus === 'online' ? 'bg-[var(--emerald)]' : aiStatus === 'offline' ? 'bg-[var(--rose)]' : 'bg-[var(--text-tertiary)] animate-pulse'}`} />
+                AI {aiStatus === 'online' ? 'Online' : aiStatus === 'offline' ? 'Offline' : 'Checking...'}
+              </span>
+            </Pill>
+            <Btn
+              variant="primary"
+              size="sm"
+              loading={loading}
+              onClick={() => { generateInsights(); generateRecommendations(); }}
+            >
+              <RefreshCw size={14} /> Refresh
+            </Btn>
+          </div>
+        }
+      />
+
+      <Card hover={false}>
+        <SectionTitle>
+          <span className="flex items-center gap-2">
+            <TrendingUp size={18} />
+            EHI Trend & Forecast
+            {ehiHistory.length === 0 && <span className="text-xs font-normal text-[var(--text-tertiary)] ml-2">Awaiting real EHI data</span>}
+          </span>
+        </SectionTitle>
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="time" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
             <Tooltip />
             {ehiHistory.length >= 3 && (
-              <ReferenceLine x={`T+1`} stroke="#8b5cf6" strokeDasharray="3 3" label={{ value: 'Forecast →', position: 'insideTopRight', fontSize: 10 }} />
+              <ReferenceLine x={`T+1`} stroke="var(--indigo)" strokeDasharray="3 3" label={{ value: 'Forecast →', position: 'insideTopRight', fontSize: 10 }} />
             )}
-            <Area type="monotone" dataKey="ehi" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} strokeWidth={2} connectNulls={false} />
-            <Area type="monotone" dataKey="predicted" stroke="#c084fc" fill="#c084fc" fillOpacity={0.1} strokeWidth={2} strokeDasharray="5 5" connectNulls={false} />
+            <Area type="monotone" dataKey="ehi" stroke="var(--indigo)" fill="var(--indigo)" fillOpacity={0.2} strokeWidth={2} connectNulls={false} />
+            <Area type="monotone" dataKey="predicted" stroke="var(--violet)" fill="var(--violet)" fillOpacity={0.1} strokeWidth={2} strokeDasharray="5 5" connectNulls={false} />
           </AreaChart>
         </ResponsiveContainer>
-      </div>
+      </Card>
 
       <div>
-        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-          <Zap size={18} />
-          Live Insights
-          <span className="text-xs font-normal text-gray-400 ml-2">
-            Last updated: {lastRefresh.toLocaleTimeString()}
+        <SectionTitle>
+          <span className="flex items-center gap-2">
+            <Zap size={18} />
+            Live Insights
+            <span className="text-xs font-normal text-[var(--text-tertiary)] ml-2">
+              Last updated: {lastRefresh.toLocaleTimeString()}
+            </span>
           </span>
-        </h3>
+        </SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {insights.map((insight) => {
             const Icon = INSIGHT_ICONS[insight.type] || Info;
             return (
-              <div key={insight.id} className={`p-4 rounded-xl border ${INSIGHT_COLORS[insight.type]}`}>
+              <Card key={insight.id} hover={false}>
                 <div className="flex items-start gap-3">
-                  <Icon size={20} className="shrink-0 mt-0.5" />
+                  <Icon size={20} className="shrink-0 mt-0.5 text-[var(--text-tertiary)]" />
                   <div>
-                    <div className="font-medium text-sm">{insight.title}</div>
-                    <p className="text-xs mt-1 opacity-80">{insight.message}</p>
-                    <div className="flex items-center gap-2 mt-2 text-[10px] opacity-50">
+                    <div className="font-medium text-sm text-[var(--text-primary)]">{insight.title}</div>
+                    <p className="text-xs mt-1 text-[var(--text-secondary)]">{insight.message}</p>
+                    <div className="flex items-center gap-2 mt-2 text-[10px] text-[var(--text-tertiary)]">
                       <span>{new Date(insight.timestamp).toLocaleString()}</span>
                       {insight.sensor && <span>• {insight.sensor}</span>}
                     </div>
                   </div>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border shadow-sm">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Lightbulb size={18} className="text-yellow-500" />
-          AI Recommendations
-        </h3>
+      <Card hover={false}>
+        <SectionTitle>
+          <span className="flex items-center gap-2">
+            <Lightbulb size={18} className="text-[var(--amber)]" />
+            AI Recommendations
+          </span>
+        </SectionTitle>
         {aiStatus === 'offline' ? (
           <div className="text-center py-8">
-            <p className="text-sm text-gray-500">AI recommendations require the backend to be online with OPENROUTER_API_KEY configured.</p>
-            <p className="text-xs text-gray-400 mt-1">Configure the API key in pern-backend/.env and restart the server.</p>
+            <p className="text-sm text-[var(--text-secondary)]">AI recommendations require the backend to be online with OPENROUTER_API_KEY configured.</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">Configure the API key in pern-backend/.env and restart the server.</p>
           </div>
         ) : recommendations.length === 0 ? (
           <div className="text-center py-8">
             {loading ? (
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center justify-center gap-2 text-sm text-[var(--text-secondary)]">
                 <Loader2 size={14} className="animate-spin" /> Generating recommendations…
               </div>
             ) : (
-              <p className="text-sm text-gray-500">No recommendations yet. Click Refresh to analyze current sensor data.</p>
+              <p className="text-sm text-[var(--text-secondary)]">No recommendations yet. Click Refresh to analyze current sensor data.</p>
             )}
           </div>
         ) : (
           <div className="space-y-3">
             {recommendations.map((rec) => (
-              <div key={rec.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
+              <div key={rec.id} className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border)]">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[rec.priority]}`}>
+                  <Pill tone={PRIORITY_TONES[rec.priority]}>
                     {rec.priority.toUpperCase()}
-                  </span>
-                  <span className="text-xs text-gray-500">{rec.category}</span>
+                  </Pill>
+                  <span className="text-xs text-[var(--text-secondary)]">{rec.category}</span>
                 </div>
-                <div className="font-medium text-sm">{rec.title}</div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{rec.description}</p>
+                <div className="font-medium text-sm text-[var(--text-primary)]">{rec.title}</div>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">{rec.description}</p>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

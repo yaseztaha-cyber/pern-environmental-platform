@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PageHeader, Card, Pill, LiveBadge, ProgressRing } from '../components/ui';
-import { API_BASE } from '../lib/constants';
+import { apiClient } from '../lib/api-client';
 import { CheckCircle2, AlertTriangle, XCircle, Server } from 'lucide-react';
 
 interface ServiceStatus {
@@ -17,15 +17,15 @@ export default function SystemStatus() {
   const checkServices = async () => {
     const results: ServiceStatus[] = [];
 
-    const probe = async (url: string) => {
+    const probe = async <T,>(fn: () => Promise<T>) => {
       const start = performance.now();
-      const res = await fetch(url);
-      return { res, latency: Math.round(performance.now() - start), data: await res.json().catch(() => ({})) };
+      const data = await fn();
+      return { latency: Math.round(performance.now() - start), data };
     };
 
     // Backend + MQTT (single health endpoint carries mqtt state)
     try {
-      const { latency, data } = await probe(`${API_BASE}/health`);
+      const { latency, data } = await probe(() => apiClient.get<{ status: string; mqtt: boolean }>('/health'));
       results.push({ name: 'Backend API', status: data.status === 'ok' ? 'healthy' : 'degraded', latency, details: data.mqtt ? 'MQTT connected' : 'MQTT disconnected' });
       results.push({ name: 'MQTT Broker', status: data.mqtt ? 'healthy' : 'degraded', latency, details: data.mqtt ? 'Mosquitto connected' : 'Broker unreachable' });
     } catch {
@@ -35,7 +35,7 @@ export default function SystemStatus() {
 
     // Live system stats
     try {
-      const { latency, data } = await probe(`${API_BASE}/live/status`);
+      const { latency, data } = await probe(() => apiClient.get<{ websocketClients: number; devices: number; recentReadings: number; uptime: number; memoryUsage: number }>('/live/status'));
       results.push({ name: 'WebSocket', status: data.websocketClients >= 0 ? 'healthy' : 'degraded', latency, details: `${data.websocketClients} active clients` });
       results.push({ name: 'Device Registry', status: data.devices > 0 ? 'healthy' : 'degraded', latency: null, details: `${data.devices} registered devices` });
       results.push({ name: 'Data Pipeline', status: data.recentReadings >= 0 ? 'healthy' : 'degraded', latency: null, details: `${data.recentReadings} readings buffered, ${Math.round(data.uptime)}s uptime, ${data.memoryUsage}MB heap` });
@@ -43,13 +43,13 @@ export default function SystemStatus() {
 
     // PostgreSQL (via sensors endpoint reachability)
     try {
-      const { latency, res } = await probe(`${API_BASE}/sensors`);
-      results.push({ name: 'PostgreSQL', status: res.ok ? 'healthy' : 'degraded', latency, details: res.ok ? 'Read/write OK' : 'Read failed' });
+      const { latency } = await probe(() => apiClient.get<unknown[]>('/sensors'));
+      results.push({ name: 'PostgreSQL', status: 'healthy', latency, details: 'Read/write OK' });
     } catch { results.push({ name: 'PostgreSQL', status: 'down', latency: null, details: 'Connection refused' }); }
 
     // Protocol Adapters
     try {
-      const { latency, data } = await probe(`${API_BASE}/protocols/status`);
+      const { latency, data } = await probe(() => apiClient.get<{ protocols: Record<string, boolean> }>('/protocols/status'));
       const protocols = data.protocols || {};
       const connected = Object.values(protocols).filter(Boolean).length;
       const total = Object.keys(protocols).length;

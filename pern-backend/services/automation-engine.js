@@ -92,14 +92,16 @@ class AutomationEngine {
         case '==': triggered = Math.abs(numericValue - rule.threshold) < 0.1; break;
         case '!=': triggered = Math.abs(numericValue - rule.threshold) >= 0.1; break;
         case 'between': {
-          const low = rule.thresholdMin ?? rule.threshold;
-          const high = rule.thresholdMax ?? rule.threshold;
+          const parts = String(rule.threshold).split(',');
+          const low = parts.length >= 2 ? Number(parts[0]) : rule.threshold;
+          const high = parts.length >= 2 ? Number(parts[1]) : rule.threshold;
           triggered = numericValue >= low && numericValue <= high;
           break;
         }
         case 'outside': {
-          const low = rule.thresholdMin ?? rule.threshold;
-          const high = rule.thresholdMax ?? rule.threshold;
+          const parts = String(rule.threshold).split(',');
+          const low = parts.length >= 2 ? Number(parts[0]) : rule.threshold;
+          const high = parts.length >= 2 ? Number(parts[1]) : rule.threshold;
           triggered = numericValue < low || numericValue > high;
           break;
         }

@@ -71,7 +71,8 @@ router.post('/', limiter, async (req, res) => {
 
 router.put('/:id', limiter, async (req, res) => {
   try {
-    await db.upsertDevice({ id: req.params.id, ...req.body, lastSeen: Date.now() });
+    const { id: _id, ...body } = req.body;
+    await db.upsertDevice({ id: req.params.id, ...body, lastSeen: Date.now() });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -100,7 +101,8 @@ router.get('/:id/metadata', async (req, res) => {
 
 router.post('/:id/metadata', limiter, async (req, res) => {
   try {
-    await db.upsertDeviceMetadata({ device_id: req.params.id, ...req.body });
+    const { device_id: _did, ...metaBody } = req.body;
+    await db.upsertDeviceMetadata({ device_id: req.params.id, ...metaBody });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

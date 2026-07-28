@@ -11,11 +11,12 @@ const logger = require('../utils/logger');
 // Get status of all protocols
 router.get('/status', (req, res) => {
   const status = protocolManager.getStatus();
-  // MQTT is managed by server.js directly — expose it via protocolManager.mqttClient
-  if (protocolManager.mqttClient) {
+  // MQTT is managed by server.js and stored on the app — check req.app
+  const mqttClient = req.app.get('mqttClient');
+  if (mqttClient) {
     const hasMQTT = status.some(p => p.name === 'MQTT');
     if (!hasMQTT) {
-      status.push({ name: 'MQTT', connected: protocolManager.mqttClient.connected });
+      status.push({ name: 'MQTT', connected: mqttClient.connected });
     }
   }
   res.json({

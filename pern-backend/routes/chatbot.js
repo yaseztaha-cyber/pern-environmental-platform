@@ -16,9 +16,9 @@ router.use('/chat', rateLimiter(60000, 30));
 // Regular (non-streaming) chat
 router.post('/chat', async (req, res) => {
   const { message, context, sessionId } = req.body || {};
+  const trimmed = (message || '').trim();
   try {
 
-    const trimmed = (message || '').trim();
     if (!trimmed) {
       return res.status(400).json({ error: 'Message is required' });
     }
@@ -58,9 +58,9 @@ router.post('/chat', async (req, res) => {
 // SSE Streaming chat
 router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
   const { message, context, sessionId } = req.body || {};
+  const trimmed = (message || '').trim();
   try {
 
-    const trimmed = (message || '').trim();
     if (!trimmed) {
       return res.status(400).json({ error: 'Message is required' });
     }

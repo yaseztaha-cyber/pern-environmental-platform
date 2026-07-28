@@ -7,7 +7,6 @@ const router = express.Router();
 const db = require('../db');
 const rateLimiter = require('../middleware/rate-limiter');
 const { requireRole } = require('../middleware/rbac');
-const { validateAutomationRule } = require('../middleware/validator');
 const limiter = rateLimiter(60000, 40);
 
 router.get('/rules', async (req, res) => {
@@ -17,7 +16,7 @@ router.get('/rules', async (req, res) => {
   } catch { res.json([]); }
 });
 
-router.post('/rules', limiter, validateAutomationRule, async (req, res) => {
+router.post('/rules', limiter, async (req, res) => {
   const rule = {
     id: req.body.id || 'ar-' + Date.now(),
     name: req.body.name,

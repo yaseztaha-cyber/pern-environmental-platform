@@ -51,8 +51,10 @@ export default function DeviceLifecyclePage() {
             daysSinceLastSeen < 2 ? 'warning' : 'offline';
 
           const recentReadings = readings.slice(-8).map((r: any) => {
-            const sensors = typeof r.sensors === 'string' ? JSON.parse(r.sensors) : (r.sensors || {});
-            return sensors.pm25 ?? sensors.tmp ?? r.pm25 ?? r.value ?? null;
+            try {
+              const sensors = typeof r.sensors === 'string' ? JSON.parse(r.sensors) : (r.sensors || {});
+              return sensors.pm25 ?? sensors.tmp ?? r.pm25 ?? r.value ?? null;
+            } catch { return null; }
           }).filter((v): v is number => v !== null);
 
           results.push({

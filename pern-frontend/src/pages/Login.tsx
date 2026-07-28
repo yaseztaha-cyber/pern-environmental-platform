@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useAuth } from '../lib/auth-context';
 import { Loader2, Shield, Zap, ChevronRight } from 'lucide-react';
 import { showToast } from '../components/Toast';
+import { Btn, Card } from '../components/ui';
 
 const isLogtoConfigured = import.meta.env.VITE_LOGTO_ENDPOINT &&
   import.meta.env.VITE_LOGTO_ENDPOINT !== 'http://localhost:3001' &&
@@ -52,20 +53,17 @@ export default function Login() {
         </div>
 
         {/* Card */}
-        <div className="card p-6 md:p-8 animate-fade-in-up stagger-1">
+        <Card hover={false} className="animate-fade-in-up stagger-1">
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">Welcome back</h2>
           <p className="text-sm text-[var(--text-tertiary)] mb-6">Sign in to access your environmental monitoring dashboard</p>
 
           <div className="space-y-3">
             {/* Logto OIDC Button */}
-            <button
+            <Btn
+              variant={isLogtoConfigured ? 'primary' : 'ghost'}
               onClick={handleLogin}
               disabled={loading || !isLogtoConfigured}
-              className={`w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[var(--radius-sm)] font-medium text-sm transition-all duration-200 ${
-                isLogtoConfigured
-                  ? 'bg-[var(--emerald)] hover:bg-emerald-500 text-white shadow-glow-sm hover:shadow-glow-md active:scale-[0.98]'
-                  : 'bg-[var(--surface)] text-[var(--text-disabled)] cursor-not-allowed border border-[var(--border)]'
-              }`}
+              className="w-full justify-center gap-3"
             >
               {loading ? (
                 <Loader2 size={18} className="animate-spin" />
@@ -74,7 +72,7 @@ export default function Login() {
               )}
               {isLogtoConfigured ? 'Sign in with Logto' : 'Logto not configured'}
               {isLogtoConfigured && !loading && <ChevronRight size={16} className="ml-auto opacity-60" />}
-            </button>
+            </Btn>
 
             {/* Divider */}
             <div className="flex items-center gap-3 my-2">
@@ -84,13 +82,14 @@ export default function Login() {
             </div>
 
             {/* Demo Login */}
-            <button
+            <Btn
+              variant="ghost"
               onClick={handleDemoLogin}
-              className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[var(--radius-sm)] font-medium text-sm bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border)] transition-all duration-200 hover:border-[var(--border-hover)] active:scale-[0.98]"
+              className="w-full justify-center gap-3"
             >
               <Zap size={18} />
               Continue with Demo Account
-            </button>
+            </Btn>
           </div>
 
           {!isLogtoConfigured && (
@@ -98,7 +97,7 @@ export default function Login() {
               <strong>Setup required:</strong> Configure <code>VITE_LOGTO_ENDPOINT</code> and <code>VITE_LOGTO_APP_ID</code> in your <code>.env</code> file to enable Logto authentication.
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Footer */}
         <div className="text-center mt-6 text-[11px] text-[var(--text-disabled)]">

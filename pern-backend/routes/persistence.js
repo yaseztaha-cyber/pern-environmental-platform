@@ -31,7 +31,7 @@ router.post('/rules', async (req, res) => {
         sensor: rule.sensor,
         operator: rule.operator,
         threshold: rule.threshold,
-        action: JSON.stringify(rule.action),
+        action: typeof rule.action === 'string' ? rule.action : JSON.stringify(rule.action),
         enabled: rule.enabled,
         organization_id: organizationId || 'default'
       });
