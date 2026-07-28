@@ -7,6 +7,7 @@
 
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const mqtt = require('mqtt');
@@ -87,6 +88,9 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(sanitizeInput);
 app.use(requestLogger);
+app.use(compression());
+
+const SERVER_START = Date.now();
 
 logger.info('PERN Backend starting...');
 
@@ -311,6 +315,8 @@ app.get('/api/health', async (req, res) => {
   const dbStatus = db.isAvailable() ? 'ok' : 'unavailable (in-memory fallback)';
   res.json({
     status: 'ok',
+    version: '2.7.0',
+    uptime: Math.floor((Date.now() - SERVER_START) / 1000),
     mqtt: mqttClient.connected,
     db: dbStatus,
     timestamp: Date.now(),

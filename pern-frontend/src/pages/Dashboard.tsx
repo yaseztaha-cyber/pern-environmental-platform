@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useData } from '../lib/data-provider';
 import { useI18n } from '../lib/i18n';
 import { useNavigate } from 'react-router';
 import {
   AlertTriangle, Users, Droplet, Wind,
   Zap, ArrowRight, TrendingUp, Activity, Loader2,
-  Download, FileSpreadsheet, FileText
+  Download, FileSpreadsheet, FileText, Server
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -127,7 +127,12 @@ export default function Dashboard() {
   const { selectedDevice, connectedDevices } = useDevice();
   const navigate = useNavigate();
   const [isSwitchingMode, setIsSwitchingMode] = useState(false);
+  const [backendHealth, setBackendHealth] = useState<{ status: string; uptime: number; mqtt: boolean; db: string } | null>(null);
   const { t } = useI18n();
+
+  useEffect(() => {
+    apiClient.getHealth().then((h: any) => setBackendHealth({ status: h.status, uptime: h.uptime, mqtt: h.mqtt, db: h.db })).catch(() => {});
+  }, []);
 
   const noRealData = isLive && !hasRealData;
   const ehiValid = data.ehi >= 0;
@@ -276,6 +281,36 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* Live Physical Sensors — 3 cols mobile, 5 cols md, 7 cols lg */}
+      {backendHealth && (
+        <Card hover={false} className="mb-4 md:mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Server size={14} className="text-[var(--text-tertiary)]" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">System Health</span>
+          </div>
+          <div className="flex flex-wrap gap-4 text-xs">
+            <span className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${backendHealth.status === 'ok' ? 'bg-[var(--emerald)]' : 'bg-[var(--rose)]'}`} />
+              Backend <span className="text-[var(--text-disabled)]">v2.7.0</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${mqttConnected ? 'bg-[var(--emerald)]' : 'bg-[var(--amber)]'}`} />
+              MQTT {mqttConnected ? 'Connected' : 'Disconnected'}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${backendHealth.db.startsWith('ok') ? 'bg-[var(--emerald)]' : 'bg-[var(--amber)]'}`} />
+              Database {backendHealth.db}
+            </span>
+            <span className="text-[var(--text-disabled)]">
+              Uptime {Math.floor(backendHealth.uptime / 60)}m
+            </span>
+            <span className="text-[var(--text-disabled)]">
+              {Object.keys(data.physical).length} active sensors
+            </span>
+          </div>
+        </Card>
+      )}
 
       {/* Live Physical Sensors — 3 cols mobile, 5 cols md, 7 cols lg */}
       <div>
