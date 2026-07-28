@@ -491,6 +491,7 @@ function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { t } = useI18n();
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
 
   return (
     <div className="flex h-screen bg-[var(--bg-0)] text-[var(--text-primary)] relative overflow-hidden">
@@ -506,7 +507,7 @@ function AppContent() {
 
       {/* Main content */}
       <div className={`flex-1 flex flex-col overflow-hidden ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-[260px]'} transition-[margin] duration-200`}>
-        <OnboardingModal />
+        {isAuthenticated && <OnboardingModal />}
 
         {/* Header */}
         <header className="h-12 border-b border-[var(--border)] bg-[var(--bg-1)]/80 backdrop-blur-xl flex items-center justify-between px-4 lg:px-6 shrink-0 relative z-30">
@@ -595,7 +596,7 @@ function AppContent() {
           </AnimatePresence>
         </main>
 
-        <MobileBottomNav />
+        {isAuthenticated && <MobileBottomNav />}
       </div>
     </div>
   );

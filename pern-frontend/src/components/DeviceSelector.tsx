@@ -1,7 +1,7 @@
 import { useDevice } from '../lib/device-context';
 
 export default function DeviceSelector() {
-  const { selectedDevice, connectedDevices, setSelectedDevice } = useDevice();
+  const { selectedDevice, connectedDevices, setSelectedDevice, clearDevices } = useDevice();
 
   if (connectedDevices.length <= 1) return null;
 
@@ -9,6 +9,10 @@ export default function DeviceSelector() {
     <select 
       value={selectedDevice?.id || ''}
       onChange={(e) => {
+        if (!e.target.value) {
+          clearDevices();
+          return;
+        }
         const device = connectedDevices.find(d => d.id === e.target.value);
         if (device) setSelectedDevice(device);
       }}

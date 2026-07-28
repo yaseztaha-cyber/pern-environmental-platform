@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { Search, Monitor, Activity, Bell, Shield, FileText, Settings, Sparkles, Map, Database, X } from 'lucide-react';
 
 interface CommandPaletteProps {
@@ -31,9 +32,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenPr
   const [query, setQuery] = useState('');
   const [internalOpen, setInternalOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const navigate = useNavigate();
 
   const isOpen = isOpenProp !== undefined ? isOpenProp : internalOpen;
-  const handleNavigate = onNavigateProp || (() => {});
+  const handleNavigate = onNavigateProp || ((path: string) => navigate(path));
 
   const handleClose = useCallback(() => {
     if (onCloseProp) onCloseProp();

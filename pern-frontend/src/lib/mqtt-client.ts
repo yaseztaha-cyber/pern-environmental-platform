@@ -154,6 +154,12 @@ export class PERN_MQTT_Client {
               };
               this.notifyHeartbeatListeners(heartbeat);
             }
+
+            // Device online/offline status
+            if (topic.includes('/devices/') && topic.includes('/status') && !topic.includes('/heartbeat')) {
+              const deviceId = topic.split('/')[2] || payload.device;
+              this.notifyDeviceListeners({ device: deviceId, timestamp: payload.timestamp || Date.now() });
+            }
           } catch (e) {
             if (import.meta.env.DEV) console.warn('[MQTT] Parse error:', e);
           }

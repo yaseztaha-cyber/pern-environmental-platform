@@ -221,7 +221,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       window.dispatchEvent(new CustomEvent('live-mode-change', { detail: { isLive: false } }));
     }
     setIsLive(live);
-  }, []);
+  }, [clearDevices]);
 
   const updatePhysicalReading = useCallback((type: string, value: number) => {
     if (isLive) return;
