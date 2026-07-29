@@ -9,6 +9,7 @@ import { API_BASE } from './constants';
 export interface OpenAQResponse {
   location: string;
   pm25: number | null;
+  pm10: number | null;
   no2: number | null;
   o3: number | null;
   timestamp: string | null;

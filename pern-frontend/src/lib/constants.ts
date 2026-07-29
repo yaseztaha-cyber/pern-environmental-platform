@@ -40,9 +40,7 @@ export const NTFY_DEFAULT_TOPIC = 'pern-platform-alerts-2026';
 export const MQTT_BROKER_WS = 'ws://localhost:9001';
 // Use VITE_API_URL when provided (e.g. a remote backend), otherwise fall back
 // to a same-origin relative path so the app works from any host/IP behind a proxy.
-export const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api`
-  : '/api';
+export const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export const DEVICE_TYPES = [
   'ESP32', 'ESP8266', 'Arduino Uno', 'Arduino Mega', 
