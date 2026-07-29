@@ -1,11 +1,13 @@
+import { useMemo } from 'react';
 import { useData } from '../lib/data-provider';
 import { SENSOR_TYPES } from '../lib/constants';
 import { exportToCSV, exportToExcel } from '../lib/export-utils';
 import { showToast } from '../components/Toast';
 import { PageErrorBoundary } from '../components/PageErrorBoundary';
 import { useI18n } from '../lib/i18n';
+import { epaAQIMulti, aqiCategory, WHO_GUIDELINES } from '../lib/epa-standards';
 import { PageHeader, Card, Pill, Btn, Badge, fmt } from '../components/ui';
-import { Download, FileSpreadsheet, Activity, Cpu } from 'lucide-react';
+import { Download, FileSpreadsheet, Activity, Cpu, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export default function SensorsPage() {
   return (
@@ -23,6 +25,12 @@ function SensorsContent() {
   const avgConfidence = totalVirtual > 0
     ? Math.round(data.virtualSensors.reduce((s, v) => s + v.confidence, 0) / totalVirtual)
     : 0;
+
+  const aqi = useMemo(() => {
+    const p = data.physical;
+    return epaAQIMulti({ pm25: p.pm25, pm10: p.pm10, no2: p.no2, so2: p.so2, co: p.co });
+  }, [data.physical]);
+  const aqiCat = useMemo(() => aqiCategory(aqi), [aqi]);
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -45,7 +53,7 @@ function SensorsContent() {
       />
 
       {/* Summary Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8 grid-entrance">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 grid-entrance">
         <div className="rounded-[var(--radius-md)] p-4 bg-[var(--emerald-dim)] border-l-[3px] border-l-[var(--emerald)]">
           <div className="section-label">{t('sensors.section.physicalSensors')}</div>
           <div className="text-2xl font-bold stat-number text-[var(--emerald)]">{Object.keys(data.physical).length}</div>
@@ -66,6 +74,32 @@ function SensorsContent() {
           </div>
         </div>
       </div>
+
+      {/* AQI Gauge */}
+      <Card hover={false} className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Activity size={15} className="text-[var(--text-tertiary)]" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">EPA AQI</span>
+          </div>
+          <Pill tone={aqi <= 50 ? 'emerald' : aqi <= 100 ? 'amber' : 'rose'}>{aqiCat.label}</Pill>
+        </div>
+        <div className="h-3 rounded-full bg-white/5 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#00e400] via-[#ffff00] via-[#ff7e00] via-[#ff0000] to-[#7e0023] opacity-40" />
+          <div
+            className="h-full rounded-full transition-all duration-700 bg-white/80 shadow-lg"
+            style={{ width: `${Math.min(100, (aqi / 300) * 100)}%` }}
+          />
+          <div
+            className="absolute top-0 w-1 h-full bg-white rounded-full transition-all duration-700 shadow-white-glow"
+            style={{ left: `${Math.min(100, (aqi / 300) * 100)}%` }}
+          />
+        </div>
+        <div className="flex justify-between mt-1 text-[10px] text-[var(--text-disabled)]">
+          <span>0</span><span>50 Good</span><span>100 Mod</span><span>150 USG</span><span>300+ Hazard</span>
+        </div>
+        <div className="text-xs text-[var(--text-tertiary)] mt-2">{aqiCat.healthAdvice}</div>
+      </Card>
 
       {/* Physical Sensors */}
       <div className="mb-10">
@@ -178,6 +212,18 @@ function SensorsContent() {
                   {vs.missingInputs && vs.missingInputs.length > 0 && (
                     <span className="text-[var(--amber)]">{t('sensors.missingPrefix')}{vs.missingInputs.join(', ')}</span>
                   )}
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-[10px]">
+                  {(() => {
+                    const who = WHO_GUIDELINES[vs.id as keyof typeof WHO_GUIDELINES] as { daily?: number } | undefined;
+                    if (who?.daily && vs.value > who.daily) {
+                      return <><AlertTriangle size={10} className="text-[var(--amber)]" /><span className="text-[var(--amber)]">Exceeds WHO {who.daily} {vs.unit}</span></>;
+                    }
+                    if (who?.daily) {
+                      return <><CheckCircle2 size={10} className="text-[var(--emerald)]" /><span className="text-[var(--emerald)]">Within WHO {who.daily} {vs.unit}</span></>;
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
             </Card>

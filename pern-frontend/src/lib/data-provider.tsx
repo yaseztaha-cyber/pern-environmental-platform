@@ -52,6 +52,7 @@ const INITIAL_READINGS: PhysicalReading = {
   nh3: 4.8,
   voc: 142,
   sm: 41,
+  light: 800,
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -236,12 +237,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Simulate realistic sensor fluctuations
     Object.keys(newReadings).forEach(key => {
       const current = newReadings[key];
-      const variation = (Math.random() - 0.5) * (key === 'pm25' ? 4 : key === 'co2' ? 25 : 1.2);
+      let range = 1.2;
+      if (key === 'pm25') range = 4;
+      else if (key === 'co2') range = 25;
+      else if (key === 'light') range = 200;
+      const variation = (Math.random() - 0.5) * range;
       newReadings[key] = Math.round((current + variation) * 100) / 100;
       
       // Clamp to reasonable ranges
       if (key === 'ph') newReadings[key] = Math.max(6.2, Math.min(8.4, newReadings[key]));
       if (key === 'pm25') newReadings[key] = Math.max(5, Math.min(68, newReadings[key]));
+      if (key === 'light') newReadings[key] = Math.round(Math.max(0, Math.min(200000, newReadings[key])));
     });
     
     setPhysical(newReadings);

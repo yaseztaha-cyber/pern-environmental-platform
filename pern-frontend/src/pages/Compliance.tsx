@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../lib/api-client';
 import { PageHeader, Card, Pill, Btn, ProgressRing } from '../components/ui';
-import { CheckCircle2, XCircle, AlertTriangle, Download } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Download, Globe, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import type { ComplianceStandard, ComplianceCheck, ComplianceStats, ComplianceTrend } from '../lib/types';
 
-const STANDARDS = [
+const STANDARDS: ComplianceStandard[] = [
   { id: 'who-pm25-24h', body: 'WHO', param: 'PM2.5', limit: 15, unit: 'µg/m³', period: '24-hour', sensorKey: 'pm25' },
   { id: 'epa-pm25-24h', body: 'EPA', param: 'PM2.5', limit: 35, unit: 'µg/m³', period: '24-hour', sensorKey: 'pm25' },
   { id: 'egypt-pm25-24h', body: 'Egypt', param: 'PM2.5', limit: 50, unit: 'µg/m³', period: '24-hour', sensorKey: 'pm25' },
@@ -18,15 +20,25 @@ const STANDARDS = [
   { id: 'egypt-pm10-24h', body: 'Egypt', param: 'PM10', limit: 70, unit: 'µg/m³', period: '24-hour', sensorKey: 'pm10' },
 ];
 
+const BODIES = ['all', 'WHO', 'EPA', 'Egypt'] as const;
+
 export default function CompliancePage() {
   const [readings, setReadings] = useState<any[]>([]);
-  const [filterBody, setFilterBody] = useState('all');
+  const [filterBody, setFilterBody] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [geoStats, setGeoStats] = useState<ComplianceStats | null>(null);
+  const [trends, setTrends] = useState<ComplianceTrend[]>([]);
 
   useEffect(() => {
     apiClient.getSensorReadings(500).then((data: any) => {
       setReadings(Array.isArray(data) ? data : []);
     }).catch(() => setReadings([])).finally(() => setLoading(false));
+    apiClient.get('/v3/compliance/stats').then((r: any) => {
+      if (r) setGeoStats({ countries: r.countries ?? 0, frameworks: r.frameworks ?? 0, overallPct: r.overallPct ?? r.averageCompliance ?? 0 });
+    }).catch(() => {});
+    apiClient.get('/v3/compliance/trends').then((r: any) => {
+      if (Array.isArray(r)) setTrends(r);
+    }).catch(() => {});
   }, []);
 
   const latestSensors: Record<string, number> = {};
@@ -37,7 +49,7 @@ export default function CompliancePage() {
     }
   }
 
-  const checks = STANDARDS.map(s => {
+  const checks: ComplianceCheck[] = useMemo(() => STANDARDS.map(s => {
     const val = latestSensors[s.sensorKey];
     if (val === undefined) return { ...s, current: null, pass: null, status: 'no-data' as const };
     let pass = false;
@@ -45,12 +57,14 @@ export default function CompliancePage() {
     else if (s.minVal !== undefined) pass = val >= s.minVal;
     else pass = val <= Number(s.limit);
     return { ...s, current: val, pass, status: pass ? 'pass' as const : 'fail' as const };
-  }).filter(c => filterBody === 'all' || c.body === filterBody);
+  }).filter(c => filterBody === 'all' || c.body === filterBody), [latestSensors, filterBody]);
 
   const passed = checks.filter(c => c.pass === true).length;
   const failed = checks.filter(c => c.pass === false).length;
   const noData = checks.filter(c => c.pass === null).length;
   const score = checks.length > 0 ? Math.round((checks.filter(c => c.pass === true).length / checks.length) * 100) : 0;
+
+  const tooltipStyle = { background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' };
 
   return (
     <div className="max-w-[1200px] mx-auto">
@@ -61,7 +75,7 @@ export default function CompliancePage() {
           <div className="flex items-center gap-3">
             <ProgressRing value={score} size={44} strokeWidth={4} accent={score >= 80 ? 'emerald' : score >= 50 ? 'amber' : 'rose'} />
             <Pill tone={score >= 80 ? 'emerald' : score >= 50 ? 'amber' : 'rose'}>{score}% compliant</Pill>
-            <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }} aria-label="Export compliance data">
+            <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}>
               <Download size={14} /> Export
             </Btn>
           </div>
@@ -69,7 +83,7 @@ export default function CompliancePage() {
       />
 
       <div className="flex gap-2 mb-6 flex-wrap" role="group" aria-label="Filter by regulatory body">
-        {['all', 'WHO', 'EPA', 'Egypt'].map(b => (
+        {BODIES.map(b => (
           <Btn key={b} variant={filterBody === b ? 'primary' : 'ghost'} size="sm"
             onClick={() => setFilterBody(b)} aria-pressed={filterBody === b}>
             {b === 'all' ? 'All Standards' : b}
@@ -91,10 +105,52 @@ export default function CompliancePage() {
           <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">No Data</div>
         </Card>
         <Card hover={false} className="text-center">
-          <div className="text-2xl font-bold text-[var(--text-primary)]">{STANDARDS.length}</div>
-          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">Total Standards</div>
+          <div className="text-2xl font-bold text-[var(--text-primary)]">{checks.length}</div>
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">Filtered Standards</div>
         </Card>
       </div>
+
+      {geoStats && (
+        <Card hover={false} className="mb-6">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] mb-3">
+            <Globe size={14} /> Geo-Compliance Overview
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-[var(--emerald)]">{geoStats.countries}</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Countries</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-[var(--cyan)]">{geoStats.frameworks}</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Frameworks</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-[var(--violet)]">{geoStats.overallPct}%</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Avg Compliance</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {trends.length > 0 && (
+        <Card className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 size={14} className="text-[var(--violet)]" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Compliance by Country</span>
+          </div>
+          <div className="h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trends}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="country" stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
+                <YAxis domain={[0, 100]} stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="compliance" fill="var(--violet)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
 
       {loading ? (
         <Card hover={false} className="text-center py-12 text-[var(--text-tertiary)]">Loading sensor data...</Card>

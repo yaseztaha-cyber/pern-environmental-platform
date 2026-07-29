@@ -6,44 +6,15 @@ import {
 import { Wifi, Cpu, Clock, ArrowDownUp, AlertTriangle, Download } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
 import {
-  calculateRealHealthScore, type RealDeviceHealth,
+  calculateRealHealthScore,
   getRssiQuality, getHeapHealth, getUptimeQuality, getHealthLabel,
 } from '../lib/device-health';
 import { connectActuatorWebSocket, onDeviceHeartbeat, type DeviceHeartbeat } from '../lib/actuator-ws';
 import { PageHeader, Card, StatCard, Pill, ProgressRing, Btn, LoadingState, fmt } from '../components/ui';
+import type { EnrichedDevice, EnrichedDeviceAlert, RealDeviceHealth, ViewMode } from '../lib/types';
 
-type ViewMode = 'overview' | 'comparison' | 'alerts';
-
-interface EnrichedDevice {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  firmwareVersion: string;
-  ipAddress: string;
-  rssi: number | null;
-  freeHeap: number | null;
-  uptimeSeconds: number | null;
-  wifiChannel: number | null;
-  cpuFreq: number | null;
-  healthScore: number;
-  rssiQuality: number;
-  heapHealth: number;
-  uptimeQuality: number;
-  lastSeen: string;
-  recordedAt: string | null;
-  history: RealDeviceHealth[];
-  alerts: DeviceAlert[];
-}
-
-interface DeviceAlert {
-  type: 'rssi_low' | 'heap_low' | 'offline' | 'firmware_old';
-  severity: 'warning' | 'critical';
-  message: string;
-}
-
-function buildAlerts(d: EnrichedDevice): DeviceAlert[] {
-  const alerts: DeviceAlert[] = [];
+function buildAlerts(d: EnrichedDevice): EnrichedDeviceAlert[] {
+  const alerts: EnrichedDeviceAlert[] = [];
   if (d.rssi !== null && d.rssi < -80) {
     alerts.push({
       type: 'rssi_low',
@@ -63,6 +34,15 @@ function buildAlerts(d: EnrichedDevice): DeviceAlert[] {
       type: 'offline',
       severity: 'critical',
       message: 'Device is offline',
+    });
+  }
+  // Firmware version check
+  const fw = d.firmwareVersion;
+  if (fw && fw !== 'N/A' && fw !== 'unknown' && !fw.startsWith('2.')) {
+    alerts.push({
+      type: 'firmware_old',
+      severity: 'warning',
+      message: `Firmware ${fw} may be outdated`,
     });
   }
   return alerts;
@@ -285,10 +265,11 @@ export default function DeviceHealthDashboard() {
       ) : (
         <>
           {/* Summary row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <StatCard label="DEVICES" value={devices.length} accent="cyan" icon={<Cpu size={18} />} />
             <StatCard label="ONLINE" value={onlineCount} accent="emerald" icon={<Wifi size={18} />} />
             <StatCard label="AVG HEALTH" value={avgHealth} unit="%" accent={getAccent(avgHealth)} icon={<ArrowDownUp size={18} />} />
+            <StatCard label="FW OUTDATED" value={devices.filter(d => d.firmwareVersion !== 'N/A' && !d.firmwareVersion.startsWith('2.')).length} accent="amber" icon={<AlertTriangle size={18} />} />
             <StatCard label="ALERTS" value={allAlerts.length} accent={allAlerts.length > 0 ? 'rose' : 'emerald'} icon={<AlertTriangle size={18} />} />
           </div>
 
@@ -331,7 +312,8 @@ export default function DeviceHealthDashboard() {
                       <th className="text-right py-2 pr-4 font-medium">Heap</th>
                       <th className="text-right py-2 pr-4 font-medium">Uptime</th>
                       <th className="text-right py-2 pr-4 font-medium">Health</th>
-                      <th className="text-left py-2 font-medium">Firmware</th>
+                      <th className="text-left py-2 pr-4 font-medium">Firmware</th>
+                      <th className="text-left py-2 font-medium">Alerts</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -355,7 +337,18 @@ export default function DeviceHealthDashboard() {
                             {d.healthScore}%
                           </span>
                         </td>
-                        <td className="py-2.5 font-mono text-xs text-[var(--text-tertiary)]">{d.firmwareVersion}</td>
+                        <td className="py-2.5 pr-4 font-mono text-xs">
+                          <Pill tone={d.firmwareVersion && !d.firmwareVersion.startsWith('2.') && d.firmwareVersion !== 'N/A' ? 'amber' : 'emerald'}>
+                            {d.firmwareVersion}
+                          </Pill>
+                        </td>
+                        <td className="py-2.5">
+                          <div className="flex gap-1">
+                            {d.alerts.length > 0 ? d.alerts.slice(0, 2).map((a, i) => (
+                              <Pill key={i} tone={a.severity === 'critical' ? 'rose' : 'amber'} className="text-[9px]">{a.type.replace('_', ' ')}</Pill>
+                            )) : <span className="text-xs text-[var(--text-tertiary)]">OK</span>}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

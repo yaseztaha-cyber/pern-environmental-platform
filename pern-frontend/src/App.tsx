@@ -16,13 +16,15 @@ import { CommandPalette } from './components/CommandPalette';
 import OnboardingModal from './components/OnboardingModal';
 import { Toggle, LoadingState } from './components/ui';
 import MobileBottomNav from './components/MobileBottomNav';
+const GlobalSensorMap = lazy(() => import('./components/GlobalSensorMap'));
+const SignalFlow = lazy(() => import('./components/SignalFlow'));
 import {
-  LayoutDashboard, Gauge, Cpu, Cable, History, Map, BrainCircuit, LineChart,
+  LayoutDashboard, Gauge, Cpu, Cable, History, BrainCircuit, LineChart,
   BarChart3, MessageSquareCode, BellRing, Workflow, Wand2, Sliders, Activity, Wifi,
   RadioTower, Clock, Stethoscope, Navigation, FileSpreadsheet, CloudRain, ShieldCheck,
   UserCheck, Layers, CheckCheck, GitCompare, Wrench, FlaskConical, BookOpenCheck,
   FolderKanban, Binary, LifeBuoy, KeyRound, Building2, Users, Presentation, PanelLeftClose, PanelLeftOpen,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, Beaker, Globe, Share2
 } from 'lucide-react';
 
 // Lazy-loaded pages
@@ -34,7 +36,6 @@ const AlertsPage = lazy(() => import('./pages/Alerts'));
 const AutomationPage = lazy(() => import('./pages/Automation'));
 const AIPage = lazy(() => import('./pages/AI'));
 const PredictionsPage = lazy(() => import('./pages/Predictions'));
-const MapPage = lazy(() => import('./pages/Map'));
 const ReportsPage = lazy(() => import('./pages/Reports'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const DeviceConnectionPage = lazy(() => import('./pages/DeviceConnection'));
@@ -67,6 +68,7 @@ const ShowcasePage = lazy(() => import('./pages/Showcase'));
 const ProtocolStatusDashboard = lazy(() => import('./pages/ProtocolStatus'));
 const RuleGeneratorPage = lazy(() => import('./pages/RuleGenerator'));
 const DeviceSetupGuidePage = lazy(() => import('./pages/DeviceSetupGuide'));
+const VirtualSensorsPage = lazy(() => import('./pages/VirtualSensors'));
 
 /* ===================== NAVIGATION ===================== */
 
@@ -96,7 +98,8 @@ const navSections: NavSection[] = [
       { path: '/device-connection', label: 'Connect Device', icon: Cable },
       { path: '/device-setup-guide', label: 'Setup Guide', icon: BookOpenCheck },
       { path: '/history', label: 'History', icon: History },
-      { path: '/map', label: 'Map', icon: Map },
+      { path: '/map', label: 'Map', icon: Globe },
+      { path: '/virtual-sensors', label: 'Virtual Sensors', icon: Beaker },
     ],
   },
   {
@@ -122,6 +125,7 @@ const navSections: NavSection[] = [
       { path: '/settings', label: 'Settings', icon: Sliders },
       { path: '/system-status', label: 'Status', icon: Activity },
       { path: '/protocol-status', label: 'Protocols', icon: Wifi },
+      { path: '/signal-flow', label: 'Signal Flow', icon: Share2 },
     ],
   },
 ];
@@ -164,7 +168,7 @@ const NAV_I18N: Record<string, string> = {
   '/device-connection': 'nav.connectDevice',
   '/device-setup-guide': 'nav.setupGuide',
   '/history': 'nav.history',
-  '/map': 'nav.map',
+  '/map': 'nav.globalSensorMap',
   '/ai': 'nav.aiEngine',
   '/predictions': 'nav.predictions',
   '/analytics': 'nav.analytics',
@@ -186,6 +190,8 @@ const NAV_I18N: Record<string, string> = {
   '/digital-twin': 'nav.digitalTwin',
   '/real-data-validation': 'nav.dataValidation',
   '/compare-virtual-sensors': 'nav.virtualCompare',
+  '/virtual-sensors': 'nav.virtualSensors',
+  '/signal-flow': 'nav.signalFlow',
   '/calibration': 'nav.calibration',
   '/research': 'nav.research',
   '/knowledge': 'nav.knowledge',
@@ -555,7 +561,7 @@ function AppContent() {
                       <Route path="/automation" element={<AutomationPage />} />
                       <Route path="/ai" element={<AIPage />} />
                       <Route path="/predictions" element={<PredictionsPage />} />
-                      <Route path="/map" element={<MapPage />} />
+                      <Route path="/map" element={<div className="p-4"><GlobalSensorMap /></div>} />
                       <Route path="/real-sensor-map" element={<RealSensorMap />} />
                       <Route path="/reports" element={<ReportsPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
@@ -583,9 +589,11 @@ function AppContent() {
                       <Route path="/team" element={<TeamMembers />} />
                       <Route path="/security-audit" element={<SecurityAudit />} />
                       <Route path="/protocol-status" element={<ProtocolStatusDashboard />} />
+                      <Route path="/signal-flow" element={<div className="p-4"><SignalFlow /></div>} />
                       <Route path="/rule-generator" element={<RuleGeneratorPage />} />
                       <Route path="/real-data-validation" element={<RealDataValidation />} />
                       <Route path="/compare-virtual-sensors" element={<CompareVirtualSensors />} />
+                      <Route path="/virtual-sensors" element={<VirtualSensorsPage />} />
                       <Route path="*" element={<NotFoundPage />} />
                     </Routes>
                   </RequireAuth>

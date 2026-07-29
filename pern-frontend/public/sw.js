@@ -1,9 +1,10 @@
-const CACHE_NAME = 'ehi-v1';
+const CACHE_NAME = 'ehi-v2';
 const PRECACHE = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE).catch(() => {}))
   );
 });
 
@@ -17,19 +18,19 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  if (request.method !== 'GET') return;
-  if (request.url.includes('/api/') || request.url.includes('/mqtt')) return;
+  if (request.method !== 'GET' || request.url.startsWith('chrome-extension:')) return;
+  if (request.url.includes('/api/') || request.url.includes('/mqtt') || request.url.includes('hot-update')) return;
 
   event.respondWith(
     caches.match(request).then(cached => {
-      const fetched = fetch(request).then(response => {
-        if (response.ok) {
+      if (cached) return cached;
+      return fetch(request).then(response => {
+        if (response.ok && response.type === 'basic') {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone).catch(() => {}));
         }
         return response;
-      }).catch(() => cached);
-      return cached || fetched;
-    })
+      }).catch(() => cached || new Response('', { status: 503, statusText: 'Offline' }));
+    }).catch(() => fetch(request).catch(() => new Response('', { status: 503, statusText: 'Offline' })))
   );
 });

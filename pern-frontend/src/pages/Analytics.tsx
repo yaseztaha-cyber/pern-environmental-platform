@@ -6,9 +6,10 @@ import { useI18n } from '../lib/i18n';
 import { PageHeader, SectionTitle, Card, Pill, Btn, fmt } from '../components/ui';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  BarChart, Bar, Legend
 } from 'recharts';
-import { Download } from 'lucide-react';
+import { Download, TrendingUp, Globe } from 'lucide-react';
 
 function EmptyChart({ message }: { message: string }) {
   return (
@@ -18,15 +19,19 @@ function EmptyChart({ message }: { message: string }) {
   );
 }
 
+const DAY_RANGES = [7, 14, 30] as const;
+
 export default function AnalyticsPage() {
   const { data, isLive, hasRealData } = useData();
   const { selectedDevice } = useDevice();
   const { t } = useI18n();
   const [ehiHistory, setEhiHistory] = useState<Array<{ ehi: number; recordedAt: string }>>([]);
+  const [complianceTrends, setComplianceTrends] = useState<Array<{ country: string; compliance: number; framework: string }>>([]);
+  const [days, setDays] = useState<number>(7);
   const noRealData = isLive && !hasRealData;
 
   useEffect(() => {
-    const from = new Date(Date.now() - 7 * 86400000).toISOString();
+    const from = new Date(Date.now() - days * 86400000).toISOString();
     apiClient.getEHIHistory(selectedDevice?.id, from).then(raw => {
       const mapped = (Array.isArray(raw) ? raw : []).map((r: any) => ({
         ehi: Number(r.ehi ?? 0),
@@ -34,7 +39,13 @@ export default function AnalyticsPage() {
       }));
       setEhiHistory(mapped);
     }).catch(() => setEhiHistory([]));
-  }, [selectedDevice?.id]);
+  }, [selectedDevice?.id, days]);
+
+  useEffect(() => {
+    apiClient.get('/v3/compliance/trends').then((r: any) => {
+      if (Array.isArray(r)) setComplianceTrends(r);
+    }).catch(() => {});
+  }, []);
 
   const trendData = useMemo(() => {
     if (ehiHistory.length < 2) return [];
@@ -76,6 +87,11 @@ export default function AnalyticsPage() {
         title={t('analytics.title')}
         subtitle={t('analytics.subtitle')}
         right={<div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-white/[0.04] rounded-lg p-0.5 border border-[var(--border)]">
+            {DAY_RANGES.map(d => (
+              <button key={d} onClick={() => setDays(d)} className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${days === d ? 'bg-[var(--emerald)] text-white shadow-sm' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}>{d}d</button>
+            ))}
+          </div>
           {noRealData ? <Pill tone="amber">Awaiting real data</Pill> : undefined}
           <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }} aria-label="Export analytics data">
             <Download size={12} /> Export CSV
@@ -141,6 +157,24 @@ export default function AnalyticsPage() {
           </Card>
         )}
 
+        {/* Compliance Trends */}
+        {complianceTrends.length > 0 && (
+          <Card className="lg:col-span-2">
+            <SectionTitle><span className="flex items-center gap-2"><Globe size={16} className="text-[var(--violet)]" />Compliance Trends by Country</span></SectionTitle>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={complianceTrends} margin={{ top: 5, right: 10, left: -10, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="country" stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} angle={-15} textAnchor="end" height={40} />
+                  <YAxis domain={[0, 100]} stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="compliance" name="Compliance %" fill="var(--violet)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        )}
         <Card className="lg:col-span-2" hover={false}>
           <SectionTitle>Computed from real inputs only</SectionTitle>
           <div className="h-20 flex items-center justify-center text-center text-[var(--text-disabled)] text-sm px-6">

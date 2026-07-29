@@ -33,3 +33,6 @@ coverage/
 # Temp
 tmp/
 temp/
+
+# Vite
+$viteOut

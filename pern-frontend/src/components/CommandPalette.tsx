@@ -18,7 +18,7 @@ interface CommandItem {
 
 const COMMAND_ITEMS: CommandItem[] = [
   { id: 'dash', title: 'Live System Dashboard', category: 'Navigation', icon: Activity, path: '/dashboard' },
-  { id: 'map', title: 'Geospatial Sensor Map', category: 'Navigation', icon: Map, path: '/map' },
+  { id: 'map', title: 'Map', category: 'Navigation', icon: Map, path: '/map' },
   { id: 'devices', title: 'Device Fleet & Management', category: 'Devices', icon: Monitor, path: '/devices' },
   { id: 'virtual', title: 'Virtual Sensor Analytics', category: 'Analytics', icon: Sparkles, path: '/virtual-sensors' },
   { id: 'alerts', title: 'Alert History & Rules', category: 'Alerts', icon: Bell, path: '/alerts' },

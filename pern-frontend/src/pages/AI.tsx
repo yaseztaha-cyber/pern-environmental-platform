@@ -9,6 +9,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  BarChart,
+  Bar,
 } from 'recharts';
 import {
   Brain,
@@ -20,11 +22,14 @@ import {
   Loader2,
   TrendingUp,
   Zap,
+  Globe,
+  Gauge,
 } from 'lucide-react';
 import { useData } from '../lib/data-provider';
 import { useToast } from '../components/Toast';
 import { apiClient } from '../lib/api-client';
 import { generateAdvancedPrediction } from '../lib/prediction-engine';
+import { epaAQIMulti, aqiCategory, WHO_GUIDELINES } from '../lib/epa-standards';
 import { PageHeader, Card, Btn, Pill, SectionTitle } from '../components/ui';
 
 interface Insight {
@@ -76,6 +81,7 @@ export default function AI() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [aiStatus, setAiStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const [ehiHistory, setEhiHistory] = useState<number[]>([]);
+  const [complianceData, setComplianceData] = useState<Array<{ country: string; compliance: number; framework: string }>>([]);
 
   const physicalRef = useRef(data.physical);
   physicalRef.current = data.physical;
@@ -201,6 +207,9 @@ export default function AI() {
   }, []);
 
   useEffect(() => {
+    apiClient.get('/v3/compliance/trends').then((r: any) => {
+      if (Array.isArray(r)) setComplianceData(r);
+    }).catch(() => {});
     checkAIStatus();
   }, []);
 
@@ -358,6 +367,46 @@ export default function AI() {
           </div>
         )}
       </Card>
+
+      {/* Compliance Analysis */}
+      {complianceData.length > 0 && (
+        <Card hover={false}>
+          <SectionTitle>
+            <span className="flex items-center gap-2">
+              <Globe size={18} className="text-[var(--violet)]" />
+              Compliance Analysis by Country
+            </span>
+          </SectionTitle>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={complianceData} margin={{ top: 5, right: 10, left: -10, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="country" stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
+                <YAxis domain={[0, 100]} stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
+                <Tooltip contentStyle={{ background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }} />
+                <Bar dataKey="compliance" name="Compliance %" fill="var(--violet)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+            {complianceData.map(cd => (
+              <div key={cd.country} className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border)]">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{cd.country}</span>
+                  <Pill tone={cd.compliance >= 80 ? 'emerald' : cd.compliance >= 60 ? 'amber' : 'rose'}>{cd.compliance}%</Pill>
+                </div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-1">{cd.framework}</div>
+                <div className="mt-2 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${cd.compliance}%`, background: cd.compliance >= 80 ? 'var(--emerald)' : cd.compliance >= 60 ? 'var(--amber)' : 'var(--rose)' }} />
+                </div>
+                <div className="mt-2 text-[10px] text-[var(--text-disabled)]">
+                  {cd.compliance >= 80 ? 'Within guidelines' : cd.compliance >= 60 ? 'Partial compliance' : 'Attention needed'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

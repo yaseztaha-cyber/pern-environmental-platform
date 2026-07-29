@@ -56,7 +56,7 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", 'ws:', 'wss:', 'https://ntfy.sh', 'https://api.open-meteo.com', 'https://api.openaq.org'],
+      connectSrc: ["'self'", 'ws:', 'wss:', 'https://ntfy.sh', 'https://api.open-meteo.com', 'https://air-quality-api.open-meteo.com'],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
@@ -370,6 +370,9 @@ app.use('/api/export', require('./routes/export'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/seed', require('./routes/seed'));
 
+// PERN v3 — Global Intelligence routes
+app.use('/api/v3', require('./routes/global-v3'));
+
 // Support tickets (in-memory store for demo, would be DB-backed in production)
 const supportTickets = [];
 app.get('/api/support/tickets', (req, res) => {
@@ -392,31 +395,41 @@ app.post('/api/support/ticket', (req, res) => {
   res.json({ success: true, ticket });
 });
 
-// OpenAQ proxy — avoids CORS issues when frontend calls external API
+const CITY_COORDS = {
+  Cairo: { lat: 30.04, lng: 31.24 }, Alexandria: { lat: 31.20, lng: 29.92 },
+  Giza: { lat: 30.01, lng: 31.21 }, London: { lat: 51.51, lng: -0.13 },
+  Paris: { lat: 48.86, lng: 2.35 }, Berlin: { lat: 52.52, lng: 13.41 },
+  'New York': { lat: 40.71, lng: -74.01 }, Beijing: { lat: 39.90, lng: 116.41 },
+  Delhi: { lat: 28.70, lng: 77.10 }, Tokyo: { lat: 35.68, lng: 139.69 },
+};
+
+// OpenAQ-compatible proxy — backed by Open-Meteo Air Quality API (free, no key needed)
 app.get('/api/openaq', async (req, res) => {
-  const { city, parameter } = req.query;
+  const { city } = req.query;
   if (!city) return res.status(400).json({ error: 'city is required' });
   try {
+    const coords = CITY_COORDS[city] || { lat: 30.04, lng: 31.24 };
     const params = new URLSearchParams({
-      city,
-      parameter: parameter || 'pm25,no2,o3',
-      limit: '10',
-      sort: 'desc',
-      order_by: 'datetime',
+      latitude: String(coords.lat),
+      longitude: String(coords.lng),
+      current: 'pm2_5,pm10,nitrogen_dioxide,ozone',
+      timezone: 'auto',
     });
-    const response = await fetch(`https://api.openaq.org/v2/latest?${params}`);
-    if (!response.ok) throw new Error(`OpenAQ ${response.status}`);
+    const response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${params}`);
+    if (!response.ok) throw new Error(`Open-Meteo ${response.status}`);
     const data = await response.json();
-    if (!data.results || data.results.length === 0) return res.json({ location: city, pm25: null, no2: null, o3: null, timestamp: null });
-    const readings = {};
-    data.results.forEach((r) => {
-      if (r.parameter === 'pm25') readings.pm25 = r.value;
-      if (r.parameter === 'no2') readings.no2 = r.value;
-      if (r.parameter === 'o3') readings.o3 = r.value;
+    if (!data.current) return res.json({ location: city, pm25: null, no2: null, o3: null, timestamp: null });
+    const { current } = data;
+    res.json({
+      location: city,
+      pm25: current.pm2_5 ?? null,
+      pm10: current.pm10 ?? null,
+      no2: current.nitrogen_dioxide ?? null,
+      o3: current.ozone ?? null,
+      timestamp: current.time || null,
     });
-    res.json({ location: city, ...readings, timestamp: data.results[0]?.date?.utc || null });
   } catch (err) {
-    logger.warn('[OpenAQ] Proxy failed', { city, error: err.message });
+    logger.warn('[Open-Meteo] Proxy failed', { city, error: err.message });
     res.json({ location: city, pm25: null, no2: null, o3: null, timestamp: null, error: err.message });
   }
 });

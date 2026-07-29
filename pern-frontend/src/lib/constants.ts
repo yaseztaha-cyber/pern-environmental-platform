@@ -21,6 +21,9 @@ export const SENSOR_TYPES = {
   
   // Soil
   sm: { name: 'Soil Moisture', unit: '%', safeRange: [20, 60], icon: 'Sprout' },
+  
+  // Light / Optical
+  light: { name: 'Light Intensity', unit: 'lux', safeRange: [0, 100000], icon: 'Sun' },
 } as const;
 
 export type SensorType = keyof typeof SENSOR_TYPES;

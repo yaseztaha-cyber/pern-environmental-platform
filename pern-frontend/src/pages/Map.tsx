@@ -4,9 +4,10 @@ import { apiClient } from '../lib/api-client';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { PageHeader, Card, Pill, SectionTitle, Btn } from '../components/ui';
+import { PageHeader, Card, Pill, SectionTitle, Btn, Toggle } from '../components/ui';
 import { showToast } from '../components/Toast';
-import { MapPin, Crosshair, AlertTriangle } from 'lucide-react';
+import { MapPin, Crosshair, AlertTriangle, Layers, ThermometerSun } from 'lucide-react';
+import type { DeviceLocation as DL, ComplianceTrend } from '../lib/types';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -61,6 +62,9 @@ export default function MapPage() {
   const [loading, setLoading] = useState(true);
   const [settingLocation, setSettingLocation] = useState<string | null>(null);
   const [pickedCoords, setPickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [showCompliance, setShowCompliance] = useState(false);
+  const [showHeat, setShowHeat] = useState(false);
+  const [complianceTrends, setComplianceTrends] = useState<ComplianceTrend[]>([]);
 
   const loadLocations = useCallback(async () => {
     setLoading(true);
@@ -88,6 +92,12 @@ export default function MapPage() {
   }, []);
 
   useEffect(() => { loadLocations(); }, [loadLocations]);
+
+  useEffect(() => {
+    apiClient.get('/v3/compliance/trends').then((r: any) => {
+      if (Array.isArray(r)) setComplianceTrends(r);
+    }).catch(() => {});
+  }, []);
 
   const onlineCount = locations.filter(l => l.status === 'online').length;
   const locatedCount = locations.filter(l => l.hasCoordinates).length;
@@ -117,7 +127,16 @@ export default function MapPage() {
       <PageHeader
         title={t('map.title')}
         subtitle={`${locatedCount} located · ${locations.length} total devices`}
-        right={loading ? <Pill tone="slate">Loading...</Pill> : <Pill tone="emerald">{onlineCount} online</Pill>}
+        right={
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mr-2 text-xs text-[var(--text-tertiary)]">
+              <Layers size={12} />
+              <Toggle checked={showCompliance} onChange={setShowCompliance} label="Compliance" />
+              <Toggle checked={showHeat} onChange={setShowHeat} label="Heat" />
+            </div>
+            {loading ? <Pill tone="slate">Loading...</Pill> : <Pill tone="emerald">{onlineCount} online</Pill>}
+          </div>
+        }
       />
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -171,6 +190,40 @@ export default function MapPage() {
                     />
                   </Fragment>
                 ))}
+                {/* Compliance overlay (example circles) */}
+                {showCompliance && locations.filter(l => l.hasCoordinates).map(loc => (
+                  <Circle
+                    key={`comp-${loc.id}`}
+                    center={[loc.lat!, loc.lng!]}
+                    radius={25000}
+                    pathOptions={{
+                      color: loc.status === 'online' ? '#10b981' : '#ef4444',
+                      fillColor: loc.status === 'online' ? '#10b981' : '#ef4444',
+                      fillOpacity: 0.08,
+                      weight: 1,
+                      dashArray: '4 4',
+                    }}
+                  />
+                ))}
+                {/* Heat overlay using PM2.5 values */}
+                {showHeat && locations.filter(l => l.hasCoordinates && l.latestReading?.pm25).map(loc => {
+                  const pm25 = loc.latestReading!.pm25 as number;
+                  const radius = 15000 + pm25 * 300;
+                  const opacity = Math.min(0.3, pm25 / 200);
+                  return (
+                    <Circle
+                      key={`heat-${loc.id}`}
+                      center={[loc.lat!, loc.lng!]}
+                      radius={Math.min(60000, radius)}
+                      pathOptions={{
+                        color: pm25 > 35 ? '#ef4444' : pm25 > 15 ? '#f59e0b' : '#10b981',
+                        fillColor: pm25 > 35 ? '#ef4444' : pm25 > 15 ? '#f59e0b' : '#10b981',
+                        fillOpacity: opacity,
+                        weight: 0,
+                      }}
+                    />
+                  );
+                })}
                 {settingLocation && pickedCoords && (
                   <Marker position={[pickedCoords.lat, pickedCoords.lng]} />
                 )}
@@ -185,6 +238,20 @@ export default function MapPage() {
           </Card>
         </div>
 
+        <div className="space-y-4">
+        {complianceTrends.length > 0 && (
+          <Card hover={false}>
+            <SectionTitle>Compliance Overview</SectionTitle>
+            <div className="space-y-2">
+              {complianceTrends.slice(0, 5).map(ct => (
+                <div key={ct.country} className="flex items-center justify-between text-xs">
+                  <span className="text-[var(--text-secondary)]">{ct.country}</span>
+                  <Pill tone={ct.compliance >= 80 ? 'emerald' : ct.compliance >= 60 ? 'amber' : 'rose'}>{ct.compliance}%</Pill>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
         <Card hover={false}>
           <SectionTitle>Devices ({locations.length})</SectionTitle>
           {unlocated.length > 0 && (
@@ -254,6 +321,7 @@ export default function MapPage() {
             ))}
           </div>
         </Card>
+        </div>
       </div>
 
       {selected && selected.hasCoordinates && selected.lat && selected.lng && (

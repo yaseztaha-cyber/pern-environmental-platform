@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router';
 import {
   AlertTriangle, Users, Droplet, Wind,
   Zap, ArrowRight, TrendingUp, Activity, Loader2,
-  Download, FileSpreadsheet, FileText, Server
+  Download, FileSpreadsheet, FileText, Server, BarChart3,
+  Globe, Gauge, MapPin
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -19,6 +20,61 @@ import {
   PageHeader, StatCard, LiveBadge, Btn, Pill, Badge, Card,
   SectionTitle, ProgressRing, fmt
 } from '../components/ui';
+
+function ComplianceWindBrief({ noRealData }: { noRealData: boolean }) {
+  const [compliance, setCompliance] = useState<{ countries: number; frameworks: number; overallPct: number } | null>(null);
+  const [wind, setWind] = useState<{ speed: number; direction: number; gust: number } | null>(null);
+  const navigate = useNavigate();
+  useEffect(() => {
+    apiClient.get('/v3/compliance/stats').then((r: any) => {
+      if (r) setCompliance({ countries: r.countries ?? 0, frameworks: r.frameworks ?? 0, overallPct: r.overallPct ?? r.averageCompliance ?? 0 });
+    }).catch(() => {});
+    apiClient.get('/v3/wind/forecast').then((r: any) => {
+      if (Array.isArray(r) && r.length > 0) setWind({ speed: r[0].speed, direction: r[0].direction, gust: r[0].gust });
+    }).catch(() => {});
+  }, []);
+  if (noRealData) return null;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 md:mb-6 grid-entrance">
+      <Card hover={false} className="flex items-center gap-4 p-4">
+        <div className="w-10 h-10 rounded-[var(--radius-sm)] bg-[var(--emerald-dim)] flex items-center justify-center shrink-0">
+          <BarChart3 size={18} className="text-[var(--emerald)]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs text-[var(--text-tertiary)] font-medium">Compliance Overview</div>
+          {compliance ? (
+            <div className="flex items-center gap-4 mt-1.5">
+              <div><span className="text-lg font-bold tabular-nums text-[var(--emerald)]">{compliance.countries}</span> <span className="text-xs text-[var(--text-tertiary)]">countries</span></div>
+              <div><span className="text-lg font-bold tabular-nums text-[var(--cyan)]">{compliance.frameworks}</span> <span className="text-xs text-[var(--text-tertiary)]">frameworks</span></div>
+              <div><span className="text-lg font-bold tabular-nums text-[var(--violet)]">{compliance.overallPct}%</span> <span className="text-xs text-[var(--text-tertiary)]">avg compliance</span></div>
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--text-disabled)] mt-1">Loading compliance data…</div>
+          )}
+        </div>
+        <Btn variant="ghost" size="sm" onClick={() => navigate('/analytics')}>Details</Btn>
+      </Card>
+      <Card hover={false} className="flex items-center gap-4 p-4">
+        <div className="w-10 h-10 rounded-[var(--radius-sm)] bg-[var(--cyan-dim)] flex items-center justify-center shrink-0">
+          <Wind size={18} className="text-[var(--cyan)]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs text-[var(--text-tertiary)] font-medium">Current Wind</div>
+          {wind ? (
+            <div className="flex items-center gap-4 mt-1.5">
+              <div><span className="text-lg font-bold tabular-nums text-[var(--cyan)]">{fmt(wind.speed)}</span> <span className="text-xs text-[var(--text-tertiary)]">m/s</span></div>
+              <div><span className="text-lg font-bold tabular-nums text-[var(--text-primary)]">{wind.direction}°</span> <span className="text-xs text-[var(--text-tertiary)]">direction</span></div>
+              <div><span className="text-lg font-bold tabular-nums text-[var(--amber)]">{fmt(wind.gust)}</span> <span className="text-xs text-[var(--text-tertiary)]">gust</span></div>
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--text-disabled)] mt-1">Loading wind data…</div>
+          )}
+        </div>
+        <Btn variant="ghost" size="sm" onClick={() => navigate('/map')}>Map</Btn>
+      </Card>
+    </div>
+  );
+}
 
 function EhiTrendChart({ ehi }: { ehi: number }) {
   const { selectedDevice } = useDevice();
@@ -232,6 +288,9 @@ export default function Dashboard() {
         <StatCard label={t('dashboard.stat.activeAlerts')} value={noRealData ? '—' : activeAlerts} accent="rose" icon={<AlertTriangle size={16} />} />
         <StatCard label={t('dashboard.stat.connectedDevices')} value={noRealData ? '—' : connectedCount} accent="violet" icon={<Users size={16} />} />
       </div>
+
+      {/* Compliance & Wind Brief */}
+      <ComplianceWindBrief noRealData={noRealData} />
 
       {/* EHI Trend */}
       <Card className="mb-4 md:mb-6 stagger-3" hover={false}>

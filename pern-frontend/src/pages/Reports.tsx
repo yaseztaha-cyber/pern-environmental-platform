@@ -1,16 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useData } from '../lib/data-provider';
 import { useI18n } from '../lib/i18n';
 import jsPDF from 'jspdf';
-import { FileSpreadsheet, FileText, Download, Loader2, ArrowLeft, Check } from 'lucide-react';
+import { FileSpreadsheet, FileText, Download, Loader2, ArrowLeft, Check, BarChart3, Wind } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
-import { PageHeader, Btn, Card, SectionTitle } from '../components/ui';
+import { PageHeader, Btn, Card, SectionTitle, Pill } from '../components/ui';
 
 export default function ReportsPage() {
   const { data } = useData();
   const { t } = useI18n();
   const [generating, setGenerating] = useState<string | null>(null);
   const [exported, setExported] = useState<string | null>(null);
+  const [complianceStats, setComplianceStats] = useState<{ countries: number; frameworks: number; overallPct: number } | null>(null);
+  const [complianceTrends, setComplianceTrends] = useState<Array<{ country: string; compliance: number; framework: string }>>([]);
+  const [windData, setWindData] = useState<Array<{ speed: number; direction: number; time: string }>>([]);
+
+  useEffect(() => {
+    apiClient.get('/v3/compliance/stats').then((r: any) => {
+      if (r) setComplianceStats({ countries: r.countries ?? 0, frameworks: r.frameworks ?? 0, overallPct: r.overallPct ?? r.averageCompliance ?? 0 });
+    }).catch(() => {});
+    apiClient.get('/v3/compliance/trends').then((r: any) => {
+      if (Array.isArray(r)) setComplianceTrends(r);
+    }).catch(() => {});
+    apiClient.get('/v3/wind/forecast').then((r: any) => {
+      if (Array.isArray(r)) setWindData(r.map((w: any) => ({ speed: w.speed, direction: w.direction, time: w.time || w.timestamp || '' })));
+    }).catch(() => {});
+  }, []);
 
   const generatePDF = async (type: string) => {
     setGenerating(type);
@@ -38,13 +53,49 @@ export default function ReportsPage() {
         doc.text(`${vs.name}: ${vs.value} ${vs.unit} (${vs.category})`, 25, y + (i * 7));
       });
 
+      y += 8 * 7;
       doc.setFontSize(14);
-      doc.text('Key Physical Readings', 20, 165);
-      y = 175;
+      doc.text('Key Physical Readings', 20, y + 10);
+      y += 20;
       Object.entries(data.physical).slice(0, 6).forEach(([key, val], i) => {
         doc.setFontSize(11);
         doc.text(`${key.toUpperCase()}: ${val}`, 25, y + (i * 7));
       });
+
+      // Type-specific sections
+      if ((type === 'compliance' || type === 'comprehensive') && complianceStats) {
+        y += 50;
+        doc.setFontSize(14);
+        doc.text('Compliance Summary', 20, y);
+        y += 8;
+        doc.setFontSize(11);
+        doc.text(`Countries monitored: ${complianceStats.countries}`, 25, y);
+        y += 7;
+        doc.text(`Frameworks tracked: ${complianceStats.frameworks}`, 25, y);
+        y += 7;
+        doc.text(`Average Compliance: ${complianceStats.overallPct}%`, 25, y);
+        y += 10;
+        if (complianceTrends.length > 0) {
+          doc.setFontSize(12);
+          doc.text('Compliance by Country:', 20, y);
+          y += 7;
+          complianceTrends.forEach((ct, i) => {
+            doc.setFontSize(10);
+            doc.text(`${ct.country}: ${ct.compliance}% (${ct.framework})`, 25, y + (i * 6));
+          });
+        }
+      }
+
+      if ((type === 'wind' || type === 'comprehensive') && windData.length > 0) {
+        y += windData.length > 0 ? complianceTrends.length * 6 + 15 : 15;
+        doc.setFontSize(14);
+        doc.text('Wind Forecast', 20, y);
+        y += 8;
+        windData.slice(0, 6).forEach((w, i) => {
+          doc.setFontSize(10);
+          doc.text(`${w.time || `Period ${i+1}`}: ${w.speed.toFixed(1)} m/s, ${w.direction}° direction`, 25, y + (i * 6));
+        });
+      }
 
       doc.setFontSize(10);
       doc.text('STEM Gharbiya • PERN Platform v2.7 • 2026', 20, 280);
@@ -92,19 +143,21 @@ export default function ReportsPage() {
 
       {/* PDF Reports Grid */}
       <SectionTitle className="mb-4">PDF Reports</SectionTitle>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
         {[
-          { type: 'daily', label: 'Daily Summary', desc: 'EHI + Key Metrics', bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]' },
-          { type: 'water', label: 'Water Quality Report', desc: 'WQI + Virtual Sensors', bg: 'bg-[var(--cyan-dim)]', fg: 'text-[var(--cyan)]' },
-          { type: 'air', label: 'Air Quality Report', desc: 'AQI + Pollutant Analysis', bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]' },
-          { type: 'risk', label: 'Risk Assessment', desc: 'Environmental Risk Score', bg: 'bg-[var(--rose-dim)]', fg: 'text-[var(--rose)]' },
-          { type: 'vulnerable', label: 'Vulnerable Groups', desc: 'Sensitivity Analysis', bg: 'bg-[var(--amber-dim)]', fg: 'text-[var(--amber)]' },
-          { type: 'compliance', label: 'Compliance Report', desc: 'WHO / EPA / Egypt', bg: 'bg-[rgba(167,139,250,0.12)]', fg: 'text-[var(--violet)]' },
+          { type: 'daily', label: 'Daily Summary', desc: 'EHI + Key Metrics', bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]', icon: <FileText size={18} /> },
+          { type: 'water', label: 'Water Quality', desc: 'WQI + Virtual Sensors', bg: 'bg-[var(--cyan-dim)]', fg: 'text-[var(--cyan)]', icon: <FileText size={18} /> },
+          { type: 'air', label: 'Air Quality', desc: 'AQI + Pollutant Analysis', bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]', icon: <FileText size={18} /> },
+          { type: 'compliance', label: 'Compliance', desc: `${complianceStats ? `${complianceStats.countries} countries, ${complianceStats.frameworks} frameworks` : 'WHO / EPA / Egypt'}`, bg: 'bg-[rgba(167,139,250,0.12)]', fg: 'text-[var(--violet)]', icon: <BarChart3 size={18} /> },
+          { type: 'wind', label: 'Wind Forecast', desc: `${windData.length > 0 ? `${windData.length} forecast periods` : 'Speed / Direction'}`, bg: 'bg-[var(--amber-dim)]', fg: 'text-[var(--amber)]', icon: <Wind size={18} /> },
+          { type: 'risk', label: 'Risk Assessment', desc: 'Environmental Risk Score', bg: 'bg-[var(--rose-dim)]', fg: 'text-[var(--rose)]', icon: <FileText size={18} /> },
+          { type: 'vulnerable', label: 'Vulnerable Groups', desc: 'Sensitivity Analysis', bg: 'bg-[var(--amber-dim)]', fg: 'text-[var(--amber)]', icon: <FileText size={18} /> },
+          { type: 'comprehensive', label: 'Comprehensive', desc: 'All metrics combined', bg: 'bg-[rgba(34,211,238,0.08)]', fg: 'text-[var(--cyan)]', icon: <FileText size={18} /> },
         ].map((report) => (
           <Card key={report.type} className="flex flex-col p-4 md:p-5">
             <div className="flex items-center gap-3 mb-3">
               <div className={`w-10 h-10 rounded-[var(--radius-sm)] ${report.bg} flex items-center justify-center`}>
-                <FileText size={18} className={report.fg} />
+                <span className={report.fg}>{report.icon}</span>
               </div>
               <div>
                 <div className="font-semibold text-[var(--text-primary)]">{report.label}</div>

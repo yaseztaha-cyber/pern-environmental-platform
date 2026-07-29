@@ -50,6 +50,7 @@ const SENSOR_RANGES: Record<string, [number, number]> = {
   wT: [0, 100],
   tb: [0, 100],
   sm: [0, 100],
+  light: [0, 200000],
 };
 
 /** Number of recent readings to keep for outlier detection. */

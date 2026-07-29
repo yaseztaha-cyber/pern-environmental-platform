@@ -2,9 +2,11 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { PageHeader, Card, Pill, Btn, SectionTitle, fmt } from '../components/ui';
 import { calculateScientificEHI } from '../lib/scientific-ehi';
 import { calculateAQI, calculateWQI } from '../lib/virtual-sensors';
-import { ThermometerSun, Droplet, Wind, Cloud, Beaker, Waves, Eye, Volume2, Gauge, RotateCcw, Save } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ThermometerSun, Droplet, Wind, Cloud, Beaker, Waves, Eye, Volume2, Gauge, RotateCcw, Save, Download, Upload, BarChart3 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { useData } from '../lib/data-provider';
+import { showToast } from '../components/Toast';
+import type { Scenario } from '../lib/types';
 
 const SENSORS = [
   { key: 'pm25', label: 'PM2.5', icon: Wind, range: [0, 150], step: 0.5, unit: 'µg/m³' },
@@ -28,13 +30,12 @@ const PRESETS = [
   { name: 'Industrial', values: { pm25: 95, ph: 6.8, tmp: 30, hum: 45, co2: 800, pm10: 180, no2: 120, so2: 65, o3: 90, noise: 95, dO: 5.5, tds: 450, mq: 1.2 } },
 ];
 
-interface Scenario { name: string; values: Record<string, number>; ehi: number; timestamp: number; }
-
 export default function DigitalTwinPage() {
   const { data, isLive, hasRealData } = useData();
   const [sensors, setSensors] = useState<Record<string, number>>({ pm25: 25, ph: 7.1, tmp: 28, hum: 55, co2: 450, pm10: 40, no2: 20, so2: 10, o3: 50, noise: 60, dO: 8.0, tds: 200, mq: 0.35 });
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [simHistory, setSimHistory] = useState<{ time: number; ehi: number }[]>([]);
+  const [complianceData, setComplianceData] = useState<{ body: string; param: string; pass: boolean }[]>([]);
   const initializedRef = useRef(false);
 
   // When live sensor data arrives, seed the sliders with real values
@@ -82,13 +83,46 @@ export default function DigitalTwinPage() {
 
   const saveScenario = () => {
     const name = `Scenario ${scenarios.length + 1}`;
-    const entry = { name, values: { ...sensors }, ehi: +ehi.toFixed(1), timestamp: Date.now() };
+    const entry: Scenario = { name, values: { ...sensors }, ehi: +ehi.toFixed(1), aqi: aqi?.value ?? 0, wqi: wqi?.value ?? 0, timestamp: Date.now() };
     setScenarios(prev => [...prev, entry]);
     setSimHistory(prev => [...prev.slice(-49), { time: Date.now(), ehi: +ehi.toFixed(1) }]);
   };
 
   const loadPreset = (preset: typeof PRESETS[0]) => setSensors(preset.values);
   const resetAll = () => setSensors(PRESETS[1].values);
+
+  const exportScenarios = () => {
+    const blob = new Blob([JSON.stringify(scenarios, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `twin-scenarios-${Date.now()}.json`; a.click();
+    URL.revokeObjectURL(url);
+    showToast('Scenarios exported', 'success');
+  };
+
+  const importScenarios = () => {
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (Array.isArray(data)) { setScenarios(prev => [...prev, ...data]); showToast(`${data.length} scenarios imported`, 'success'); }
+      } catch { showToast('Invalid scenario file', 'error'); }
+    };
+    input.click();
+  };
+
+  // Compute simple compliance check based on current values
+  useEffect(() => {
+    const checks: { body: string; param: string; pass: boolean }[] = [];
+    if (sensors.pm25 > 15) checks.push({ body: 'WHO', param: 'PM2.5', pass: false }); else checks.push({ body: 'WHO', param: 'PM2.5', pass: true });
+    if (sensors.pm25 > 35) checks.push({ body: 'EPA', param: 'PM2.5', pass: false }); else checks.push({ body: 'EPA', param: 'PM2.5', pass: true });
+    if (sensors.co2 > 1000) checks.push({ body: 'WHO', param: 'CO₂', pass: false }); else checks.push({ body: 'WHO', param: 'CO₂', pass: true });
+    if (sensors.ph < 6.5 || sensors.ph > 8.5) checks.push({ body: 'WHO', param: 'pH', pass: false }); else checks.push({ body: 'WHO', param: 'pH', pass: true });
+    if (sensors.pm10 > 45) checks.push({ body: 'WHO', param: 'PM10', pass: false }); else checks.push({ body: 'WHO', param: 'PM10', pass: true });
+    setComplianceData(checks);
+  }, [sensors]);
 
   const ehiColor = ehi >= 70 ? 'var(--emerald)' : ehi >= 40 ? 'var(--amber)' : 'var(--rose)';
   const ehiColorHex = ehi >= 70 ? '#10b981' : ehi >= 40 ? '#f59e0b' : '#ef4444';
@@ -101,8 +135,10 @@ export default function DigitalTwinPage() {
         right={
           <div className="flex items-center gap-2">
             <Pill tone={ehiPillTone}>{ehiLabel} — EHI {fmt(ehi)}</Pill>
-            <Btn onClick={resetAll} size="sm" aria-label="Reset to defaults"><RotateCcw size={14} /></Btn>
-            <Btn onClick={saveScenario} variant="primary" size="sm" aria-label="Save current scenario"><Save size={12} /> Save</Btn>
+            <Btn onClick={resetAll} size="sm" aria-label="Reset"><RotateCcw size={14} /></Btn>
+            <Btn onClick={saveScenario} variant="primary" size="sm"><Save size={12} /> Save</Btn>
+            <Btn onClick={exportScenarios} size="sm" aria-label="Export scenarios"><Download size={14} /></Btn>
+            <Btn onClick={importScenarios} size="sm" aria-label="Import scenarios"><Upload size={14} /></Btn>
           </div>
         } />
 
@@ -172,13 +208,26 @@ export default function DigitalTwinPage() {
             </Card>
           )}
 
+          {/* Compliance Checks */}
+          <Card hover={false}>
+            <SectionTitle><span className="flex items-center gap-2"><BarChart3 size={14} className="text-[var(--violet)]" />Compliance</span></SectionTitle>
+            <div className="space-y-1.5">
+              {complianceData.map((c, i) => (
+                <div key={i} className="flex items-center justify-between text-xs py-1">
+                  <span className="text-[var(--text-secondary)]">{c.body} {c.param}</span>
+                  <Pill tone={c.pass ? 'emerald' : 'rose'}>{c.pass ? 'PASS' : 'FAIL'}</Pill>
+                </div>
+              ))}
+            </div>
+          </Card>
+
           {scenarios.length > 0 && (
             <Card hover={false}>
-              <SectionTitle>Saved Scenarios</SectionTitle>
+              <SectionTitle>Saved Scenarios ({scenarios.length})</SectionTitle>
               <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                {scenarios.map((s, i) => (
+                {[...scenarios].reverse().map((s, i) => (
                   <div key={i} className="flex items-center justify-between py-2 px-2 rounded text-xs hover:bg-[var(--surface)]">
-                    <span className="text-[var(--text-secondary)]">{s.name}</span>
+                    <span className="text-[var(--text-secondary)] truncate">{s.name}</span>
                     <Pill tone={s.ehi >= 70 ? 'emerald' : s.ehi >= 40 ? 'amber' : 'rose'}>EHI {fmt(s.ehi)}</Pill>
                   </div>
                 ))}
