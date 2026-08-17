@@ -42,7 +42,10 @@ const PredictionsPage = lazy(() => import('./pages/Predictions'));
 const ReportsPage = lazy(() => import('./pages/Reports'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const Login = lazy(() => import('./pages/Login'));
-const AuthCallback = lazy(() => import('./pages/AuthCallback'));
+const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 const VulnerablePage = lazy(() => import('./pages/Vulnerable'));
 const DigitalTwinPage = lazy(() => import('./pages/DigitalTwin'));
 const CompliancePage = lazy(() => import('./pages/Compliance'));
@@ -579,7 +582,10 @@ function AppContent() {
                 <Suspense fallback={<PageLoader />}>
                   <Routes>
                 <Route path="/login" element={<Login />} />
-                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route path="/*" element={
                   <RequireAuth>
                     <Routes>

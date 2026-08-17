@@ -1,14 +1,11 @@
 /* oxlint-disable react/only-export-components */
 /**
  * Authentication Context — wraps the app with auth state.
- * Supports Logto OIDC and demo user fallback.
- *
- * Tokens are stored in sessionStorage (cleared when the tab closes)
- * rather than localStorage (persists across sessions) for better security.
+ * Uses self-hosted JWT + bcrypt auth with refresh tokens.
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { logtoClient, type AuthUser, getUser, getAccessToken, isAuthenticated as checkIsAuthenticated, logout as logtoLogout } from './auth';
+import { type AuthUser, login as apiLogin, logout as apiLogout, getMe, refreshToken } from './auth';
 
 const STORAGE_KEY_TOKEN = 'pern_auth_token';
 const STORAGE_KEY_DEMO = 'pern_demo_user';
@@ -19,7 +16,7 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   isAuthenticated: boolean;
-  login: () => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -42,20 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    try {
-      const authed = await checkIsAuthenticated();
-      if (authed) {
-        const u = await getUser();
-        if (u) {
-          setUser(u);
-          const token = await getAccessToken();
-          if (token) sessionStorage.setItem(STORAGE_KEY_TOKEN, token);
-          return;
-        }
-      }
-    } catch { /* not logged in via Logto */ }
-
-    // Fallback: check for demo user in sessionStorage
+    // Check for demo user first
     const demoRaw = sessionStorage.getItem(STORAGE_KEY_DEMO);
     if (demoRaw) {
       try {
@@ -65,9 +49,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch { /* corrupt */ }
     }
 
-    // Auto-enter demo mode when no real session exists: fresh visitors land
-    // directly in the dashboard instead of a login wall. Real Logto sessions
-    // are checked first above, so signed-in users keep their own account.
+    // Try existing access token
+    const existingToken = sessionStorage.getItem(STORAGE_KEY_TOKEN);
+    if (existingToken && existingToken !== 'demo-token') {
+      const me = await getMe(existingToken);
+      if (me) {
+        setUser(me);
+        return;
+      }
+      // Token expired — try refresh
+      const newToken = await refreshToken();
+      if (newToken) {
+        sessionStorage.setItem(STORAGE_KEY_TOKEN, newToken);
+        const me2 = await getMe(newToken);
+        if (me2) {
+          setUser(me2);
+          return;
+        }
+      }
+      sessionStorage.removeItem(STORAGE_KEY_TOKEN);
+    }
+
+    // No session — auto-enter demo mode
     sessionStorage.setItem(STORAGE_KEY_DEMO, JSON.stringify(DEMO_USER));
     sessionStorage.setItem(STORAGE_KEY_TOKEN, 'demo-token');
     setUser(DEMO_USER);
@@ -77,33 +80,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh().finally(() => setLoading(false));
   }, [refresh]);
 
-  // React to session expiry signalled by the API client (pern-auth-expired).
+  // React to session expiry
   useEffect(() => {
     const onAuthExpired = () => setUser(null);
     window.addEventListener('pern-auth-expired', onAuthExpired);
     return () => window.removeEventListener('pern-auth-expired', onAuthExpired);
   }, []);
 
-  const login = useCallback(async () => {
+  const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
-      await logtoClient.signIn(`${window.location.origin}/#/auth/callback`);
-    } catch (err) {
-      if (import.meta.env.DEV) console.error('Login failed:', err);
-      throw err;
+      const result = await apiLogin(email, password);
+      sessionStorage.setItem(STORAGE_KEY_TOKEN, result.accessToken);
+      setUser(result.user);
     } finally {
       setLoading(false);
     }
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      const authed = await checkIsAuthenticated();
-      if (authed) {
-        await logtoLogout();
-      }
-    } catch { /* noop */ }
-    // Clear all auth-related storage
+    try { await apiLogout(); } catch { /* noop */ }
     sessionStorage.removeItem(STORAGE_KEY_DEMO);
     sessionStorage.removeItem(STORAGE_KEY_TOKEN);
     localStorage.removeItem(STORAGE_KEY_DEMO);

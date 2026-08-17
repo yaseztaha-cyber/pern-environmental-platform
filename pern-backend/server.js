@@ -14,6 +14,7 @@ const cookieParser = require('cookie-parser');
 const mqtt = require('mqtt');
 const fetch = require('node-fetch');
 const { authenticateToken } = require('./auth');
+const authRoutes = require('./routes/auth');
 const db = require('./db');
 const logger = require('./utils/logger');
 const { validateEnv } = require('./utils/env-validator');
@@ -363,6 +364,10 @@ async function sendNtfyNotification(notification) {
 // gracefully (no token required) so local development without a Logto
 // instance keeps working.
 app.use(cookieParser());
+
+// Auth routes — mounted BEFORE authenticateToken so they are public
+app.use('/api/auth', authRoutes);
+
 app.use('/api', authenticateToken);
 
 // Guard every /api query string against injection / prototype pollution.

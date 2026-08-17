@@ -4,7 +4,7 @@
  */
 
 import { getCurrentContext } from './app-context';
-import { getAccessToken } from './auth';
+import { refreshToken } from './auth';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const TOKEN_KEY = 'pern_auth_token';
@@ -20,7 +20,7 @@ async function refreshAccessToken(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
     try {
-      const token = await getAccessToken();
+      const token = await refreshToken();
       if (token) {
         sessionStorage.setItem(TOKEN_KEY, token);
         return true;

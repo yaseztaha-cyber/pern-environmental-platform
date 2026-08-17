@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { testNtfyNotification } from '../lib/ntfy';
-import { isLogtoConfigured } from '../lib/auth';
+const isLogtoConfigured = false;
 import { useAuth } from '../lib/auth-context';
 import { useI18n } from '../lib/i18n';
 import { PageHeader, Card, Pill, Btn, SectionTitle, Toggle } from '../components/ui';

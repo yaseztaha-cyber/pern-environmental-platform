@@ -266,6 +266,23 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- Local auth columns (added for self-hosted auth)
+      DO $$ BEGIN
+        ALTER TABLE users ADD COLUMN password_hash VARCHAR(200);
+      EXCEPTION WHEN duplicate_column THEN null; END $$;
+      DO $$ BEGIN
+        ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT false;
+      EXCEPTION WHEN duplicate_column THEN null; END $$;
+      DO $$ BEGIN
+        ALTER TABLE users ADD COLUMN verification_token VARCHAR(200);
+      EXCEPTION WHEN duplicate_column THEN null; END $$;
+      DO $$ BEGIN
+        ALTER TABLE users ADD COLUMN reset_token VARCHAR(200);
+      EXCEPTION WHEN duplicate_column THEN null; END $$;
+      DO $$ BEGIN
+        ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP;
+      EXCEPTION WHEN duplicate_column THEN null; END $$;
+
       CREATE TABLE IF NOT EXISTS notification_preferences (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(100),
@@ -1174,6 +1191,66 @@ async function deleteUser(id) {
   }
 }
 
+async function createLocalUser({ id, email, name, passwordHash, role, organizationId }) {
+  try {
+    return await pool.query(
+      `INSERT INTO users (id, email, name, password_hash, role, organization_id, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, false)`,
+      [id, email, name || '', passwordHash, role || 'viewer', organizationId || 'default']
+    );
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function setVerificationToken(userId, token) {
+  try {
+    return await pool.query(
+      `UPDATE users SET verification_token = $2 WHERE id = $1`,
+      [userId, token]
+    );
+  } catch { /* no-op */ }
+}
+
+async function verifyEmailUser(token) {
+  try {
+    const result = await pool.query(
+      `UPDATE users SET email_verified = true, verification_token = NULL
+       WHERE verification_token = $1 RETURNING id, email, name`,
+      [token]
+    );
+    return result.rows[0] || null;
+  } catch { return null; }
+}
+
+async function setResetToken(userId, token, expires) {
+  try {
+    return await pool.query(
+      `UPDATE users SET reset_token = $2, reset_token_expires = $3 WHERE id = $1`,
+      [userId, token, expires]
+    );
+  } catch { /* no-op */ }
+}
+
+async function getUserByResetToken(token) {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()`,
+      [token]
+    );
+    return result.rows[0] || null;
+  } catch { return null; }
+}
+
+async function resetPasswordHash(userId, passwordHash) {
+  try {
+    return await pool.query(
+      `UPDATE users SET password_hash = $2, reset_token = NULL, reset_token_expires = NULL WHERE id = $1`,
+      [userId, passwordHash]
+    );
+  } catch { /* no-op */ }
+}
+
 // ============================================================
 // NOTIFICATION PREFERENCES
 // ============================================================
@@ -1625,6 +1702,12 @@ module.exports = {
   upsertUser,
   updateUserLastLogin,
   deleteUser,
+  createLocalUser,
+  setVerificationToken,
+  verifyEmailUser,
+  setResetToken,
+  getUserByResetToken,
+  resetPasswordHash,
 
   // Notification preferences (new)
   getNotificationPreferences,

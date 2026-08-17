@@ -1,76 +1,91 @@
 /**
- * Logto OIDC Authentication
- * Uses @logto/browser SDK
+ * Self-hosted JWT Authentication API
+ * Replaces Logto OIDC with local bcrypt + JWT auth
  */
 
-import LogtoClient, { 
-  type LogtoConfig, 
-  type UserInfoResponse 
-} from '@logto/browser';
-
-const endpoint = import.meta.env.VITE_LOGTO_ENDPOINT;
-const appId = import.meta.env.VITE_LOGTO_APP_ID;
-
-// Logto is only considered configured when real (non-default) env values are
-// provided. Otherwise the OIDC call would always fail with a network error in
-// local/dev environments — so we skip it and guide the user to the demo login.
-export const isLogtoConfigured = Boolean(endpoint && appId && endpoint !== 'http://localhost:3001');
-
-const config: LogtoConfig = {
-  endpoint: endpoint || 'http://localhost:3001',
-  appId: appId || 'pern-app',
-  resources: ['https://api.pern.dev'],
-};
-
-export const logtoClient = new LogtoClient(config);
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export interface AuthUser {
   id: string;
   name?: string;
   email?: string;
   role?: string;
+  emailVerified?: boolean;
 }
 
-export async function loginWithLogto(redirectUri?: string) {
-  const callbackUri = redirectUri || `${window.location.origin}/#/auth/callback`;
-  await logtoClient.signIn(callbackUri);
+export interface AuthResponse {
+  accessToken: string;
+  user: AuthUser;
 }
 
-export async function handleLogtoCallback() {
-  await logtoClient.handleSignInCallback(window.location.href);
+async function authPost<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', // send/receive refresh cookie
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Auth error ${res.status}`);
+  return data as T;
 }
 
-export async function logout() {
-  await logtoClient.signOut(window.location.origin);
+export async function register(name: string, email: string, password: string): Promise<AuthResponse> {
+  return authPost<AuthResponse>('/auth/register', { name, email, password });
 }
 
-export async function getUser(): Promise<AuthUser | null> {
-  const isAuthenticated = await logtoClient.isAuthenticated();
-  if (!isAuthenticated) return null;
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  return authPost<AuthResponse>('/auth/login', { email, password });
+}
 
+export async function logout(): Promise<void> {
+  await authPost('/auth/logout', {});
+}
+
+export async function getMe(token: string): Promise<AuthUser | null> {
   try {
-    const userInfo: UserInfoResponse = await logtoClient.fetchUserInfo();
-    return {
-      id: userInfo.sub,
-      name: userInfo.name ?? undefined,
-      email: userInfo.email ?? undefined,
-      role: (userInfo.custom_data as any)?.role || 'viewer',
-    };
-  } catch (e) {
-    if (import.meta.env.DEV) console.warn('[Auth] Failed to fetch user info:', (e as Error)?.message || e);
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
     return null;
   }
 }
 
-export async function getAccessToken(): Promise<string | null> {
+export async function refreshToken(): Promise<string | null> {
   try {
-    return await logtoClient.getAccessToken();
-  } catch (e) {
-    if (import.meta.env.DEV) console.warn('[Auth] Failed to get access token:', (e as Error)?.message || e);
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.accessToken || null;
+  } catch {
     return null;
   }
 }
 
-export function isAuthenticated(): Promise<boolean> {
-  return logtoClient.isAuthenticated();
+export async function verifyEmail(token: string): Promise<boolean> {
+  try {
+    const data = await authPost<{ success: boolean }>('/auth/verify-email', { token });
+    return !!data.success;
+  } catch {
+    return false;
+  }
+}
+
+export async function resendVerification(email: string): Promise<void> {
+  await authPost('/auth/resend-verification', { email });
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  await authPost('/auth/forgot-password', { email });
+}
+
+export async function resetPassword(token: string, password: string): Promise<void> {
+  await authPost('/auth/reset-password', { token, password });
 }

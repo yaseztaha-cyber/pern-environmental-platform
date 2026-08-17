@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
-import { copyFile, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, readFile, writeFile, readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { Plugin } from 'vite'
 
 const landingFile = fileURLToPath(new URL('public/landing.html', import.meta.url))
@@ -34,9 +35,13 @@ function landingAtRoot(): Plugin {
       })
     },
     async closeBundle() {
-      const appHtml = fileURLToPath(new URL('dist/index.html', import.meta.url))
-      const appTarget = fileURLToPath(new URL('dist/app.html', import.meta.url))
+      const distDir = fileURLToPath(new URL('dist', import.meta.url))
       try {
+        const files = await readdir(distDir)
+        const indexFile = files.find(f => f.startsWith('index') && f.endsWith('.html'))
+        if (!indexFile) throw new Error('No index.html found in dist/')
+        const appHtml = join(distDir, indexFile)
+        const appTarget = join(distDir, 'app.html')
         await copyFile(appHtml, appTarget)
         const landing = await readFile(landingFile, 'utf-8')
         await writeFile(appHtml, landing)

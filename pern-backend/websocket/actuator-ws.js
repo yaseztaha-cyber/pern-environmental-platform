@@ -8,8 +8,11 @@
 
 const WebSocket = require('ws');
 const url = require('url');
+const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
-const { verifyLogtoToken, ENFORCE_AUTH } = require('../auth');
+const { ENFORCE_AUTH } = require('../auth');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'pern-jwt-secret-change-me-in-production';
 
 let wss = null;
 const clients = new Set();
@@ -22,13 +25,32 @@ async function authenticateConnection(req) {
     || (req.headers.authorization && req.headers.authorization.split(' ')[1]);
 
   if (!token) {
-    if (!ENFORCE_AUTH) return { sub: 'dev-ws-user', role: 'admin' };
+    if (!ENFORCE_AUTH()) return { sub: 'dev-ws-user', role: 'admin' };
     return null;
   }
 
-  const result = await verifyLogtoToken(token);
-  if (result.valid) return result.payload;
-  if (!ENFORCE_AUTH) return { sub: 'dev-ws-user', role: 'admin' };
+  // Try local JWT first
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return decoded;
+  } catch { /* try Logto */ }
+
+  // Try Logto JWKS fallback
+  const logtoEndpoint = process.env.LOGTO_ENDPOINT;
+  const logtoAppId = process.env.LOGTO_APP_ID;
+  if (logtoEndpoint && logtoAppId && logtoEndpoint !== 'http://localhost:3001') {
+    try {
+      const { createRemoteJWKSet, jwtVerify } = require('jose');
+      const jwks = createRemoteJWKSet(new URL(`${logtoEndpoint}/oidc/jwks`));
+      const { payload } = await jwtVerify(token, jwks, {
+        issuer: `${logtoEndpoint}/oidc`,
+        audience: logtoAppId,
+      });
+      return payload;
+    } catch { /* failed */ }
+  }
+
+  if (!ENFORCE_AUTH()) return { sub: 'dev-ws-user', role: 'admin' };
   return null;
 }
 
