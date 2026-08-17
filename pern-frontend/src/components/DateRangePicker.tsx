@@ -56,7 +56,7 @@ export default function DateRangePicker({ from, to, onChange, className = '' }: 
           <ChevronDown size={12} />
         </button>
         {showPresets && (
-          <div className="absolute top-full left-0 mt-1 bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius-sm)] shadow-lg z-50 py-1 min-w-[160px]">
+          <div className="absolute top-full left-0 mt-1 bg-[var(--bg)] border border-[var(--border)] rounded-[var(--radius-sm)] shadow-lg z-50 py-1 min-w-[160px] animate-pop">
             {PRESETS.map(p => (
               <button key={p.value} onClick={() => applyPreset(p)}
                 className="block w-full text-left px-3 py-2 text-sm hover:bg-[var(--surface)] transition-colors">

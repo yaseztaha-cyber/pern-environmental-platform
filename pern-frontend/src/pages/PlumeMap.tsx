@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Card, SectionTitle, Btn } from '../components/ui';
-import { Wind, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
+import { PageHeader, Card, SectionTitle, Btn } from '../components/ui';
+import { useI18n } from '../lib/i18n';
+import { Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface TrajectoryPoint {
   hour: number; lat: number; lng: number; concentration: number;
@@ -29,6 +30,7 @@ interface PlumeEvent {
 }
 
 function TrajectoryLayer({ data }: { data: TrajectoryData | null }) {
+  const { t } = useI18n();
   const map = useMap();
   useEffect(() => {
     if (!data || !data.trajectory.length) return;
@@ -38,24 +40,25 @@ function TrajectoryLayer({ data }: { data: TrajectoryData | null }) {
     L.polyline(coords, { color: '#ef4444', weight: 2, opacity: 0.6, dashArray: '5, 5' }).addTo(group);
     L.circleMarker([data.origin.lat, data.origin.lng], {
       radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.8,
-    }).addTo(group).bindPopup(`Origin: ${data.pollutant}`);
+    }).addTo(group).bindPopup(t('plumeMap.originPopup', 'Origin: {pollutant}', { pollutant: data.pollutant }));
 
     data.trajectory.filter(p => p.hour % 3 === 0).forEach(p => {
       const radius = Math.max(3, p.concentration / 10);
       L.circleMarker([p.lat, p.lng], {
         radius, color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.3,
-      }).addTo(group).bindPopup(`Hour ${p.hour}: ${p.concentration}% conc.`);
+      }).addTo(group).bindPopup(t('plumeMap.hourPopup', 'Hour {hour}: {concentration}% conc.', { hour: p.hour, concentration: p.concentration }));
     });
 
     group.addTo(map);
     const bounds = L.latLngBounds(coords);
     map.fitBounds(bounds, { padding: [30, 30] });
     return () => { group.remove(); };
-  }, [data, map]);
+  }, [data, map, t]);
   return null;
 }
 
 function PlumeMarkers({ events }: { events: PlumeEvent[] }) {
+  const { t } = useI18n();
   const map = useMap();
   useEffect(() => {
     if (!events.length) return;
@@ -64,15 +67,16 @@ function PlumeMarkers({ events }: { events: PlumeEvent[] }) {
       L.circleMarker([ev.source_lat, ev.source_lon], {
         radius: 10, color: ev.severity === 'critical' ? '#ef4444' : '#f59e0b',
         fillColor: ev.severity === 'critical' ? '#ef4444' : '#f59e0b', fillOpacity: 0.4,
-      }).addTo(group).bindPopup(`Plume: ${ev.pollutant} (${ev.severity})`);
+      }).addTo(group).bindPopup(t('plumeMap.plumePopup', 'Plume: {pollutant} ({severity})', { pollutant: ev.pollutant, severity: ev.severity }));
     });
     group.addTo(map);
     return () => { group.remove(); };
-  }, [events, map]);
+  }, [events, map, t]);
   return null;
 }
 
 export default function PlumeMap() {
+  const { t } = useI18n();
   const [trajectory, setTrajectory] = useState<TrajectoryData | null>(null);
   const [events, setEvents] = useState<PlumeEvent[]>([]);
   const [windData, setWindData] = useState<WindForecast | null>(null);
@@ -99,53 +103,46 @@ export default function PlumeMap() {
     setLoading(false);
   }, [originLat, originLng, pollutant]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleCalculate = () => loadData(true);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Wind size={18} className="text-[var(--emerald)]" />
-            Plume Tracker
-          </h2>
-          <p className="text-xs text-slate-500">
-            Wind trajectory & pollution transport simulation
-          </p>
-        </div>
-        <Btn variant="ghost" size="sm" onClick={() => loadData(false)}>
+      <PageHeader
+        title={t('plumeMap.title', 'Plume Tracker')}
+        subtitle={t('plumeMap.subtitle', 'Wind trajectory & pollution transport simulation')}
+        right={<Btn variant="ghost" size="sm" onClick={() => loadData(false)}>
           <RefreshCw size={14} />
-        </Btn>
-      </div>
+        </Btn>}
+      />
 
       <div className="flex flex-wrap items-end gap-3 p-4 rounded-2xl bg-white/5 border border-white/10">
         <div>
-          <label className="text-xs text-slate-400 block mb-1">Latitude</label>
+          <label className="text-xs text-slate-400 block mb-1">{t('plumeMap.latitude', 'Latitude')}</label>
           <input value={originLat} onChange={e => setOriginLat(e.target.value)}
             className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-sm w-24" />
         </div>
         <div>
-          <label className="text-xs text-slate-400 block mb-1">Longitude</label>
+          <label className="text-xs text-slate-400 block mb-1">{t('plumeMap.longitude', 'Longitude')}</label>
           <input value={originLng} onChange={e => setOriginLng(e.target.value)}
             className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-sm w-24" />
         </div>
         <div>
-          <label className="text-xs text-slate-400 block mb-1">Pollutant</label>
+          <label className="text-xs text-slate-400 block mb-1">{t('plumeMap.pollutant', 'Pollutant')}</label>
           <select value={pollutant} onChange={e => setPollutant(e.target.value)}
             className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 text-sm">
             <option>PM2.5</option><option>PM10</option><option>NO2</option><option>SO2</option>
           </select>
         </div>
         <Btn variant="primary" size="sm" onClick={handleCalculate}>
-          <Navigation size={14} /> Calculate Trajectory
+          <Navigation size={14} /> {t('plumeMap.calculateTrajectory', 'Calculate Trajectory')}
         </Btn>
       </div>
 
       <div className="h-[450px] rounded-2xl overflow-hidden border border-white/10">
         {loading ? (
-          <div className="h-full flex items-center justify-center bg-slate-900 text-slate-400">Loading plume data...</div>
+          <div className="h-full flex items-center justify-center bg-slate-900 text-slate-400">{t('plumeMap.loading', 'Loading plume data...')}</div>
         ) : (
           <MapContainer center={[30.5, 31.5]} zoom={6} className="h-full w-full" scrollWheelZoom={true}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
@@ -158,7 +155,7 @@ export default function PlumeMap() {
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4">
-            <SectionTitle>Wind Forecast</SectionTitle>
+            <SectionTitle>{t('plumeMap.windForecast', 'Wind Forecast')}</SectionTitle>
             {windData ? (
               <div className="mt-2 space-y-1 text-xs text-slate-400 max-h-48 overflow-y-auto">
                 {windData.hourly.slice(0, 12).map(h => (
@@ -171,14 +168,14 @@ export default function PlumeMap() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-slate-500 mt-2">No forecast data</p>
+              <p className="text-sm text-slate-500 mt-2">{t('plumeMap.noForecast', 'No forecast data')}</p>
             )}
           </Card>
 
           <Card className="p-4">
-            <SectionTitle>Active Plume Events</SectionTitle>
+            <SectionTitle>{t('plumeMap.activePlumeEvents', 'Active Plume Events')}</SectionTitle>
             {events.length === 0 ? (
-              <p className="text-sm text-slate-500 mt-2">No active plumes</p>
+              <p className="text-sm text-slate-500 mt-2">{t('plumeMap.noActivePlumes', 'No active plumes')}</p>
             ) : (
               <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
                 {events.map(ev => (
@@ -198,17 +195,17 @@ export default function PlumeMap() {
           </Card>
 
           <Card className="p-4">
-            <SectionTitle>Trajectory Stats</SectionTitle>
+            <SectionTitle>{t('plumeMap.trajectoryStats', 'Trajectory Stats')}</SectionTitle>
             {trajectory ? (
               <div className="mt-2 space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-slate-400">Origin</span><span>{Number(trajectory.origin.lat).toFixed(2)}°, {Number(trajectory.origin.lng).toFixed(2)}°</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Pollutant</span><span>{trajectory.pollutant}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Trajectory Points</span><span>{trajectory.trajectory.length}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Max Concentration</span><span>{Math.max(...trajectory.trajectory.map(p => p.concentration))}%</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Affected Area Radius</span><span>~{Math.round(Math.max(...trajectory.trajectory.map(p => Math.abs(p.lat - trajectory.origin.lat))) * 111)} km</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">{t('plumeMap.origin', 'Origin')}</span><span>{Number(trajectory.origin.lat).toFixed(2)}°, {Number(trajectory.origin.lng).toFixed(2)}°</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">{t('plumeMap.pollutant', 'Pollutant')}</span><span>{trajectory.pollutant}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">{t('plumeMap.trajectoryPoints', 'Trajectory Points')}</span><span>{trajectory.trajectory.length}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">{t('plumeMap.maxConcentration', 'Max Concentration')}</span><span>{Math.max(...trajectory.trajectory.map(p => p.concentration))}%</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">{t('plumeMap.affectedAreaRadius', 'Affected Area Radius')}</span><span>~{Math.round(Math.max(...trajectory.trajectory.map(p => Math.abs(p.lat - trajectory.origin.lat))) * 111)} km</span></div>
               </div>
             ) : (
-              <p className="text-sm text-slate-500 mt-2">Calculate trajectory</p>
+              <p className="text-sm text-slate-500 mt-2">{t('plumeMap.calculateHint', 'Calculate trajectory')}</p>
             )}
           </Card>
         </div>

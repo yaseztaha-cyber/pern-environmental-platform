@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { useI18n } from '../lib/i18n';
-import { PageHeader, Card, Btn, Pill, SectionTitle } from '../components/ui';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { PageHeader, Card, Pill } from '../components/ui';
 import {
   BookOpen, Copy, Check, ChevronDown, ChevronRight, Cpu, Wifi,
-  Cable, Upload, AlertTriangle, CheckCircle2, ExternalLink,
+  Cable, Upload, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
+
+type TFunc = (key: string, fallback?: string, params?: Record<string, string>) => string;
 
 /* ─── Copy button helper ─── */
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, t }: { text: string; t: TFunc }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard?.writeText(text);
@@ -18,7 +18,7 @@ function CopyButton({ text }: { text: string }) {
   };
   return (
     <button onClick={copy} className="text-xs flex items-center gap-1 hover:text-[var(--emerald)] transition-colors">
-      {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy</>}
+      {copied ? <><Check size={12} /> {t('setupGuide.copy.copied', 'Copied!')}</> : <><Copy size={12} /> {t('setupGuide.copy.copy', 'Copy')}</>}
     </button>
   );
 }
@@ -41,12 +41,12 @@ function GuideSection({ title, icon, defaultOpen = false, children }: {
 }
 
 /* ─── Code block ─── */
-function CodeBlock({ title, lang, children }: { title: string; lang?: string; children: string }) {
+function CodeBlock({ title, lang, children, t }: { title: string; lang?: string; children: string; t: TFunc }) {
   return (
     <div className="mt-3">
       <div className="flex items-center justify-between bg-black/50 rounded-t-[var(--radius-sm)] px-3 py-1.5 border border-b-0 border-[var(--border)]">
         <span className="text-xs text-[var(--text-tertiary)] font-mono">{title}{lang ? ` (${lang})` : ''}</span>
-        <CopyButton text={children} />
+        <CopyButton text={children} t={t} />
       </div>
       <pre className="bg-black/40 rounded-b-[var(--radius-sm)] p-3 overflow-x-auto text-[11px] leading-relaxed font-mono text-[var(--emerald)] border border-[var(--border)] whitespace-pre-wrap">{children}</pre>
     </div>
@@ -392,19 +392,19 @@ export default function DeviceSetupGuide() {
   return (
     <div className="max-w-[1000px] mx-auto">
       <PageHeader
-        title="Device Setup Guide"
-        subtitle="Step-by-step guide to connect Arduino Uno or ESP32 to the platform"
-        right={<Pill tone="emerald"><BookOpen size={14} /> Interactive Guide</Pill>}
+        title={t('setupGuide.title', 'Device Setup Guide')}
+        subtitle={t('setupGuide.subtitle', 'Step-by-step guide to connect Arduino Uno or ESP32 to the platform')}
+        right={<Pill tone="emerald"><BookOpen size={14} /> {t('setupGuide.interactiveGuide', 'Interactive Guide')}</Pill>}
       />
 
       {/* Board selector */}
       <Card hover={false} className="mb-6">
         <div className="flex items-center gap-4">
-          <span className="text-xs text-[var(--text-tertiary)] font-medium">Select your board:</span>
+          <span className="text-xs text-[var(--text-tertiary)] font-medium">{t('setupGuide.selectBoard', 'Select your board:')}</span>
           <div className="flex gap-2">
             {([
-              ['esp32', 'ESP32 (WiFi MQTT)', 'Direct WiFi connection, no bridge needed'],
-              ['arduino-uno', 'Arduino Uno (USB Serial)', 'Uses PC bridge to connect to MQTT'],
+              ['esp32', t('setupGuide.board.esp32', 'ESP32 (WiFi MQTT)'), t('setupGuide.board.esp32Desc', 'Direct WiFi connection, no bridge needed')],
+              ['arduino-uno', t('setupGuide.board.arduinoUno', 'Arduino Uno (USB Serial)'), t('setupGuide.board.arduinoUnoDesc', 'Uses PC bridge to connect to MQTT')],
             ] as [Board, string, string][]).map(([key, label, desc]) => (
               <button
                 key={key}
@@ -430,47 +430,47 @@ export default function DeviceSetupGuide() {
 
         {/* ──── STEP 0: Prerequisites ──── */}
         <GuideSection
-          title="Prerequisites — What You Need"
+          title={t('setupGuide.prereqTitle', 'Prerequisites — What You Need')}
           icon={<AlertTriangle size={18} className="text-[var(--amber)]" />}
           defaultOpen={true}
         >
           <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-black/20 rounded-lg border border-[var(--border)]">
-                <div className="font-medium text-[var(--text-primary)] mb-1">Hardware</div>
+                <div className="font-medium text-[var(--text-primary)] mb-1">{t('setupGuide.hardware', 'Hardware')}</div>
                 <ul className="space-y-1 text-[var(--text-tertiary)]">
                   {selectedBoard === 'esp32' ? (
                     <>
-                      <li>• ESP32 DevKit V1 board</li>
-                      <li>• DHT22 temperature/humidity sensor</li>
-                      <li>• MQ-135 air quality sensor</li>
-                      <li>• TDS water quality sensor</li>
-                      <li>• pH sensor module</li>
-                      <li>• Jumper wires + breadboard</li>
-                      <li>• USB Micro cable</li>
+                      <li>• {t('setupGuide.hw.esp32Board', 'ESP32 DevKit V1 board')}</li>
+                      <li>• {t('setupGuide.hw.dht22', 'DHT22 temperature/humidity sensor')}</li>
+                      <li>• {t('setupGuide.hw.mq135', 'MQ-135 air quality sensor')}</li>
+                      <li>• {t('setupGuide.hw.tds', 'TDS water quality sensor')}</li>
+                      <li>• {t('setupGuide.hw.ph', 'pH sensor module')}</li>
+                      <li>• {t('setupGuide.hw.jumperWires', 'Jumper wires + breadboard')}</li>
+                      <li>• {t('setupGuide.hw.usbMicro', 'USB Micro cable')}</li>
                     </>
                   ) : (
                     <>
-                      <li>• Arduino Uno R3 board</li>
-                      <li>• LM35 temperature sensor</li>
-                      <li>• DHT11 humidity sensor</li>
-                      <li>• MQ-135 air quality sensor</li>
-                      <li>• GP2Y1010AU dust sensor</li>
-                      <li>• USB Type-A to B cable</li>
-                      <li>• 150Ω resistor + 220µF capacitor</li>
+                      <li>• {t('setupGuide.hw.arduinoBoard', 'Arduino Uno R3 board')}</li>
+                      <li>• {t('setupGuide.hw.lm35', 'LM35 temperature sensor')}</li>
+                      <li>• {t('setupGuide.hw.dht11', 'DHT11 humidity sensor')}</li>
+                      <li>• {t('setupGuide.hw.mq135', 'MQ-135 air quality sensor')}</li>
+                      <li>• {t('setupGuide.hw.gp2y', 'GP2Y1010AU dust sensor')}</li>
+                      <li>• {t('setupGuide.hw.usbAB', 'USB Type-A to B cable')}</li>
+                      <li>• {t('setupGuide.hw.capacitor', '150Ω resistor + 220µF capacitor')}</li>
                     </>
                   )}
                 </ul>
               </div>
               <div className="p-3 bg-black/20 rounded-lg border border-[var(--border)]">
-                <div className="font-medium text-[var(--text-primary)] mb-1">Software</div>
+                <div className="font-medium text-[var(--text-primary)] mb-1">{t('setupGuide.software', 'Software')}</div>
                 <ul className="space-y-1 text-[var(--text-tertiary)]">
-                  <li>• Arduino IDE 2.x</li>
-                  <li>• Node.js 18+ (for bridge & MQTT)</li>
-                  <li>• Mosquitto MQTT broker (Docker)</li>
-                  {selectedBoard === 'arduino-uno' && <li>• npm: <code>serialport mqtt</code></li>}
-                  {selectedBoard === 'esp32' && <li>• ESP32 board package in Arduino IDE</li>}
-                  <li>• Arduino Library Manager libraries</li>
+                  <li>• {t('setupGuide.sw.arduinoIde', 'Arduino IDE 2.x')}</li>
+                  <li>• {t('setupGuide.sw.node', 'Node.js 18+ (for bridge & MQTT)')}</li>
+                  <li>• {t('setupGuide.sw.mosquitto', 'Mosquitto MQTT broker (Docker)')}</li>
+                  {selectedBoard === 'arduino-uno' && <li>• {t('setupGuide.sw.npm', 'npm:')} <code>serialport mqtt</code></li>}
+                  {selectedBoard === 'esp32' && <li>• {t('setupGuide.sw.esp32Package', 'ESP32 board package in Arduino IDE')}</li>}
+                  <li>• {t('setupGuide.sw.libraries', 'Arduino Library Manager libraries')}</li>
                 </ul>
               </div>
             </div>
@@ -479,33 +479,33 @@ export default function DeviceSetupGuide() {
 
         {/* ──── STEP 1: MQTT Broker ──── */}
         <GuideSection
-          title="Step 1 — Start MQTT Broker (Mosquitto)"
+          title={t('setupGuide.step1Title', 'Step 1 — Start MQTT Broker (Mosquitto)')}
           icon={<Wifi size={18} className="text-[var(--emerald)]" />}
           defaultOpen={true}
         >
           <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
-            <p>The MQTT broker is the hub that receives data from your device and forwards it to the platform. Run this with Docker:</p>
-            <CodeBlock title="Terminal — Start Mosquitto" lang="bash">{MOQTT_BROKER_CONFIG}</CodeBlock>
+            <p>{t('setupGuide.step1Body', 'The MQTT broker is the hub that receives data from your device and forwards it to the platform. Run this with Docker:')}</p>
+            <CodeBlock title={t('setupGuide.terminalStartMosquitto', 'Terminal — Start Mosquitto')} lang="bash" t={t}>{MOQTT_BROKER_CONFIG}</CodeBlock>
             <div className="flex items-start gap-2 p-2 bg-[var(--amber-dim)] rounded-lg border border-[var(--amber)]/20">
               <AlertTriangle size={14} className="text-[var(--amber)] mt-0.5 shrink-0" />
-              <span>The broker must be running on <code className="font-mono">localhost:1883</code> (MQTT) and <code className="font-mono">localhost:9001</code> (WebSocket) for the platform to connect.</span>
+              <span>{t('setupGuide.step1Warning.a', 'The broker must be running on ')}<code className="font-mono">localhost:1883</code>{t('setupGuide.step1Warning.b', ' (MQTT) and ')}<code className="font-mono">localhost:9001</code>{t('setupGuide.step1Warning.c', ' (WebSocket) for the platform to connect.')}</span>
             </div>
           </div>
         </GuideSection>
 
         {/* ──── STEP 2: Install Libraries ──── */}
         <GuideSection
-          title="Step 2 — Install Arduino Libraries"
+          title={t('setupGuide.step2Title', 'Step 2 — Install Arduino Libraries')}
           icon={<Upload size={18} className="text-[var(--blue)]" />}
         >
           <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
-            <p>In Arduino IDE, go to <strong>Sketch → Include Library → Manage Libraries</strong> and install:</p>
+            <p>{t('setupGuide.step2Body.a', 'In Arduino IDE, go to ')}<strong>Sketch → Include Library → Manage Libraries</strong>{t('setupGuide.step2Body.b', ' and install:')}</p>
             <div className="grid grid-cols-2 gap-2">
               <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
                 <CheckCircle2 size={14} className="text-[var(--emerald)] shrink-0" />
                 <div>
-                  <div className="font-medium text-[var(--text-primary)]">ArduinoJson</div>
-                  <div className="text-[10px] text-[var(--text-tertiary)]">by Benoit Blanchon — JSON builder</div>
+                  <div className="font-medium text-[var(--text-primary)]">{t('setupGuide.lib.arduinoJson', 'ArduinoJson')}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)]">{t('setupGuide.lib.arduinoJsonDesc', "by Benoit Blanchon — JSON builder")}</div>
                 </div>
               </div>
               {selectedBoard === 'esp32' && (
@@ -513,15 +513,15 @@ export default function DeviceSetupGuide() {
                   <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
                     <CheckCircle2 size={14} className="text-[var(--emerald)] shrink-0" />
                     <div>
-                      <div className="font-medium text-[var(--text-primary)]">PubSubClient</div>
-                      <div className="text-[10px] text-[var(--text-tertiary)]">by Nick O'Leary — MQTT client</div>
+                      <div className="font-medium text-[var(--text-primary)]">{t('setupGuide.lib.pubSubClient', 'PubSubClient')}</div>
+                      <div className="text-[10px] text-[var(--text-tertiary)]">{t('setupGuide.lib.pubSubClientDesc', "by Nick O'Leary — MQTT client")}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
                     <CheckCircle2 size={14} className="text-[var(--emerald)] shrink-0" />
                     <div>
-                      <div className="font-medium text-[var(--text-primary)]">DHT sensor library</div>
-                      <div className="text-[10px] text-[var(--text-tertiary)]">by Adafruit — DHT22 support</div>
+                      <div className="font-medium text-[var(--text-primary)]">{t('setupGuide.lib.dht', 'DHT sensor library')}</div>
+                      <div className="text-[10px] text-[var(--text-tertiary)]">{t('setupGuide.lib.dhtDesc', 'by Adafruit — DHT22 support')}</div>
                     </div>
                   </div>
                 </>
@@ -532,27 +532,27 @@ export default function DeviceSetupGuide() {
 
         {/* ──── STEP 3: Wiring ──── */}
         <GuideSection
-          title="Step 3 — Wire the Sensors"
+          title={t('setupGuide.step3Title', 'Step 3 — Wire the Sensors')}
           icon={<Cable size={18} className="text-[var(--violet)]" />}
         >
           <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
-            <p>Connect sensors to your board as follows. Always connect GND first, then VCC, then signal pins.</p>
+            <p>{t('setupGuide.step3Body', 'Connect sensors to your board as follows. Always connect GND first, then VCC, then signal pins.')}</p>
             {selectedBoard === 'esp32' ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-[var(--border)]">
-                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">Sensor</th>
-                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">ESP32 Pin</th>
-                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">Notes</th>
+                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">{t('setupGuide.table.sensor', 'Sensor')}</th>
+                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">{t('setupGuide.table.esp32Pin', 'ESP32 Pin')}</th>
+                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">{t('setupGuide.table.notes', 'Notes')}</th>
                     </tr>
                   </thead>
                   <tbody className="font-mono">
-                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">DHT22 DATA</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO4</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">10kΩ pull-up to 3.3V</td></tr>
-                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">MQ-135 AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO34</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">ADC1 — works during WiFi</td></tr>
-                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">TDS AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO35</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">ADC1, read-only</td></tr>
-                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">pH AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO32</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">ADC1</td></tr>
-                    <tr><td className="py-1.5 pr-4">CO2 AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO36</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">ADC1 (VP pin)</td></tr>
+                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">DHT22 DATA</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO4</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.esp32.pullup', '10kΩ pull-up to 3.3V')}</td></tr>
+                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">MQ-135 AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO34</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.esp32.adc1Wifi', 'ADC1 — works during WiFi')}</td></tr>
+                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">TDS AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO35</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.esp32.readOnly', 'ADC1, read-only')}</td></tr>
+                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">pH AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO32</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.esp32.adc1', 'ADC1')}</td></tr>
+                    <tr><td className="py-1.5 pr-4">CO2 AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">GPIO36</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.esp32.vp', 'ADC1 (VP pin)')}</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -561,131 +561,131 @@ export default function DeviceSetupGuide() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-[var(--border)]">
-                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">Sensor</th>
-                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">Arduino Pin</th>
-                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">Notes</th>
+                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">{t('setupGuide.table.sensor', 'Sensor')}</th>
+                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">{t('setupGuide.table.arduinoPin', 'Arduino Pin')}</th>
+                      <th className="py-2 pr-4 text-[var(--text-tertiary)] font-medium">{t('setupGuide.table.notes', 'Notes')}</th>
                     </tr>
                   </thead>
                   <tbody className="font-mono">
-                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">LM35 OUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A0</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">10mV/°C, VCC=5V</td></tr>
-                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">DHT11 DATA</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A1</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">10kΩ pull-up to 5V</td></tr>
-                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">MQ-135 AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A2</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">Needs 5 min warm-up</td></tr>
-                    <tr><td className="py-1.5 pr-4">GP2Y1010AU</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A3</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">150Ω + 220µF filter circuit</td></tr>
+                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">LM35 OUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A0</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.uno.lm35', '10mV/°C, VCC=5V')}</td></tr>
+                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">DHT11 DATA</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A1</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.uno.pullup5', '10kΩ pull-up to 5V')}</td></tr>
+                    <tr className="border-b border-[var(--border)]/50"><td className="py-1.5 pr-4">MQ-135 AOUT</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A2</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.uno.warmup', 'Needs 5 min warm-up')}</td></tr>
+                    <tr><td className="py-1.5 pr-4">GP2Y1010AU</td><td className="py-1.5 pr-4 text-[var(--emerald)]">A3</td><td className="py-1.5 text-[var(--text-tertiary)] font-sans">{t('setupGuide.note.uno.filter', '150Ω + 220µF filter circuit')}</td></tr>
                   </tbody>
                 </table>
               </div>
             )}
             <div className="flex items-start gap-2 p-2 bg-[var(--rose-dim)] rounded-lg border border-[var(--rose)]/20">
               <AlertTriangle size={14} className="text-[var(--rose)] mt-0.5 shrink-0" />
-              <span><strong>Important:</strong> Never connect 5V sensors directly to ESP32 (3.3V only). Use a voltage divider or logic level shifter.</span>
+              <span><strong>{t('setupGuide.step3Warning.important', 'Important:')}</strong>{t('setupGuide.step3Warning.body', ' Never connect 5V sensors directly to ESP32 (3.3V only). Use a voltage divider or logic level shifter.')}</span>
             </div>
           </div>
         </GuideSection>
 
         {/* ──── STEP 4: Upload Code ──── */}
         <GuideSection
-          title={`Step 4 — Upload Code to ${selectedBoard === 'esp32' ? 'ESP32' : 'Arduino Uno'}`}
+          title={t('setupGuide.step4Title', 'Step 4 — Upload Code to {board}', { board: selectedBoard === 'esp32' ? 'ESP32' : 'Arduino Uno' })}
           icon={<Upload size={18} className="text-[var(--emerald)]" />}
           defaultOpen={true}
         >
           <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
             {selectedBoard === 'esp32' ? (
               <>
-                <Step n={1} title="Install ESP32 Board Package">
-                  <p>In Arduino IDE, go to <strong>File → Preferences</strong>, add this URL to "Additional Board Manager URLs":</p>
+                <Step n={1} title={t('setupGuide.step4.installPackage', 'Install ESP32 Board Package')}>
+                  <p>{t('setupGuide.step4.prefs.a', 'In Arduino IDE, go to ')}<strong>File → Preferences</strong>{t('setupGuide.step4.prefs.b', ', add this URL to "Additional Board Manager URLs":')}</p>
                   <code className="block bg-black/30 rounded p-2 font-mono text-[var(--emerald)] mt-1">https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json</code>
-                  <p>Then <strong>Tools → Board → Boards Manager</strong>, search "esp32" and install.</p>
+                  <p>{t('setupGuide.step4.boardsManager.a', 'Then ')}<strong>Tools → Board → Boards Manager</strong>{t('setupGuide.step4.boardsManager.b', ', search "esp32" and install.')}</p>
                 </Step>
-                <Step n={2} title="Edit Configuration">
-                  <p>In the code below, change these values:</p>
+                <Step n={2} title={t('setupGuide.step4.editConfig', 'Edit Configuration')}>
+                  <p>{t('setupGuide.step4.editConfigBody', 'In the code below, change these values:')}</p>
                   <ul className="list-disc pl-4 space-y-0.5">
-                    <li><code>YOUR_WIFI_SSID</code> — your WiFi network name</li>
-                    <li><code>YOUR_WIFI_PASSWORD</code> — your WiFi password</li>
-                    <li><code>MQTT_SERVER</code> — your PC's IP (run <code>ipconfig</code> to find it)</li>
-                    <li><code>DEVICE_ID</code> — a unique name for this device</li>
+                    <li><code>YOUR_WIFI_SSID</code>{t('setupGuide.step4.ssidDesc', ' — your WiFi network name')}</li>
+                    <li><code>YOUR_WIFI_PASSWORD</code>{t('setupGuide.step4.passDesc', ' — your WiFi password')}</li>
+                    <li><code>MQTT_SERVER</code>{t('setupGuide.step4.serverDesc.a', " — your PC's IP (run ")}<code>ipconfig</code>{t('setupGuide.step4.serverDesc.b', ' to find it)')}</li>
+                    <li><code>DEVICE_ID</code>{t('setupGuide.step4.deviceIdDesc', ' — a unique name for this device')}</li>
                   </ul>
                 </Step>
-                <Step n={3} title="Upload">
-                  <p>Select <strong>Tools → Board → ESP32 → ESP32 Dev Module</strong>, select the correct COM port, then click Upload.</p>
+                <Step n={3} title={t('setupGuide.step4.upload', 'Upload')}>
+                  <p>{t('setupGuide.step4.uploadEsp32.a', 'Select ')}<strong>Tools → Board → ESP32 → ESP32 Dev Module</strong>{t('setupGuide.step4.uploadEsp32.b', ', select the correct COM port, then click Upload.')}</p>
                 </Step>
               </>
             ) : (
               <>
-                <Step n={1} title="Select Board & Port">
-                  <p>Select <strong>Tools → Board → Arduino AVR → Arduino Uno</strong>, then select your COM port.</p>
+                <Step n={1} title={t('setupGuide.step4.selectBoardPort', 'Select Board & Port')}>
+                  <p>{t('setupGuide.step4.selectBoardPortBody.a', 'Select ')}<strong>Tools → Board → Arduino AVR → Arduino Uno</strong>{t('setupGuide.step4.selectBoardPortBody.b', ', then select your COM port.')}</p>
                 </Step>
-                <Step n={2} title="Edit DEVICE_ID">
-                  <p>Change <code>DEVICE_ID</code> in the code to a unique name (e.g., "arduino-001").</p>
+                <Step n={2} title={t('setupGuide.step4.editDeviceId', 'Edit DEVICE_ID')}>
+                  <p>{t('setupGuide.step4.editDeviceIdBody.a', 'Change ')}<code>DEVICE_ID</code>{t('setupGuide.step4.editDeviceIdBody.b', ' in the code to a unique name (e.g., "arduino-001").')}</p>
                 </Step>
-                <Step n={3} title="Upload">
-                  <p>Click Upload. After upload, open Serial Monitor at <strong>115200 baud</strong> to verify JSON output.</p>
+                <Step n={3} title={t('setupGuide.step4.upload', 'Upload')}>
+                  <p>{t('setupGuide.step4.uploadVerify.a', 'Click Upload. After upload, open Serial Monitor at ')}<strong>115200 baud</strong>{t('setupGuide.step4.uploadVerify.b', ' to verify JSON output.')}</p>
                 </Step>
               </>
             )}
-            <CodeBlock title={`${selectedBoard === 'esp32' ? 'ESP32' : 'Arduino Uno'} Sketch (.ino)`} lang="C++">{selectedBoard === 'esp32' ? ESP32_CODE : ARDUINO_UNO_CODE}</CodeBlock>
+            <CodeBlock title={t('setupGuide.sketchTitle', '{board} Sketch (.ino)', { board: selectedBoard === 'esp32' ? 'ESP32' : 'Arduino Uno' })} lang="C++" t={t}>{selectedBoard === 'esp32' ? ESP32_CODE : ARDUINO_UNO_CODE}</CodeBlock>
           </div>
         </GuideSection>
 
         {/* ──── STEP 5: PC Bridge (Arduino only) ──── */}
         {selectedBoard === 'arduino-uno' && (
           <GuideSection
-            title="Step 5 — Start PC Bridge (Arduino Only)"
+            title={t('setupGuide.step5Title', 'Step 5 — Start PC Bridge (Arduino Only)')}
             icon={<Cable size={18} className="text-[var(--blue)]" />}
           >
             <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
-              <p>Arduino Uno has no WiFi. The bridge script reads Serial JSON from Arduino and publishes to MQTT:</p>
-              <Step n={1} title="Install Node.js Dependencies">
-                <CodeBlock title="Terminal" lang="bash">{`npm install serialport mqtt`}</CodeBlock>
+              <p>{t('setupGuide.step5Body', 'Arduino Uno has no WiFi. The bridge script reads Serial JSON from Arduino and publishes to MQTT:')}</p>
+              <Step n={1} title={t('setupGuide.step5.installDeps', 'Install Node.js Dependencies')}>
+                <CodeBlock title={t('setupGuide.terminal', 'Terminal')} lang="bash" t={t}>{`npm install serialport mqtt`}</CodeBlock>
               </Step>
-              <Step n={2} title="Find Your COM Port">
-                <p>Check <strong>Device Manager → Ports (COM & LPT)</strong> for "Arduino Uno (COM3)" or similar.</p>
+              <Step n={2} title={t('setupGuide.step5.findPort', 'Find Your COM Port')}>
+                <p>{t('setupGuide.step5.findPortBody.a', 'Check ')}<strong>Device Manager → Ports (COM & LPT)</strong>{t('setupGuide.step5.findPortBody.b', ' for "Arduino Uno (COM3)" or similar.')}</p>
               </Step>
-              <Step n={3} title="Run the Bridge">
-                <CodeBlock title="Terminal" lang="bash">{`node bridge.js COM3`}</CodeBlock>
-                <p>You should see MQTT publish messages appearing every 5 seconds.</p>
+              <Step n={3} title={t('setupGuide.step5.runBridge', 'Run the Bridge')}>
+                <CodeBlock title={t('setupGuide.terminal', 'Terminal')} lang="bash" t={t}>{`node bridge.js COM3`}</CodeBlock>
+                <p>{t('setupGuide.step5.runBridgeBody', 'You should see MQTT publish messages appearing every 5 seconds.')}</p>
               </Step>
-              <CodeBlock title="bridge.js" lang="JavaScript">{BRIDGE_CODE}</CodeBlock>
+              <CodeBlock title={t('setupGuide.bridgeJs', 'bridge.js')} lang="JavaScript" t={t}>{BRIDGE_CODE}</CodeBlock>
             </div>
           </GuideSection>
         )}
 
         {/* ──── STEP 6: Platform Connection ──── */}
         <GuideSection
-          title={`Step ${selectedBoard === 'esp32' ? '5' : '6'} — Connect in the Platform`}
+          title={t('setupGuide.step6Title', 'Step {n} — Connect in the Platform', { n: selectedBoard === 'esp32' ? '5' : '6' })}
           icon={<CheckCircle2 size={18} className="text-[var(--emerald)]" />}
           defaultOpen={true}
         >
           <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
-            <Step n={1} title="Link the MQTT Broker">
-              <p>Go to <strong>Connect Device</strong> page. Enter your broker URL (default: <code>ws://localhost:9001</code>) and click <strong>Connect</strong>.</p>
+            <Step n={1} title={t('setupGuide.step6.linkBroker', 'Link the MQTT Broker')}>
+              <p>{t('setupGuide.step6.linkBrokerBody.a', 'Go to ')}<strong>Connect Device</strong>{t('setupGuide.step6.linkBrokerBody.b', ' page. Enter your broker URL (default: ')}<code>ws://localhost:9001</code>{t('setupGuide.step6.linkBrokerBody.c', ') and click ')}<strong>Connect</strong>{t('setupGuide.step6.linkBrokerBody.d', '.')}</p>
             </Step>
-            <Step n={2} title="Register Your Device">
-              <p>Enter the same <code>DEVICE_ID</code> you set in the Arduino code, select the device type, and click <strong>Add Device</strong>.</p>
+            <Step n={2} title={t('setupGuide.step6.register', 'Register Your Device')}>
+              <p>{t('setupGuide.step6.registerBody.a', 'Enter the same ')}<code>DEVICE_ID</code>{t('setupGuide.step6.registerBody.b', ' you set in the Arduino code, select the device type, and click ')}<strong>Add Device</strong>{t('setupGuide.step6.registerBody.c', '.')}</p>
             </Step>
-            <Step n={3} title="Verify Data Flow">
-              <p>The device will show as <Pill tone="amber">pending</Pill> until its first reading arrives. Once data flows, it flips to <Pill tone="emerald">connected</Pill>.</p>
+            <Step n={3} title={t('setupGuide.step6.verifyData', 'Verify Data Flow')}>
+              <p>{t('setupGuide.step6.verifyDataBody.a', 'The device will show as ')}<Pill tone="amber">{t('setupGuide.status.pending', 'pending')}</Pill>{t('setupGuide.step6.verifyDataBody.b', ' until its first reading arrives. Once data flows, it flips to ')}<Pill tone="emerald">{t('setupGuide.status.connected', 'connected')}</Pill>{t('setupGuide.step6.verifyDataBody.c', '.')}</p>
             </Step>
             <div className="flex items-start gap-2 p-2 bg-[var(--emerald-dim)] rounded-lg border border-[var(--emerald)]/20">
               <CheckCircle2 size={14} className="text-[var(--emerald)] mt-0.5 shrink-0" />
-              <span>Tip: Open Serial Monitor to confirm your device is sending data. You should see JSON lines every 5 seconds.</span>
+              <span>{t('setupGuide.step6Tip', 'Tip: Open Serial Monitor to confirm your device is sending data. You should see JSON lines every 5 seconds.')}</span>
             </div>
           </div>
         </GuideSection>
 
         {/* ──── Troubleshooting ──── */}
         <GuideSection
-          title="Troubleshooting"
+          title={t('setupGuide.troubleshooting', 'Troubleshooting')}
           icon={<AlertTriangle size={18} className="text-[var(--amber)]" />}
         >
           <div className="mt-3 space-y-3 text-xs text-[var(--text-secondary)]">
             <div className="space-y-2">
               {[
-                ['Device stays "pending"', 'Check that the MQTT broker is running (Docker), the broker URL in the platform matches ws://localhost:9001, and the DEVICE_ID matches exactly.'],
-                ['No Serial output', 'Verify baud rate is 115200 in Serial Monitor. Check wiring — especially VCC and GND.'],
-                ['ESP32: WiFi connection fails', 'Ensure you\'re using 2.4GHz WiFi (ESP32 doesn\'t support 5GHz). Check SSID/password are correct.'],
-                ['MQTT connection fails', 'Run "mosquitto -h" to verify Mosquitto is installed. Check that port 1883 is not blocked by firewall.'],
-                ['Unstable readings', 'Add 100nF decoupling capacitors on sensor VCC pins. Keep analog wires short. Avoid running sensor wires near power cables.'],
-                ['DHT22 returns NaN', 'Add a 10kΩ pull-up resistor between DATA and VCC. Ensure the sensor has had at least 2 seconds to initialize.'],
+                [t('setupGuide.faq.devicePending', 'Device stays "pending"'), t('setupGuide.faq.devicePendingSol', 'Check that the MQTT broker is running (Docker), the broker URL in the platform matches ws://localhost:9001, and the DEVICE_ID matches exactly.')],
+                [t('setupGuide.faq.noSerial', 'No Serial output'), t('setupGuide.faq.noSerialSol', 'Verify baud rate is 115200 in Serial Monitor. Check wiring — especially VCC and GND.')],
+                [t('setupGuide.faq.wifiFail', 'ESP32: WiFi connection fails'), t('setupGuide.faq.wifiFailSol', 'Ensure you\'re using 2.4GHz WiFi (ESP32 doesn\'t support 5GHz). Check SSID/password are correct.')],
+                [t('setupGuide.faq.mqttFail', 'MQTT connection fails'), t('setupGuide.faq.mqttFailSol', 'Run "mosquitto -h" to verify Mosquitto is installed. Check that port 1883 is not blocked by firewall.')],
+                [t('setupGuide.faq.unstable', 'Unstable readings'), t('setupGuide.faq.unstableSol', 'Add 100nF decoupling capacitors on sensor VCC pins. Keep analog wires short. Avoid running sensor wires near power cables.')],
+                [t('setupGuide.faq.dhtNan', 'DHT22 returns NaN'), t('setupGuide.faq.dhtNanSol', 'Add a 10kΩ pull-up resistor between DATA and VCC. Ensure the sensor has had at least 2 seconds to initialize.')],
               ].map(([problem, solution], i) => (
                 <div key={i} className="p-2 bg-black/20 rounded-lg">
                   <div className="font-medium text-[var(--text-primary)]">{problem}</div>

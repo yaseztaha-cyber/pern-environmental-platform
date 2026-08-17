@@ -25,17 +25,20 @@ export function useRealtime(options?: UseRealtimeOptions) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const disposedRef = useRef(false);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
   const connect = useCallback(() => {
+    if (disposedRef.current) return;
     const url = options?.url || `ws://${window.location.hostname}:8081`;
     try {
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => { if (!disposedRef.current) setConnected(true); };
       ws.onclose = () => {
+        if (disposedRef.current) return;
         setConnected(false);
         reconnectTimeout.current = setTimeout(connect, 3000);
       };
@@ -66,10 +69,13 @@ export function useRealtime(options?: UseRealtimeOptions) {
   }, [options?.url]);
 
   useEffect(() => {
+    disposedRef.current = false;
     connect();
     return () => {
+      disposedRef.current = true;
       clearTimeout(reconnectTimeout.current);
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [connect]);
 

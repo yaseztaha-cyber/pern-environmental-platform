@@ -5,6 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { sendError } = require('../middleware/error-handler');
 
 router.get('/readings/csv', async (req, res) => {
   try {
@@ -37,7 +38,7 @@ router.get('/readings/csv', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="sensor-readings-${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send(csvLines.join('\n'));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -66,7 +67,7 @@ router.get('/alerts/csv', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="alert-history-${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send(csvLines.join('\n'));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 

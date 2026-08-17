@@ -18,13 +18,30 @@
  */
 
 import { calculateScientificEHI, ScientificEHIResult } from './scientific-ehi';
-import { generateAdvancedPrediction, PredictionResult, EnsembleWeights } from './prediction-engine';
+import { generateAdvancedPrediction, PredictionResult, EnsembleWeights, detectAnomalies, detectTrendDirection, TrendInfo } from './prediction-engine';
 import { generateRecommendations, Recommendation } from './recommendation-engine';
 import { generateConfidenceFactors, calculateStatisticalConfidence } from './confidence-scoring';
 
 export interface SensorPrediction {
   sensor: string;
   prediction: PredictionResult;
+}
+
+export interface SensorAnomaly {
+  sensor: string;
+  anomalyIndices: number[];
+  anomalyCount: number;
+}
+
+export interface SensorTrend {
+  sensor: string;
+  trend: TrendInfo;
+}
+
+export interface CrossCorrelation {
+  sensorA: string;
+  sensorB: string;
+  coefficient: number;
 }
 
 export interface ScientificAnalysis {
@@ -38,6 +55,9 @@ export interface ScientificAnalysis {
     crossConsistency: number;
   };
   predictions: SensorPrediction[];
+  anomalies: SensorAnomaly[];
+  trends: SensorTrend[];
+  crossCorrelations: CrossCorrelation[];
   recommendations: Recommendation[];
   warnings: string[];
 }
@@ -61,10 +81,16 @@ export function runScientificAnalysis(
       confidence: 0,
       confidenceFactors: { dataFreshness: 0, sensorCoverage: 0, modelAccuracy: 0, trendStrength: 0, crossConsistency: 0 },
       predictions: [],
+      anomalies: [],
+      trends: [],
+      crossCorrelations: [],
       recommendations: [],
       warnings: ['No sensor readings available'],
     };
   }
+
+  const anomalies: SensorAnomaly[] = [];
+  const trends: SensorTrend[] = [];
 
   for (const sensor of PREDICTION_SENSORS) {
     if (readings[sensor] === undefined) continue;
@@ -75,6 +101,42 @@ export function runScientificAnalysis(
       predictions.push({ sensor, prediction });
     } catch {
       warnings.push(`Prediction failed for ${sensor}`);
+    }
+
+    const anomalyIndices = detectAnomalies(sensorHistory);
+    if (anomalyIndices.length > 0) {
+      anomalies.push({ sensor, anomalyIndices, anomalyCount: anomalyIndices.length });
+    }
+
+    trends.push({ sensor, trend: detectTrendDirection(sensorHistory) });
+  }
+
+  const crossCorrelations: CrossCorrelation[] = [];
+  const sensorKeys = activeKeys.filter(k => history[k]?.length >= 5);
+  for (let i = 0; i < sensorKeys.length; i++) {
+    for (let j = i + 1; j < sensorKeys.length; j++) {
+      const a = sensorKeys[i];
+      const b = sensorKeys[j];
+      const ha = history[a];
+      const hb = history[b];
+      if (!ha || !hb) continue;
+      const len = Math.min(ha.length, hb.length);
+      const aSlice = ha.slice(-len);
+      const bSlice = hb.slice(-len);
+      const aMean = aSlice.reduce((s, v) => s + v, 0) / len;
+      const bMean = bSlice.reduce((s, v) => s + v, 0) / len;
+      let num = 0, da2 = 0, db2 = 0;
+      for (let k = 0; k < len; k++) {
+        const da = aSlice[k] - aMean;
+        const db = bSlice[k] - bMean;
+        num += da * db;
+        da2 += da * da;
+        db2 += db * db;
+      }
+      const den = Math.sqrt(da2 * db2);
+      if (den > 0) {
+        crossCorrelations.push({ sensorA: a, sensorB: b, coefficient: num / den });
+      }
     }
   }
 
@@ -115,6 +177,9 @@ export function runScientificAnalysis(
     confidence,
     confidenceFactors,
     predictions,
+    anomalies,
+    trends,
+    crossCorrelations,
     recommendations,
     warnings,
   };

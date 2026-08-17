@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../middleware/rbac');
+const { sendError } = require('../middleware/error-handler');
 
 router.get('/', async (req, res) => {
   try {
@@ -28,7 +29,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
   try {
     await db.upsertOrganization({ id, name, description, ownerId, settings });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -37,14 +38,14 @@ router.put('/:id', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Organization not found' });
     await db.upsertOrganization({ id: req.params.id, ...existing, ...req.body, settings: { ...existing.settings, ...req.body.settings } });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
     await db.deleteOrganization(req.params.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.get('/:id/members', async (req, res) => {
@@ -58,14 +59,14 @@ router.post('/:id/members', requireRole('admin', 'manager'), async (req, res) =>
   try {
     await db.addTeamMember({ orgId: req.params.id, ...req.body });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.delete('/:id/members/:userId', async (req, res) => {
   try {
     await db.removeTeamMember(req.params.id, req.params.userId);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.put('/:id/members/:userId/role', async (req, res) => {
@@ -73,7 +74,7 @@ router.put('/:id/members/:userId/role', async (req, res) => {
     if (!req.body?.role) return res.status(400).json({ error: 'role required' });
     await db.updateTeamMemberRole(req.params.id, req.params.userId, req.body.role);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 module.exports = router;

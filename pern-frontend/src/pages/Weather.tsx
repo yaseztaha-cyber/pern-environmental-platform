@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useData } from '../lib/data-provider';
 import { apiClient } from '../lib/api-client';
-import { PageHeader, Card, Pill, Btn, SectionTitle, LoadingState, EmptyState, fmt } from '../components/ui';
+import { useI18n } from '../lib/i18n';
+import { PageHeader, Card, Btn, SectionTitle, LoadingState, EmptyState, fmt } from '../components/ui';
 import { Droplets, Wind as WindIcon, CloudRain, Sun, MapPin, Gauge } from 'lucide-react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
+import { ChartGrid, ChartTooltip, CHART_TICK, CHART_CURSOR } from '../components/charts';
 import { epaAQIMulti, aqiCategory } from '../lib/epa-standards';
 import type { WeatherData as WD } from '../lib/types';
 
@@ -38,6 +40,15 @@ function getWindDir(deg: number): string {
   return dirs[Math.round(deg / 45) % 8];
 }
 
+const AQI_LABEL_KEYS: Record<string, string> = {
+  'Good': 'weather.aqi.good',
+  'Moderate': 'weather.aqi.moderate',
+  'Unhealthy (SG)': 'weather.aqi.unhealthySg',
+  'Unhealthy': 'weather.aqi.unhealthy',
+  'Very Unhealthy': 'weather.aqi.veryUnhealthy',
+  'Hazardous': 'weather.aqi.hazardous',
+};
+
 const CITIES = [
   { name: 'Cairo', lat: 30.0444, lon: 31.2357 },
   { name: 'Giza', lat: 30.0131, lon: 31.2089 },
@@ -50,6 +61,7 @@ const CITIES = [
 ];
 
 export default function WeatherPage() {
+  const { t } = useI18n();
   const { data } = useData();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,7 +75,7 @@ export default function WeatherPage() {
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m&timezone=Africa/Cairo&forecast_days=2`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error('Weather API unavailable');
+      if (!res.ok) throw new Error(t('weather.apiUnavailable', 'Weather API unavailable'));
       const json = await res.json();
 
       const hourlyCount = 24;
@@ -92,7 +104,7 @@ export default function WeatherPage() {
         location: { name: c.name, lat: c.lat, lon: c.lon },
       });
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch weather data');
+      setError(err.message || t('weather.fetchFailed', 'Failed to fetch weather data'));
     } finally {
       setLoading(false);
     }
@@ -112,7 +124,7 @@ export default function WeatherPage() {
   }, [data.physical]);
   const aqiCat = useMemo(() => aqiCategory(aqi), [aqi]);
 
-  const wmo = weather ? WMO_CODES[weather.current.weatherCode] || { label: 'Unknown', icon: '❓' } : null;
+  const wmo = weather ? WMO_CODES[weather.current.weatherCode] || { label: t('weather.wmo.unknown', 'Unknown'), icon: '❓' } : null;
 
   // Correlation with sensor data
   const sensorHumidity = data.physical.hum;
@@ -124,8 +136,8 @@ export default function WeatherPage() {
   return (
     <div className="max-w-[1200px] mx-auto">
       <PageHeader
-        title="Weather Integration"
-        subtitle="Real-time conditions from Open-Meteo • Correlated with your sensors"
+        title={t('weather.title', 'Weather Integration')}
+        subtitle={t('weather.subtitle', 'Real-time conditions from Open-Meteo • Correlated with your sensors')}
         right={
           <Btn variant="ghost" size="sm" className="gap-2">
             <MapPin size={14} className="text-[var(--text-disabled)]" />
@@ -141,9 +153,9 @@ export default function WeatherPage() {
       />
 
       {loading ? (
-        <LoadingState label="Fetching weather data…" />
+        <LoadingState label={t('weather.loading', 'Fetching weather data…')} />
       ) : error ? (
-        <EmptyState title="Weather unavailable" message={error} />
+        <EmptyState title={t('weather.unavailable', 'Weather unavailable')} message={error} />
       ) : weather ? (
         <>
           {/* Current conditions hero */}
@@ -152,19 +164,19 @@ export default function WeatherPage() {
             <div className="md:col-span-1 panel-glow p-6 flex flex-col justify-between">
               <div>
                 <div className="text-5xl font-bold tracking-tighter">{fmt(weather.current.temperature)}°</div>
-                <div className="text-sm text-[var(--text-secondary)] mt-1">{wmo?.icon} {wmo?.label}</div>
-                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">Feels like {fmt(weather.current.apparentTemperature)}°C</div>
+                <div className="text-sm text-[var(--text-secondary)] mt-1">{wmo?.icon} {wmo ? t(`weather.wmo.${weather.current.weatherCode}`, wmo.label) : ''}</div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{t('weather.feelsLike', 'Feels like {temp}°C', { temp: fmt(weather.current.apparentTemperature) })}</div>
               </div>
-              <div className="text-xs text-[var(--text-disabled)] mt-4">{weather.location.name}, Egypt</div>
+              <div className="text-xs text-[var(--text-disabled)] mt-4">{t('weather.location', '{city}, Egypt', { city: weather.location.name })}</div>
             </div>
 
             {/* Details */}
             <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { icon: Droplets, label: 'Humidity', value: `${fmt(weather.current.humidity)}%`, color: 'text-[var(--cyan)]' },
-                { icon: WindIcon, label: 'Wind', value: `${fmt(weather.current.windSpeed)} km/h`, color: 'text-[var(--cyan)]', sub: getWindDir(weather.current.windDirection) },
-                { icon: CloudRain, label: 'Precipitation', value: `${fmt(weather.current.precipitation)} mm`, color: 'text-[var(--indigo)]' },
-                { icon: Sun, label: 'UV Index', value: '—', color: 'text-[var(--amber)]' },
+                { icon: Droplets, label: t('weather.humidity', 'Humidity'), value: `${fmt(weather.current.humidity)}%`, color: 'text-[var(--cyan)]' },
+                { icon: WindIcon, label: t('weather.wind', 'Wind'), value: `${fmt(weather.current.windSpeed)} km/h`, color: 'text-[var(--cyan)]', sub: getWindDir(weather.current.windDirection) },
+                { icon: CloudRain, label: t('weather.precipitation', 'Precipitation'), value: `${fmt(weather.current.precipitation)} mm`, color: 'text-[var(--indigo)]' },
+                { icon: Sun, label: t('weather.uvIndex', 'UV Index'), value: '—', color: 'text-[var(--amber)]' },
               ].map(({ icon: Icon, label, value, color, sub }) => (
                 <div key={label} className="glass rounded-[var(--radius-md)] p-4">
                   <Icon size={16} className={color} />
@@ -184,12 +196,12 @@ export default function WeatherPage() {
                   <Droplets size={14} className="text-[var(--cyan)]" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium">Indoor vs Outdoor Humidity</div>
+                  <div className="text-sm font-medium">{t('weather.indoorVsOutdoor', 'Indoor vs Outdoor Humidity')}</div>
                   <div className="text-xs text-[var(--text-tertiary)]">
-                    Your sensor reads <span className="text-[var(--emerald)] font-mono">{fmt(sensorHumidity)}%</span> vs outdoor <span className="font-mono">{fmt(weatherHumidity)}%</span>
+                    {t('weather.sensorReads', 'Your sensor reads ')}<span className="text-[var(--emerald)] font-mono">{fmt(sensorHumidity)}%</span>{t('weather.vsOutdoor', ' vs outdoor ')}<span className="font-mono">{fmt(weatherHumidity)}%</span>
                     {Math.abs(humidityDelta) > 10
-                      ? <> — <span className="text-[var(--amber)]">significant difference ({humidityDelta > 0 ? '+' : ''}{humidityDelta}%)</span></>
-                      : ' — consistent'}
+                      ? <> — <span className="text-[var(--amber)]">{t('weather.significantDifference', 'significant difference ({delta}%)', { delta: `${humidityDelta > 0 ? '+' : ''}${humidityDelta}` })}</span></>
+                      : ` — ${t('weather.consistent', 'consistent')}`}
                   </div>
                 </div>
               </div>
@@ -198,7 +210,7 @@ export default function WeatherPage() {
 
           {/* Hourly forecast chart */}
           <Card className="mb-6">
-            <SectionTitle>24-Hour Forecast</SectionTitle>
+            <SectionTitle>{t('weather.hourlyForecast', '24-Hour Forecast')}</SectionTitle>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={weather.hourly.time.map((t, i) => ({
@@ -207,21 +219,14 @@ export default function WeatherPage() {
                   humidity: weather.hourly.humidity[i],
                   precip: weather.hourly.precipitationProbability[i],
                 }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis dataKey="time" stroke="var(--text-disabled)" fontSize={10} interval={3} />
-                  <YAxis yAxisId="temp" stroke="var(--text-disabled)" fontSize={10} domain={['auto', 'auto']} />
-                  <YAxis yAxisId="humidity" orientation="right" stroke="var(--text-disabled)" fontSize={10} domain={[0, 100]} />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--bg-2)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: 12,
-                    }}
-                  />
-                  <Line yAxisId="temp" type="monotone" dataKey="temp" stroke="var(--emerald)" strokeWidth={2} dot={false} name="Temp (°C)" />
-                  <Line yAxisId="humidity" type="monotone" dataKey="humidity" stroke="var(--cyan)" strokeWidth={2} dot={false} name="Humidity (%)" />
-                  <Line yAxisId="humidity" type="monotone" dataKey="precip" stroke="var(--indigo)" strokeWidth={1.5} dot={false} strokeDasharray="4 4" name="Rain prob (%)" />
+                  <ChartGrid />
+                  <XAxis dataKey="time" tick={CHART_TICK} axisLine={false} tickLine={false} interval={3} />
+                  <YAxis yAxisId="temp" tick={CHART_TICK} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                  <YAxis yAxisId="humidity" orientation="right" tick={CHART_TICK} axisLine={false} tickLine={false} domain={[0, 100]} />
+                  <Tooltip content={<ChartTooltip />} cursor={CHART_CURSOR} />
+                  <Line yAxisId="temp" type="monotone" dataKey="temp" stroke="var(--emerald)" strokeWidth={2} dot={false} name={t('weather.chart.temp', 'Temp (°C)')} />
+                  <Line yAxisId="humidity" type="monotone" dataKey="humidity" stroke="var(--cyan)" strokeWidth={2} dot={false} name={t('weather.chart.humidity', 'Humidity (%)')} />
+                  <Line yAxisId="humidity" type="monotone" dataKey="precip" stroke="var(--indigo)" strokeWidth={1.5} dot={false} strokeDasharray="4 4" name={t('weather.chart.rainProb', 'Rain prob (%)')} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -230,51 +235,51 @@ export default function WeatherPage() {
           {/* Wind Forecast from PERN Engine */}
           {windForecast.length > 0 && (
             <Card className="mb-6">
-              <SectionTitle><span className="flex items-center gap-2"><WindIcon size={16} className="text-[var(--amber)]" />Wind Forecast (PERN v3)</span></SectionTitle>
+              <SectionTitle><span className="flex items-center gap-2"><WindIcon size={16} className="text-[var(--amber)]" />{t('weather.windForecast', 'Wind Forecast (PERN v3)')}</span></SectionTitle>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={windForecast.map(w => ({ ...w, label: w.time ? new Date(w.time).getHours().toString().padStart(2,'0')+':00' : '', speedKmh: (w.speed * 3.6).toFixed(1) }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="label" stroke="var(--text-tertiary)" tick={{ fontSize: 10 }} />
-                    <YAxis stroke="var(--text-tertiary)" tick={{ fontSize: 10 }} label={{ value: 'm/s', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: 'var(--text-tertiary)' }}} />
-                    <Tooltip contentStyle={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: 12 }} />
-                    <Bar dataKey="speed" fill="var(--amber)" radius={[3, 3, 0, 0]} name="Speed (m/s)" />
+                    <ChartGrid />
+                    <XAxis dataKey="label" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                    <YAxis tick={CHART_TICK} axisLine={false} tickLine={false} label={{ value: 'm/s', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: 'var(--text-tertiary)' }}} />
+                    <Tooltip content={<ChartTooltip />} cursor={CHART_CURSOR} />
+                    <Bar dataKey="speed" fill="var(--amber)" radius={[3, 3, 0, 0]} name={t('weather.chart.speed', 'Speed (m/s)')} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="mt-3 text-xs text-[var(--text-tertiary)]">
-                Avg direction: {getWindDir(windForecast.reduce((s, w) => s + w.direction, 0) / windForecast.length)}
+                {t('weather.avgDirection', 'Avg direction: {dir}', { dir: getWindDir(windForecast.reduce((s, w) => s + w.direction, 0) / windForecast.length) })}
               </div>
             </Card>
           )}
 
           {/* AQI vs Weather correlation */}
           <Card className="mb-6">
-            <SectionTitle><span className="flex items-center gap-2"><Gauge size={16} className="text-[var(--violet)]" />AQI & Weather Correlation</span></SectionTitle>
+            <SectionTitle><span className="flex items-center gap-2"><Gauge size={16} className="text-[var(--violet)]" />{t('weather.aqiCorrelation', 'AQI & Weather Correlation')}</span></SectionTitle>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">EPA AQI</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{t('weather.epaAqi', 'EPA AQI')}</div>
                 <div className="text-xl font-bold mt-1" style={{ color: aqiCat.color }}>{aqi}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">{aqiCat.label}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{t(AQI_LABEL_KEYS[aqiCat.label] ?? '', aqiCat.label)}</div>
               </div>
               <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Wind Effect</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{t('weather.windEffect', 'Wind Effect')}</div>
                 <div className="text-xl font-bold mt-1 text-[var(--amber)]">
-                  {weather.current.windSpeed > 15 ? 'Dispersing' : weather.current.windSpeed > 5 ? 'Moderate' : 'Stagnant'}
+                  {weather.current.windSpeed > 15 ? t('weather.windEffect.dispersing', 'Dispersing') : weather.current.windSpeed > 5 ? t('weather.windEffect.moderate', 'Moderate') : t('weather.windEffect.stagnant', 'Stagnant')}
                 </div>
                 <div className="text-[10px] text-[var(--text-tertiary)]">{weather.current.windSpeed} km/h</div>
               </div>
               <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Temp Impact</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{t('weather.tempImpact', 'Temp Impact')}</div>
                 <div className="text-xl font-bold mt-1 text-[var(--rose)]">
-                  {weather.current.temperature > 35 ? 'High risk' : weather.current.temperature > 25 ? 'Elevated' : 'Normal'}
+                  {weather.current.temperature > 35 ? t('weather.tempImpact.highRisk', 'High risk') : weather.current.temperature > 25 ? t('weather.tempImpact.elevated', 'Elevated') : t('weather.tempImpact.normal', 'Normal')}
                 </div>
                 <div className="text-[10px] text-[var(--text-tertiary)]">{weather.current.temperature}°C</div>
               </div>
               <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Humidity</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{t('weather.humidity', 'Humidity')}</div>
                 <div className="text-xl font-bold mt-1 text-[var(--cyan)]">
-                  {weather.current.humidity > 70 ? 'Damp' : weather.current.humidity > 40 ? 'Comfortable' : 'Dry'}
+                  {weather.current.humidity > 70 ? t('weather.humidity.damp', 'Damp') : weather.current.humidity > 40 ? t('weather.humidity.comfortable', 'Comfortable') : t('weather.humidity.dry', 'Dry')}
                 </div>
                 <div className="text-[10px] text-[var(--text-tertiary)]">{weather.current.humidity}%</div>
               </div>
@@ -283,15 +288,15 @@ export default function WeatherPage() {
 
           {/* Environmental insight */}
           <Card>
-            <SectionTitle>Environmental Analysis</SectionTitle>
+            <SectionTitle>{t('weather.environmentalAnalysis', 'Environmental Analysis')}</SectionTitle>
             <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
               {weather.current.temperature > 35
-                ? 'High outdoor temperature detected. Elevated PM2.5 and ozone levels are common in these conditions. Monitor air quality closely.'
+                ? t('weather.analysis.highTemp', 'High outdoor temperature detected. Elevated PM2.5 and ozone levels are common in these conditions. Monitor air quality closely.')
                 : weather.current.humidity > 80
-                  ? 'High humidity may affect water quality sensors. pH and dissolved oxygen readings can be influenced by atmospheric moisture.'
+                  ? t('weather.analysis.highHumidity', 'High humidity may affect water quality sensors. pH and dissolved oxygen readings can be influenced by atmospheric moisture.')
                   : weather.current.windSpeed > 30
-                    ? 'Strong winds can disperse airborne pollutants but may also carry dust and particulate matter from surrounding areas.'
-                    : 'Current weather conditions are moderate. No significant environmental impact expected from weather patterns.'}
+                    ? t('weather.analysis.strongWind', 'Strong winds can disperse airborne pollutants but may also carry dust and particulate matter from surrounding areas.')
+                    : t('weather.analysis.moderate', 'Current weather conditions are moderate. No significant environmental impact expected from weather patterns.')}
             </p>
           </Card>
         </>

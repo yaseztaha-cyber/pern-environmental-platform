@@ -1,19 +1,26 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Map, CloudRain, Wind } from 'lucide-react';
+import { Map, CloudRain, Wind, Satellite, Navigation } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 import MapPage from './Map';
 import WeatherPage from './Weather';
 import PlumeMap from './PlumeMap';
+import GlobalSensorsV3 from './GlobalSensorsV3';
+import RealSensorMap from './RealSensorMap';
 
-type Tab = 'map' | 'weather' | 'plume';
-const tabs = [
-  { id: 'map' as const, label: 'Map', icon: <Map size={14} /> },
-  { id: 'weather' as const, label: 'Weather', icon: <CloudRain size={14} /> },
-  { id: 'plume' as const, label: 'Plume Tracker', icon: <Wind size={14} /> },
+type Tab = 'map' | 'weather' | 'plume' | 'globalv3' | 'realsensor';
+const getTabs = (t: (key: string, fallback?: string) => string) => [
+  { id: 'map' as const, label: t('nav.globalSensorMap', 'Map'), icon: <Map size={14} /> },
+  { id: 'weather' as const, label: t('nav.weather', 'Weather'), icon: <CloudRain size={14} /> },
+  { id: 'plume' as const, label: t('mapsWeather.tab.plume', 'Plume Tracker'), icon: <Wind size={14} /> },
+  { id: 'globalv3' as const, label: t('nav.globalSensorsV3', 'Global v3'), icon: <Satellite size={14} /> },
+  { id: 'realsensor' as const, label: t('nav.realSensorMap', 'Real Sensor Map'), icon: <Navigation size={14} /> },
 ];
 
 export default function MapsWeatherHub() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('map');
+  const tabs = getTabs(t);
 
   return (
     <div className="max-w-[1100px] mx-auto">
@@ -40,6 +47,8 @@ export default function MapsWeatherHub() {
           {activeTab === 'map' && <MapPage />}
           {activeTab === 'weather' && <WeatherPage />}
           {activeTab === 'plume' && <PlumeMap />}
+          {activeTab === 'globalv3' && <GlobalSensorsV3 />}
+          {activeTab === 'realsensor' && <RealSensorMap />}
         </motion.div>
       </AnimatePresence>
     </div>

@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../lib/auth-context';
-import { Loader2, Shield, Zap, ChevronRight } from 'lucide-react';
+import { isLogtoConfigured } from '../lib/auth';
+import { useI18n } from '../lib/i18n';
+import { Loader2, Shield, Zap, ChevronRight, ExternalLink } from 'lucide-react';
 import { showToast } from '../components/Toast';
 import { Btn, Card } from '../components/ui';
-
-const isLogtoConfigured = import.meta.env.VITE_LOGTO_ENDPOINT &&
-  import.meta.env.VITE_LOGTO_ENDPOINT !== 'http://localhost:3001' &&
-  import.meta.env.VITE_LOGTO_APP_ID &&
-  import.meta.env.VITE_LOGTO_APP_ID !== 'pern-app';
+import { PernLogo } from '../components/PernLogo';
 
 export default function Login() {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -21,7 +20,7 @@ export default function Login() {
       await login();
     } catch (error) {
       console.error('Login failed:', error);
-      showToast('Login failed. Please try again.', 'error');
+      showToast(t('auth.loginFailed', 'Login failed. Please try again.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -45,17 +44,15 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8 animate-fade-in-up">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-[var(--emerald)] to-emerald-600 rounded-2xl flex items-center justify-center mb-4 shadow-glow-md">
-            <span className="text-white text-3xl font-bold">P</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gradient">PERN Platform</h1>
-          <p className="text-[var(--text-tertiary)] mt-2 text-sm">Environmental Health Intelligence</p>
+          <PernLogo size={72} className="mx-auto mb-4" />
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gradient">{t('login.title', 'PERN Platform')}</h1>
+          <p className="text-[var(--text-tertiary)] mt-2 text-sm">{t('login.subtitle', 'Environmental Health Intelligence')}</p>
         </div>
 
         {/* Card */}
         <Card hover={false} className="animate-fade-in-up stagger-1">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">Welcome back</h2>
-          <p className="text-sm text-[var(--text-tertiary)] mb-6">Sign in to access your environmental monitoring dashboard</p>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">{t('auth.welcomeBack', 'Welcome back')}</h2>
+          <p className="text-sm text-[var(--text-tertiary)] mb-6">{t('login.signInSubtitle', 'Sign in to access your environmental monitoring dashboard')}</p>
 
           <div className="space-y-3">
             {/* Logto OIDC Button */}
@@ -70,14 +67,14 @@ export default function Login() {
               ) : (
                 <Shield size={18} />
               )}
-              {isLogtoConfigured ? 'Sign in with Logto' : 'Logto not configured'}
-              {isLogtoConfigured && !loading && <ChevronRight size={16} className="ml-auto opacity-60" />}
+              {isLogtoConfigured ? t('auth.logto', 'Sign in with Logto') : t('auth.logtoNotConfigured', 'Logto not configured')}
+              {isLogtoConfigured && !loading && <ChevronRight size={16} className="ml-auto opacity-60 rtl:ml-0 rtl:mr-auto" />}
             </Btn>
 
             {/* Divider */}
             <div className="flex items-center gap-3 my-2">
               <div className="flex-1 h-px bg-[var(--border)]" />
-              <span className="text-[11px] text-[var(--text-disabled)] uppercase tracking-wider">or</span>
+              <span className="text-[11px] text-[var(--text-disabled)] uppercase tracking-wider">{t('login.or', 'or')}</span>
               <div className="flex-1 h-px bg-[var(--border)]" />
             </div>
 
@@ -88,20 +85,30 @@ export default function Login() {
               className="w-full justify-center gap-3"
             >
               <Zap size={18} />
-              Continue with Demo Account
+              {t('auth.demoAccount', 'Continue with Demo Account')}
             </Btn>
           </div>
 
           {!isLogtoConfigured && (
             <div className="mt-4 p-3 rounded-[var(--radius-sm)] bg-[var(--amber-dim)] border border-[var(--amber)]/20 text-xs text-[var(--amber)]">
-              <strong>Setup required:</strong> Configure <code>VITE_LOGTO_ENDPOINT</code> and <code>VITE_LOGTO_APP_ID</code> in your <code>.env</code> file to enable Logto authentication.
+              <strong>{t('login.setupRequired', 'Setup required:')}</strong> {t('login.setupConfigure', 'Configure')} <code>VITE_LOGTO_ENDPOINT</code> {t('login.setupAnd', 'and')} <code>VITE_LOGTO_APP_ID</code> {t('login.setupIn', 'in your')} <code>.env</code> {t('login.setupSuffix', 'file to enable Logto authentication.')}
             </div>
           )}
         </Card>
 
         {/* Footer */}
-        <div className="text-center mt-6 text-[11px] text-[var(--text-disabled)]">
-          STEM Gharbiya • PERN v2.7 • 2026
+        <div className="text-center mt-6 space-y-3">
+          <a
+            href="/"
+            className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] hover:text-[var(--emerald)] transition-colors"
+            title={t('login.backTitle', 'Back to the PERN landing page')}
+          >
+            <ExternalLink size={12} />
+            {t('login.backLink', 'Back to the landing page')}
+          </a>
+          <div className="text-[11px] text-[var(--text-disabled)]">
+            {t('login.footerBrand', 'STEM Gharbiya • PERN v2.7 • 2026')}
+          </div>
         </div>
       </div>
     </div>

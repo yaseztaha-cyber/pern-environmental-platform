@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../lib/api-client';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { PageHeader, Card, Pill, Btn } from '../components/ui';
+import { useI18n } from '../lib/i18n';
 
 interface LifecycleDevice {
   id: string;
@@ -19,6 +20,7 @@ interface LifecycleDevice {
 }
 
 export default function DeviceLifecyclePage() {
+  const { t } = useI18n();
   const [devices, setDevices] = useState<LifecycleDevice[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -102,15 +104,15 @@ export default function DeviceLifecyclePage() {
   return (
     <div>
       <PageHeader
-        title="Device Lifecycle Dashboard"
-        subtitle="Real device telemetry • Usage frequency • Remaining lifetime"
-        right={<Btn variant="primary" onClick={loadDevices}>Refresh All Metrics</Btn>}
+        title={t('deviceLifecycle.title', 'Device Lifecycle Dashboard')}
+        subtitle={t('deviceLifecycle.subtitle', 'Real device telemetry • Usage frequency • Remaining lifetime')}
+        right={<Btn variant="primary" onClick={loadDevices}>{t('deviceLifecycle.refreshAll', 'Refresh All Metrics')}</Btn>}
       />
 
       {loading ? (
-        <Card hover={false} className="text-center py-12 text-[var(--text-secondary)]">Loading device data…</Card>
+        <Card hover={false} className="text-center py-12 text-[var(--text-secondary)]">{t('deviceLifecycle.loading', 'Loading device data…')}</Card>
       ) : devices.length === 0 ? (
-        <Card hover={false} className="text-center py-12 text-[var(--text-secondary)]">No devices found. Connect devices first.</Card>
+        <Card hover={false} className="text-center py-12 text-[var(--text-secondary)]">{t('deviceLifecycle.noDevices', 'No devices found. Connect devices first.')}</Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 grid-entrance">
           {devices.map(device => {
@@ -129,38 +131,38 @@ export default function DeviceLifecyclePage() {
                     <div className="text-sm text-[var(--emerald)]">{device.type}</div>
                   </div>
                   <Pill tone={device.status === 'online' ? 'emerald' : device.status === 'warning' ? 'amber' : 'slate'}>
-                    {device.status}
+                    {device.status === 'online' ? t('deviceLifecycle.status.online', 'Online') : device.status === 'warning' ? t('deviceLifecycle.status.warning', 'Warning') : t('deviceLifecycle.status.offline', 'Offline')}
                   </Pill>
                 </div>
 
                 <div className="grid grid-cols-2 gap-y-6">
                   <div>
-                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">TOTAL READINGS</div>
+                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">{t('deviceLifecycle.totalReadings', 'TOTAL READINGS')}</div>
                     <div className="font-mono text-4xl font-semibold tracking-tighter mt-1 text-[var(--text-primary)]">{device.totalReadings.toLocaleString()}</div>
-                    <div className="text-xs text-[var(--emerald)] mt-1">Since deployment</div>
+                    <div className="text-xs text-[var(--emerald)] mt-1">{t('deviceLifecycle.sinceDeployment', 'Since deployment')}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">UPTIME</div>
+                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">{t('deviceLifecycle.uptime', 'UPTIME')}</div>
                     <div className="font-mono text-4xl font-semibold tracking-tighter mt-1 text-[var(--text-primary)]">{device.uptimeHours}h</div>
-                    <div className="text-xs text-[var(--emerald)] mt-1">~{Math.floor(device.uptimeHours / 24)} days</div>
+                    <div className="text-xs text-[var(--emerald)] mt-1">~{Math.floor(device.uptimeHours / 24)} {t('deviceLifecycle.days', 'days')}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">HEALTH SCORE</div>
+                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">{t('deviceLifecycle.healthScore', 'HEALTH SCORE')}</div>
                     <div className="font-mono text-4xl font-semibold tracking-tighter mt-1" style={{ color: healthColor }}>
                       {device.healthScore}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">EST. REMAINING LIFE</div>
+                    <div className="text-xs text-[var(--text-secondary)] tracking-wider">{t('deviceLifecycle.estRemainingLife', 'EST. REMAINING LIFE')}</div>
                     <div className="font-mono text-4xl font-semibold tracking-tighter mt-1 text-[var(--rose)]">
                       {device.estimatedRemainingDays}d
                     </div>
-                    <div className="text-xs text-[var(--rose)] mt-1">~{Math.floor(device.estimatedRemainingDays / 30)} months</div>
+                    <div className="text-xs text-[var(--rose)] mt-1">~{Math.floor(device.estimatedRemainingDays / 30)} {t('deviceLifecycle.months', 'months')}</div>
                   </div>
                 </div>
 
                 <div className="mt-6 pt-6 border-t border-[var(--border)]">
-                  <div className="text-xs text-[var(--text-secondary)] mb-2">Recent Sensor Readings</div>
+                  <div className="text-xs text-[var(--text-secondary)] mb-2">{t('deviceLifecycle.recentReadings', 'Recent Sensor Readings')}</div>
                   <div className="h-16">
                     {trendData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
@@ -169,18 +171,18 @@ export default function DeviceLifecyclePage() {
                         </LineChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div className="h-full flex items-center justify-center text-xs text-[var(--text-tertiary)]">No readings yet</div>
+                      <div className="h-full flex items-center justify-center text-xs text-[var(--text-tertiary)]">{t('deviceLifecycle.noReadings', 'No readings yet')}</div>
                     )}
                   </div>
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-between items-center text-sm">
                   <div>
-                    <span className="text-[var(--text-secondary)]">Usage:</span>{' '}
-                    <Pill tone={usageTone}>{device.usageIntensity}</Pill>
+                    <span className="text-[var(--text-secondary)]">{t('deviceLifecycle.usage', 'Usage:')}</span>{' '}
+                    <Pill tone={usageTone}>{device.usageIntensity === 'high' ? t('deviceLifecycle.usage.high', 'High') : device.usageIntensity === 'medium' ? t('deviceLifecycle.usage.medium', 'Medium') : t('deviceLifecycle.usage.low', 'Low')}</Pill>
                   </div>
                   <div className="text-xs text-[var(--text-secondary)] font-mono">
-                    FW: {device.firmwareVersion}
+                    {t('deviceLifecycle.fw', 'FW:')} {device.firmwareVersion}
                   </div>
                 </div>
               </Card>

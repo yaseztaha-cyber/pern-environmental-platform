@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 /**
  * Authentication Context — wraps the app with auth state.
  * Supports Logto OIDC and demo user fallback.
@@ -11,6 +12,8 @@ import { logtoClient, type AuthUser, getUser, getAccessToken, isAuthenticated as
 
 const STORAGE_KEY_TOKEN = 'pern_auth_token';
 const STORAGE_KEY_DEMO = 'pern_demo_user';
+
+const DEMO_USER: AuthUser = { id: 'demo-user', name: 'Demo User', email: 'demo@pern.dev', role: 'supervisor' };
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -62,12 +65,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch { /* corrupt */ }
     }
 
-    setUser(null);
+    // Auto-enter demo mode when no real session exists: fresh visitors land
+    // directly in the dashboard instead of a login wall. Real Logto sessions
+    // are checked first above, so signed-in users keep their own account.
+    sessionStorage.setItem(STORAGE_KEY_DEMO, JSON.stringify(DEMO_USER));
+    sessionStorage.setItem(STORAGE_KEY_TOKEN, 'demo-token');
+    setUser(DEMO_USER);
   }, []);
 
   useEffect(() => {
     refresh().finally(() => setLoading(false));
   }, [refresh]);
+
+  // React to session expiry signalled by the API client (pern-auth-expired).
+  useEffect(() => {
+    const onAuthExpired = () => setUser(null);
+    window.addEventListener('pern-auth-expired', onAuthExpired);
+    return () => window.removeEventListener('pern-auth-expired', onAuthExpired);
+  }, []);
 
   const login = useCallback(async () => {
     setLoading(true);

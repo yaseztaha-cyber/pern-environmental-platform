@@ -1,8 +1,10 @@
 {
   "name": "pern-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.1.0",
   "type": "module",
+  "author": "Yassen Taha Hussainy Elnasher",
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

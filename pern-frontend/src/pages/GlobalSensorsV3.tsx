@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Card, StatCard, SectionTitle, Btn, Pill } from '../components/ui';
+import { PageHeader, Card, StatCard, SectionTitle, Btn, Pill } from '../components/ui';
+import { useI18n } from '../lib/i18n';
 import { Globe, Satellite, MapPin, RefreshCw, Activity } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { ChartGrid, ChartTooltip, CHART_TICK } from '../components/charts';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -36,8 +38,6 @@ const SAT_PARAMS = [
 
 const PIE_COLORS = ['#22c55e', '#06b6d4', '#a855f7', '#3b82f6', '#f59e0b'];
 
-const tooltipStyle = { background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 };
-
 function MapBoundsUpdater({ sensors }: { sensors: VirtualSensor[] }) {
   const map = useMap();
   useEffect(() => {
@@ -50,11 +50,16 @@ function MapBoundsUpdater({ sensors }: { sensors: VirtualSensor[] }) {
 }
 
 export default function GlobalSensorsV3() {
+  const { t } = useI18n();
   const [sensors, setSensors] = useState<VirtualSensor[]>([]);
   const [coverage, setCoverage] = useState<CoverageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dropPinMode, setDropPinMode] = useState(false);
+
+  const paramLabel = useCallback((p: { key: string; label: string }) =>
+    p.key === 'aerosol_index' ? t('globalSensors.param.aerosol', 'Aerosol') : p.label,
+  [t]);
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -120,9 +125,9 @@ export default function GlobalSensorsV3() {
     });
     return Object.entries(counts).map(([key, count]) => {
       const meta = SAT_PARAMS.find(p => p.key === key);
-      return { name: meta?.label || key, count, color: meta?.color || '#64748b' };
+      return { name: meta ? paramLabel(meta) : key, count, color: meta?.color || '#64748b' };
     }).sort((a, b) => b.count - a.count);
-  }, [sensors]);
+  }, [sensors, paramLabel]);
 
   const sourceDist = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -147,33 +152,26 @@ export default function GlobalSensorsV3() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Satellite size={18} className="text-[var(--emerald)]" />
-            Global Satellite Sensors (v3)
-          </h2>
-          <p className="text-xs text-slate-500">
-            {coverage ? `${coverage.resolution} · ${coverage.parameters.length} parameters` : 'Sentinel-5P simulated data'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title={t('globalSensors.title', 'Global Satellite Sensors (v3)')}
+        subtitle={coverage ? `${coverage.resolution} · ${t('globalSensors.parametersSuffix', '{count} parameters', { count: coverage.parameters.length })}` : t('globalSensors.subtitle.simulated', 'Sentinel-5P simulated data')}
+        right={<div className="flex flex-wrap items-center gap-2">
           <Btn variant="ghost" size="sm" loading={refreshing} onClick={() => loadData(true)}>
             <RefreshCw size={14} />
           </Btn>
           <Btn variant={dropPinMode ? 'primary' : 'ghost'} size="sm" onClick={() => setDropPinMode(p => !p)}>
-            <MapPin size={14} /> {dropPinMode ? 'Cancel Pin' : 'Drop Pin'}
+            <MapPin size={14} /> {dropPinMode ? t('globalSensors.cancelPin', 'Cancel Pin') : t('globalSensors.dropPin', 'Drop Pin')}
           </Btn>
           <Btn variant="ghost" size="sm" onClick={handleScan}>
-            Scan Region
+            {t('globalSensors.scanRegion', 'Scan Region')}
           </Btn>
-        </div>
-      </div>
+        </div>}
+      />
 
       <div className="h-[500px] rounded-2xl overflow-hidden border border-white/10">
         {loading ? (
           <div className="h-full flex items-center justify-center bg-slate-900 text-slate-400">
-            Loading satellite sensor data...
+            {t('globalSensors.loading', 'Loading satellite sensor data...')}
           </div>
         ) : (
           <MapContainer center={[30.5, 31.5]} zoom={5} className="h-full w-full" scrollWheelZoom={true}>
@@ -193,7 +191,7 @@ export default function GlobalSensorsV3() {
                     <span style={{ color: '#22c55e' }}>{s.source_type}</span><br />
                     {SAT_PARAMS.filter(p => s.parameters?.includes(p.key)).map(p => (
                       <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 2 }}>
-                        <span>{p.label}:</span>
+                        <span>{paramLabel(p)}:</span>
                         <span style={{ fontWeight: 600 }}>{getParamValue(s, p.key) ?? '—'} {p.unit}</span>
                       </div>
                     ))}
@@ -210,41 +208,41 @@ export default function GlobalSensorsV3() {
 
       {dropPinMode && (
         <div className="px-4 py-2 bg-[var(--emerald)]/10 text-[var(--emerald)] rounded-xl text-sm text-center border border-[var(--emerald)]/20">
-          Click anywhere on the map to create a virtual satellite sensor at that location
+          {t('globalSensors.dropPinHint', 'Click anywhere on the map to create a virtual satellite sensor at that location')}
         </div>
       )}
 
       {!loading && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Virtual Sensors" value={sensors.length} accent="emerald" icon={<Globe size={18} />} />
-            <StatCard label="Resolution" value={coverage?.resolution?.split(' ')[0] || 'N/A'} unit="deg" accent="cyan" icon={<Satellite size={18} />} />
-            <StatCard label="Parameters" value={totalParams.size} accent="violet" icon={<Activity size={18} />} />
-            <StatCard label="Last Scan" value={coverage?.last_scan ? new Date(coverage.last_scan).toLocaleTimeString() : '—'} accent="blue" icon={<RefreshCw size={18} />} />
+            <StatCard label={t('globalSensors.stat.virtualSensors', 'Virtual Sensors')} value={sensors.length} accent="emerald" icon={<Globe size={18} />} />
+            <StatCard label={t('globalSensors.stat.resolution', 'Resolution')} value={coverage?.resolution?.split(' ')[0] || t('globalSensorsV3.na', 'N/A')} unit="deg" accent="cyan" icon={<Satellite size={18} />} />
+            <StatCard label={t('globalSensors.stat.parameters', 'Parameters')} value={totalParams.size} accent="violet" icon={<Activity size={18} />} />
+            <StatCard label={t('globalSensors.stat.lastScan', 'Last Scan')} value={coverage?.last_scan ? new Date(coverage.last_scan).toLocaleTimeString() : '—'} accent="blue" icon={<RefreshCw size={18} />} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card className="p-4">
-              <SectionTitle>Parameter Availability</SectionTitle>
+              <SectionTitle>{t('globalSensors.section.parameterAvailability', 'Parameter Availability')}</SectionTitle>
               {paramAvailData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={paramAvailData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                    <ChartGrid />
+                    <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
                     <YAxis hide />
-                    <Tooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-hover)' }} />
+                    <Bar dataKey="count" name={t('globalSensors.chart.count', 'Count')} radius={[4, 4, 0, 0]}>
                       {paramAvailData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="text-sm text-slate-500 text-center py-8">No parameter data</p>
+                <p className="text-sm text-slate-500 text-center py-8">{t('globalSensors.noParameterData', 'No parameter data')}</p>
               )}
             </Card>
 
             <Card className="p-4">
-              <SectionTitle>Source Distribution</SectionTitle>
+              <SectionTitle>{t('globalSensors.section.sourceDistribution', 'Source Distribution')}</SectionTitle>
               {sourceDist.length > 0 ? (
                 <div className="flex items-center gap-4 mt-2">
                   <ResponsiveContainer width={120} height={120}>
@@ -252,7 +250,7 @@ export default function GlobalSensorsV3() {
                       <Pie data={sourceDist} cx="50%" cy="50%" innerRadius={30} outerRadius={55} dataKey="value" paddingAngle={2}>
                         {sourceDist.map((_, i) => <Cell key={i} fill={_.color} />)}
                       </Pie>
-                      <Tooltip contentStyle={tooltipStyle} />
+                      <Tooltip content={<ChartTooltip />} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="space-y-1.5 text-xs">
@@ -266,18 +264,18 @@ export default function GlobalSensorsV3() {
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 text-center py-8">No source data</p>
+                <p className="text-sm text-slate-500 text-center py-8">{t('globalSensors.noSourceData', 'No source data')}</p>
               )}
             </Card>
 
             <Card className="p-4">
-              <SectionTitle>Parameter Coverage</SectionTitle>
+              <SectionTitle>{t('globalSensors.section.parameterCoverage', 'Parameter Coverage')}</SectionTitle>
               {paramCoverage.length > 0 && sensors.length > 0 ? (
                 <div className="space-y-3 mt-1">
                   {paramCoverage.map(p => (
                     <div key={p.key}>
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="font-medium" style={{ color: p.color }}>{p.label}</span>
+                        <span className="font-medium" style={{ color: p.color }}>{paramLabel(p)}</span>
                         <span className="text-slate-400">{p.count}/{sensors.length} · {p.percent}%</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
@@ -287,17 +285,20 @@ export default function GlobalSensorsV3() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 text-center py-8">No coverage data</p>
+                <p className="text-sm text-slate-500 text-center py-8">{t('globalSensors.noCoverageData', 'No coverage data')}</p>
               )}
             </Card>
           </div>
 
           <Card className="p-4">
-            <SectionTitle>Satellite Virtual Sensors</SectionTitle>
+            <SectionTitle>{t('globalSensors.section.satelliteVirtualSensors', 'Satellite Virtual Sensors')}</SectionTitle>
             <div className="mt-3 space-y-2">
               {sensors.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-8">
-                  No virtual sensors yet. Click "Drop Pin" to add one, or "Scan Region" to auto-generate a grid.
+                  {t('globalSensors.empty', 'No virtual sensors yet. Click "{dropPin}" to add one, or "{scanRegion}" to auto-generate a grid.', {
+                    dropPin: t('globalSensors.dropPin', 'Drop Pin'),
+                    scanRegion: t('globalSensors.scanRegion', 'Scan Region'),
+                  })}
                 </p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -315,7 +316,7 @@ export default function GlobalSensorsV3() {
                       <div className="grid grid-cols-2 gap-1 mt-2 text-xs">
                         {SAT_PARAMS.filter(p => s.parameters?.includes(p.key)).slice(0, 4).map(p => (
                           <div key={p.key} className="flex justify-between">
-                            <span className="text-slate-500">{p.label}</span>
+                            <span className="text-slate-500">{paramLabel(p)}</span>
                             <span className="font-mono" style={{ color: p.color }}>
                               {getParamValue(s, p.key) ?? '—'}
                             </span>

@@ -1,21 +1,24 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, FolderKanban, Quote, FlaskConical } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 import Knowledge from './Knowledge';
 import ResourcesPage from './Resources';
 import ReferencesPage from './References';
 import ResearchPage from './Research';
 
 type Tab = 'articles' | 'resources' | 'references' | 'research';
-const tabs = [
-  { id: 'articles' as const, label: 'Articles', icon: <BookOpen size={14} /> },
-  { id: 'resources' as const, label: 'Resources', icon: <FolderKanban size={14} /> },
-  { id: 'references' as const, label: 'References', icon: <Quote size={14} /> },
-  { id: 'research' as const, label: 'Research', icon: <FlaskConical size={14} /> },
-];
 
 export default function KnowledgeHub() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('articles');
+
+  const tabs = [
+    { id: 'articles' as const, label: t('knowledge.tabs.articles', 'Articles'), icon: <BookOpen size={14} /> },
+    { id: 'resources' as const, label: t('knowledge.tabs.resources', 'Resources'), icon: <FolderKanban size={14} /> },
+    { id: 'references' as const, label: t('knowledge.tabs.references', 'References'), icon: <Quote size={14} /> },
+    { id: 'research' as const, label: t('knowledge.tabs.research', 'Research'), icon: <FlaskConical size={14} /> },
+  ];
 
   return (
     <div className="max-w-[1100px] mx-auto">

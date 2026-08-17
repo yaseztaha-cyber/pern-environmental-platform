@@ -4,9 +4,11 @@ import { fetchOpenAQData } from '../lib/openaq-service';
 import { getAverageReading } from '../lib/sensor-community-service';
 import { PageHeader, Card, EmptyState } from '../components/ui';
 import { showToast } from '../components/Toast';
+import { useI18n } from '../lib/i18n';
 import { GitCompareArrows } from 'lucide-react';
 
 export default function CompareVirtualSensors() {
+  const { t } = useI18n();
   const { data, hasRealData } = useData();
   const [city, setCity] = useState('Cairo');
   const [countryCode, setCountryCode] = useState('EG');
@@ -38,7 +40,7 @@ export default function CompareVirtualSensors() {
       });
     } catch (error) {
       console.error('Comparison failed:', error);
-      showToast('Failed to fetch comparison data. Check your network and try again.', 'error');
+      showToast(t('compareVirtual.toastFetchFailed', 'Failed to fetch comparison data. Check your network and try again.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -47,8 +49,8 @@ export default function CompareVirtualSensors() {
   return (
     <div>
       <PageHeader
-        title="Compare Virtual Sensors"
-        subtitle="PERN virtual sensors vs Real-world data"
+        title={t('nav.virtualCompare', 'Compare Virtual Sensors')}
+        subtitle={t('compareVirtual.subtitle', 'PERN virtual sensors vs Real-world data')}
       />
 
       <Card className="mb-6" hover={false}>
@@ -58,14 +60,14 @@ export default function CompareVirtualSensors() {
             value={city} 
             onChange={e => setCity(e.target.value)}
             className="flex-1 bg-[var(--surface)] px-4 py-3 rounded-[var(--radius-sm)]"
-            placeholder="City name (OpenAQ)"
+            placeholder={t('compareVirtual.cityPlaceholder', 'City name (OpenAQ)')}
           />
           <input 
             type="text" 
             value={countryCode} 
             onChange={e => setCountryCode(e.target.value.toUpperCase())}
             className="w-24 bg-[var(--surface)] px-4 py-3 rounded-[var(--radius-sm)]"
-            placeholder="Country"
+            placeholder={t('compareVirtual.countryPlaceholder', 'Country')}
             maxLength={2}
           />
           <button 
@@ -73,7 +75,7 @@ export default function CompareVirtualSensors() {
             disabled={loading || !hasRealData}
             className="px-8 py-3 bg-[var(--emerald)] hover:opacity-90 disabled:opacity-50 rounded-[var(--radius-sm)]"
           >
-            {loading ? 'Comparing...' : 'Compare'}
+            {loading ? t('compareVirtual.comparing', 'Comparing...') : t('compareVirtual.compare', 'Compare')}
           </button>
         </div>
       </Card>
@@ -81,8 +83,8 @@ export default function CompareVirtualSensors() {
       {!hasRealData && (
         <EmptyState
           icon={<GitCompareArrows size={22} />}
-          title="No live sensor data"
-          message="Connect a device and enter Live Mode to compare virtual sensor values with real-world data."
+          title={t('compareVirtual.noLiveData', 'No live sensor data')}
+          message={t('compareVirtual.noLiveDataMsg', 'Connect a device and enter Live Mode to compare virtual sensor values with real-world data.')}
         />
       )}
 
@@ -90,18 +92,18 @@ export default function CompareVirtualSensors() {
         <div className="grid md:grid-cols-2 gap-6">
           {/* PERN Data */}
           <Card hover={false}>
-            <h3 className="font-semibold mb-4">PERN Virtual Sensors</h3>
+            <h3 className="font-semibold mb-4">{t('compareVirtual.pernVirtual', 'PERN Virtual Sensors')}</h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span>EHI</span>
                 <span className="font-mono">{comparison.pern.ehi}</span>
               </div>
               <div className="flex justify-between">
-                <span>Air Quality Index <span className="text-[10px] text-[var(--text-disabled)]">(composite 0-500)</span></span>
+                <span>{t('compareVirtual.aqi', 'Air Quality Index')} <span className="text-[10px] text-[var(--text-disabled)]">{t('compareVirtual.aqiSuffix', '(composite 0-500)')}</span></span>
                 <span className="font-mono">{comparison.pern.aqi || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
-                <span>Water Quality Index <span className="text-[10px] text-[var(--text-disabled)]">(penalty 0-100)</span></span>
+                <span>{t('compareVirtual.wqi', 'Water Quality Index')} <span className="text-[10px] text-[var(--text-disabled)]">{t('compareVirtual.wqiSuffix', '(penalty 0-100)')}</span></span>
                 <span className="font-mono">{comparison.pern.wqi || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
@@ -113,7 +115,7 @@ export default function CompareVirtualSensors() {
 
           {/* Real Data */}
           <Card hover={false}>
-            <h3 className="font-semibold mb-4">Real-World Data</h3>
+            <h3 className="font-semibold mb-4">{t('compareVirtual.realWorld', 'Real-World Data')}</h3>
             <div className="space-y-3 text-sm">
               {comparison.openaq && (
                 <div>
@@ -128,7 +130,7 @@ export default function CompareVirtualSensors() {
                 <div>
                   <div className="font-medium mb-2">Sensor.Community</div>
                   <div className="flex justify-between">
-                    <span>Avg PM2.5</span>
+                    <span>{t('compareVirtual.avgPm25', 'Avg PM2.5')}</span>
                     <span className="font-mono">{comparison.sensorCommunity.avgPM25} <span className="text-[var(--text-disabled)]">µg/m³</span></span>
                   </div>
                 </div>

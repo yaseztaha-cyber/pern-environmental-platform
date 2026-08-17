@@ -41,18 +41,50 @@ export interface DeviceHeartbeat {
   timestamp: number;
 }
 
+export interface ConnectionStats {
+  connected: boolean;
+  connecting: boolean;
+  reconnecting: boolean;
+  reconnectAttempts: number;
+  uptimeMs: number;
+  connectedAt: number | null;
+  latencyMs: number | null;
+  quality: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
 export class PERN_MQTT_Client {
   private client: MqttClient | null = null;
   private connected: boolean = false;
   private connecting: boolean = false;
   private reconnecting: boolean = false;
   private reconnectAttempts: number = 0;
+  private connectedAt: number | null = null;
   private listeners: Array<(data: SensorData) => void> = [];
   private actuatorListeners: Array<(status: ActuatorStatus) => void> = [];
   private deviceListeners: Array<(device: DiscoveredDevice) => void> = [];
   private heartbeatListeners: Array<(heartbeat: DeviceHeartbeat) => void> = [];
   private statusListeners: Array<(status: boolean) => void> = [];
   private reconnectingListeners: Array<(reconnecting: boolean, attempt: number) => void> = [];
+  private qualityListeners: Array<(quality: ConnectionStats) => void> = [];
+
+  getConnectionStats(): ConnectionStats {
+    const uptimeMs = this.connectedAt ? Date.now() - this.connectedAt : 0;
+    let quality: ConnectionStats['quality'] = 'poor';
+    if (this.connected && this.reconnectAttempts === 0) quality = 'excellent';
+    else if (this.connected && this.reconnectAttempts <= 2) quality = 'good';
+    else if (this.connected || this.reconnecting) quality = 'fair';
+    return { connected: this.connected, connecting: this.connecting, reconnecting: this.reconnecting, reconnectAttempts: this.reconnectAttempts, uptimeMs, connectedAt: this.connectedAt, latencyMs: null, quality };
+  }
+
+  onQualityChange(callback: (stats: ConnectionStats) => void): () => void {
+    this.qualityListeners.push(callback);
+    return () => { this.qualityListeners = this.qualityListeners.filter(cb => cb !== callback); };
+  }
+
+  private notifyQuality(): void {
+    const stats = this.getConnectionStats();
+    this.qualityListeners.forEach(cb => cb(stats));
+  }
 
   connect(brokerUrl: string = MQTT_BROKER_WS): Promise<boolean> {
     if (this.client && (this.connected || this.connecting || this.reconnecting)) {
@@ -96,6 +128,7 @@ export class PERN_MQTT_Client {
           this.connecting = false;
           this.reconnecting = false;
           this.reconnectAttempts = 0;
+          this.connectedAt = Date.now();
           if (import.meta.env.DEV) console.log('[MQTT] Connected to', brokerUrl);
           
           // Subscribe to sensor data topics
@@ -105,6 +138,7 @@ export class PERN_MQTT_Client {
           
           this.notifyStatus(true);
           this.notifyReconnecting(false, 0);
+          this.notifyQuality();
           resolve(true);
         });
 
@@ -178,6 +212,7 @@ export class PERN_MQTT_Client {
             this.notifyReconnecting(true, this.reconnectAttempts);
           }
           this.notifyStatus(false);
+          this.notifyQuality();
           resolve(false);
         });
 
@@ -187,6 +222,7 @@ export class PERN_MQTT_Client {
           this.connecting = true;
           if (import.meta.env.DEV) console.log('[MQTT] Reconnecting (attempt ' + this.reconnectAttempts + ')');
           this.notifyReconnecting(true, this.reconnectAttempts);
+          this.notifyQuality();
         });
 
         this.client.on('close', () => {
@@ -198,6 +234,7 @@ export class PERN_MQTT_Client {
             this.notifyReconnecting(true, this.reconnectAttempts);
           }
           this.notifyStatus(false);
+          this.notifyQuality();
         });
 
       } catch (err) {
@@ -221,8 +258,10 @@ export class PERN_MQTT_Client {
       this.connecting = false;
       this.reconnecting = false;
       this.reconnectAttempts = 0;
+      this.connectedAt = null;
       this.notifyStatus(false);
       this.notifyReconnecting(false, 0);
+      this.notifyQuality();
     }
   }
 

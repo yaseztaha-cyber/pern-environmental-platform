@@ -48,21 +48,29 @@ export default function OnboardingModal() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100]" role="dialog" aria-modal="true" aria-label="Onboarding tour"
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4" role="dialog" aria-modal="true" aria-label="Onboarding tour"
+      onClick={finish}
       onKeyDown={(e) => { if (e.key === 'Escape') finish(); }}>
-      <div className="glass max-w-lg p-8 rounded-3xl">
+      <div className="glass max-w-lg w-full p-8 rounded-3xl relative" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={finish}
+          aria-label="Close tour"
+          className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-sm transition-colors"
+        >
+          ✕
+        </button>
         <div className="text-[var(--emerald)] text-xs tracking-widest mb-1">STEP {step + 1} / {ONBOARDING_STEPS.length}</div>
         <div className="text-2xl font-semibold tracking-tight mb-3">{ONBOARDING_STEPS[step].title}</div>
         <p className="text-[var(--text-secondary)] mb-8 leading-relaxed">{ONBOARDING_STEPS[step].description}</p>
 
         <div className="flex gap-3">
-          <button 
+          <button
             onClick={finish}
             className="flex-1 py-3 bg-white/10 hover:bg-white/20 rounded-2xl text-sm"
           >
             Skip Tour
           </button>
-          <button 
+          <button
             onClick={next}
             className="flex-1 py-3 bg-[var(--emerald)] hover:opacity-90 rounded-2xl text-sm font-medium"
             autoFocus

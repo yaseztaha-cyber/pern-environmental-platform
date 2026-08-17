@@ -185,7 +185,7 @@ export const DEVICE_PROFILES: DeviceProfile[] = [
     defaultBaud: 9600,
     sensors: ['pm25', 'tmp', 'hum', 'co2'],
     sensorDetails: details(['pm25', 'tmp', 'hum', 'co2']),
-    example: (id, baud) =>
+    example: (id, _baud) =>
       `// Arduino Uno + ESP-01 WiFi Module\n` +
       `// Wiring: ESP TX→Pin10, ESP RX→Pin11 (via divider!)\n` +
       `// ESP-01 is 3.3V — use voltage divider on TX→RX\n` +

@@ -1,0 +1,104 @@
+{
+  "config": {
+    "alpha": 0.1,
+    "calib_frac": 0.6,
+    "anomaly_normal": "harmonic",
+    "anomaly_harmonics": 3,
+    "anomaly_window": 1
+  },
+  "horizons": {
+    "1": {
+      "rho": 0.748,
+      "alpha_tuned": 0.05,
+      "inflation": 1.0142,
+      "coverage": 0.9198,
+      "interval_width": 4.304,
+      "rmse": 1.131,
+      "target_std": 5.797,
+      "n_bins": 72,
+      "holdout_coverage": 0.9267,
+      "coverage_by_month": {
+        "1": 0.8105,
+        "2": 0.8192,
+        "3": 0.9758,
+        "4": 0.9729,
+        "5": 0.925,
+        "6": 0.9719,
+        "7": 0.9597,
+        "8": 0.8339,
+        "9": 0.9979,
+        "10": 0.8992,
+        "11": 0.8896,
+        "12": 0.9052
+      },
+      "worst_month": "1",
+      "mos": {
+        "anomaly": 0.314,
+        "normal": 0.052,
+        "mos": 0.634
+      }
+    },
+    "7": {
+      "rho": 0.0,
+      "alpha_tuned": 0.04,
+      "inflation": 1.1818935634143435,
+      "coverage": 0.9382,
+      "interval_width": 8.0,
+      "rmse": 1.794,
+      "target_std": 5.81,
+      "n_bins": 70,
+      "holdout_coverage": 0.8906,
+      "coverage_by_month": {
+        "1": 0.9677,
+        "2": 0.6473,
+        "3": 1.0,
+        "4": 0.9938,
+        "5": 0.9602,
+        "6": 0.976,
+        "7": 0.9698,
+        "8": 0.8717,
+        "9": 1.0,
+        "10": 1.0,
+        "11": 0.8292,
+        "12": 0.9617
+      },
+      "worst_month": "2",
+      "mos": {
+        "anomaly": 0.071,
+        "normal": 0.071,
+        "mos": 0.859
+      },
+      "ensemble": {
+        "rmse": 0.759,
+        "vs_blend_rmse": 0.762
+      }
+    },
+    "30": {
+      "rho": 0.0,
+      "alpha_tuned": 0.04,
+      "inflation": 1.0837,
+      "coverage": 0.8954,
+      "interval_width": 6.948,
+      "rmse": 1.802,
+      "target_std": 5.857,
+      "n_bins": 72,
+      "holdout_coverage": 0.9193,
+      "coverage_by_month": {
+        "1": 0.9153,
+        "2": 0.6942,
+        "3": 1.0,
+        "4": 0.9854,
+        "5": 0.9556,
+        "6": 0.9292,
+        "7": 0.9526,
+        "8": 0.6234,
+        "9": 1.0,
+        "10": 0.998,
+        "11": 0.7,
+        "12": 0.9516
+      },
+      "worst_month": "8",
+      "mos": {}
+    }
+  }
+}

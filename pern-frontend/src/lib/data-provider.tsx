@@ -1,8 +1,9 @@
+/* oxlint-disable react/only-export-components */
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
 import { computeDynamicVirtualSensors, type VirtualSensorResult } from './virtual-sensors';
 import { mqttClient, type SensorData } from './mqtt-client';
 import { calculateScientificEHI } from './scientific-ehi';
-import { getCurrentContext } from './app-context';
+import { getCurrentContext, type AppContext } from './app-context';
 import { addEHIReading } from './historical-data';
 import { useDevice } from './device-context';
 import { apiClient } from './api-client';
@@ -29,6 +30,7 @@ interface DataContextType {
   lastUpdate: number;
   canSimulate: boolean;
   hasRealData: boolean;
+  liveDevice: string | null;
   updatePhysicalReading: (type: string, value: number) => void;
   simulateNewReading: () => void;
 }
@@ -55,25 +57,26 @@ const INITIAL_READINGS: PhysicalReading = {
   light: 800,
 };
 
+// Apply context-specific baseline overrides on top of a fresh copy of INITIAL_READINGS.
+function applyContextBaseline(base: PhysicalReading, ctx: AppContext): PhysicalReading {
+  if (ctx.type === 'organization') {
+    if (ctx.id.includes('cairo')) {
+      base.pm25 = 28;
+      base.co2 = 520;
+    } else if (ctx.id.includes('giza')) {
+      base.pm25 = 21;
+      base.ph = 7.1;
+    }
+  }
+  return base;
+}
+
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const currentContext = getCurrentContext();
+  const currentContextRef = useRef(currentContext);
+  currentContextRef.current = currentContext;
   const { selectedDevice, clearDevices } = useDevice();
-
-  // Simulation baseline (used only when NOT in live mode)
-  const getContextInitialReadings = () => {
-    const base = { ...INITIAL_READINGS };
-    if (currentContext.type === 'organization') {
-      const orgId = currentContext.id;
-      if (orgId.includes('cairo')) {
-        base.pm25 = 28;
-        base.co2 = 520;
-      } else if (orgId.includes('giza')) {
-        base.pm25 = 21;
-        base.ph = 7.1;
-      }
-    }
-    return base;
-  };
 
   // In Live Mode: start with NO data. Real sensor readings populate this.
   const [physical, setPhysical] = useState<PhysicalReading>({});
@@ -84,6 +87,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [reconnecting, setReconnecting] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(Date.now());
   const [hasRealData, setHasRealData] = useState(false);
+  // Device id of the most recent MQTT sensor message (Live Mode source).
+  const [liveDevice, setLiveDevice] = useState<string | null>(null);
 
   // Keep the latest selected device in a ref so the Live Mode effect can read
   // it without re-subscribing on every device change.
@@ -142,14 +147,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setLastUpdate(Date.now());
 
       if (isLive && scientific) {
-        addEHIReading(scientific.score, selectedDevice?.id);
-        apiClient.postEHIHistory({ deviceId: selectedDevice?.id, ehi: scientific.score, category: scientific.category })
+        const deviceId = liveDevice ?? selectedDevice?.id;
+        addEHIReading(scientific.score, deviceId);
+        apiClient.postEHIHistory({ deviceId, ehi: scientific.score, category: scientific.category })
           .catch(() => {});
       }
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [physical, isLive, selectedDevice?.id]);
+  }, [physical, isLive, liveDevice, selectedDevice?.id]);
 
   // MQTT Live Mode - STRICT ENFORCEMENT
   useEffect(() => {
@@ -180,6 +186,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       unsubscribe = mqttClient.onSensorData((sensorData: SensorData) => {
         // When a specific device is selected, only ingest that device's stream
         if (selectedDeviceRef.current && sensorData.device !== selectedDeviceRef.current.id) return;
+        setLiveDevice(sensorData.device);
         setHasRealData(true);
         // Run through temporal smoothing + outlier detection
         const { smoothed } = processBatch(sensorData.sensors);
@@ -214,10 +221,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setVirtualSensors([]);
       setEhi(-1);
       setHasRealData(false);
+      setLiveDevice(null);
       clearDevices();
       window.dispatchEvent(new CustomEvent('live-mode-change', { detail: { isLive: true } }));
     } else {
-      setPhysical(getContextInitialReadings());
+      setPhysical(applyContextBaseline({ ...INITIAL_READINGS }, currentContextRef.current));
       setHasRealData(false);
       window.dispatchEvent(new CustomEvent('live-mode-change', { detail: { isLive: false } }));
     }
@@ -268,9 +276,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     lastUpdate,
     canSimulate: !isLive,
     hasRealData,
+    liveDevice,
     updatePhysicalReading,
     simulateNewReading,
-  }), [physical, virtualSensors, ehi, lastUpdate, displayLocation, isLive, setLiveMode, mqttConnected, reconnecting, hasRealData, updatePhysicalReading, simulateNewReading]);
+  }), [physical, virtualSensors, ehi, lastUpdate, displayLocation, isLive, setLiveMode, mqttConnected, reconnecting, hasRealData, liveDevice, updatePhysicalReading, simulateNewReading]);
 
   return (
     <DataContext.Provider value={value}>

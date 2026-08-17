@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import type { Organization } from './organization';
 import { getCurrentOrganization, setCurrentOrganization } from './organization';

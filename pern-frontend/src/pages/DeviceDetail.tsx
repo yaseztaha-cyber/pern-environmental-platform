@@ -5,8 +5,10 @@ import { SENSOR_TYPES } from '../lib/constants';
 import { PageHeader, Pill, Card } from '../components/ui';
 import { showToast } from '../components/Toast';
 import { ArrowLeft, Wifi, Clock, Cpu, MapPin, Settings, Trash2 } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 
 export default function DeviceDetailPage() {
+  const { t } = useI18n();
   const { deviceId } = useParams();
   const navigate = useNavigate();
   const [device, setDevice] = useState<any>(null);
@@ -37,39 +39,39 @@ export default function DeviceDetailPage() {
       setEditing(false);
       const dev = await apiClient.getDevice(deviceId).catch(() => null);
       setDevice(dev);
-      showToast('Device saved', 'success');
+      showToast(t('deviceDetail.saved', 'Device saved'), 'success');
     } catch (err) {
       console.error('Failed to save device:', err);
-      showToast('Failed to save device', 'error');
+      showToast(t('deviceDetail.saveFailed', 'Failed to save device'), 'error');
     }
   };
 
   const handleDelete = async () => {
-    if (!deviceId || !confirm('Delete this device permanently?')) return;
+    if (!deviceId || !confirm(t('deviceDetail.deleteConfirm', 'Delete this device permanently?'))) return;
     try {
       await apiClient.deleteDevice(deviceId);
       navigate('/devices');
     } catch (err) {
       console.error('Failed to delete device:', err);
-      showToast('Failed to delete device', 'error');
+      showToast(t('deviceDetail.deleteFailed', 'Failed to delete device'), 'error');
     }
   };
 
-  if (loading) return <Card className="max-w-[900px] mx-auto mt-8 text-center py-16 text-[var(--text-disabled)]">Loading...</Card>;
-  if (!device) return <Card className="max-w-[900px] mx-auto mt-8 text-center py-16">Device not found</Card>;
+  if (loading) return <Card className="max-w-[900px] mx-auto mt-8 text-center py-16 text-[var(--text-disabled)]">{t('deviceDetail.loading', 'Loading...')}</Card>;
+  if (!device) return <Card className="max-w-[900px] mx-auto mt-8 text-center py-16">{t('deviceDetail.notFound', 'Device not found')}</Card>;
 
   const timeSince = (dateStr: string) => {
     const ms = Date.now() - new Date(dateStr).getTime();
-    if (ms < 60000) return 'just now';
-    if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
-    if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`;
-    return `${Math.floor(ms / 86400000)}d ago`;
+    if (ms < 60000) return t('deviceDetail.timeJustNow', 'just now');
+    if (ms < 3600000) return t('deviceDetail.timeMinutesAgo', '{n}m ago', { n: Math.floor(ms / 60000) });
+    if (ms < 86400000) return t('deviceDetail.timeHoursAgo', '{n}h ago', { n: Math.floor(ms / 3600000) });
+    return t('deviceDetail.timeDaysAgo', '{n}d ago', { n: Math.floor(ms / 86400000) });
   };
 
   return (
     <div className="max-w-[900px] mx-auto">
-      <button onClick={() => navigate('/devices')} aria-label="Back to Devices" className="flex items-center gap-2 text-sm text-[var(--text-disabled)] hover:text-[var(--text-primary)] mb-4">
-        <ArrowLeft size={14} /> Back to Devices
+      <button onClick={() => navigate('/devices')} aria-label={t('deviceDetail.back', 'Back to Devices')} className="flex items-center gap-2 text-sm text-[var(--text-disabled)] hover:text-[var(--text-primary)] mb-4">
+        <ArrowLeft size={14} /> {t('deviceDetail.back', 'Back to Devices')}
       </button>
 
       <PageHeader
@@ -78,12 +80,12 @@ export default function DeviceDetailPage() {
         right={
           <div className="flex items-center gap-2">
             <Pill tone={device.status === 'online' ? 'emerald' : device.status === 'warning' ? 'amber' : 'rose'}>
-              <Wifi size={12} /> {device.status}
+              <Wifi size={12} /> {t('deviceDetail.status.' + device.status, device.status)}
             </Pill>
-            <button onClick={() => setEditing(!editing)} aria-label="Edit device" className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--surface)] text-[var(--text-secondary)]">
+            <button onClick={() => setEditing(!editing)} aria-label={t('deviceDetail.editAria', 'Edit device')} className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--surface)] text-[var(--text-secondary)]">
               <Settings size={16} />
             </button>
-            <button onClick={handleDelete} aria-label="Delete device" className="p-2 rounded-[var(--radius-sm)] hover:bg-red-500/20 text-red-400">
+            <button onClick={handleDelete} aria-label={t('deviceDetail.deleteAria', 'Delete device')} className="p-2 rounded-[var(--radius-sm)] hover:bg-red-500/20 text-red-400">
               <Trash2 size={16} />
             </button>
           </div>
@@ -92,38 +94,38 @@ export default function DeviceDetailPage() {
 
       {editing ? (
         <Card className="mb-6">
-          <div className="font-semibold mb-3">Edit Device</div>
+          <div className="font-semibold mb-3">{t('deviceDetail.editTitle', 'Edit Device')}</div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">Name</label>
+              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">{t('deviceDetail.nameLabel', 'Name')}</label>
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                 className="w-full px-3 py-2 rounded-[var(--radius-sm)] text-sm" />
             </div>
             <div className="flex-1">
-              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">Type</label>
+              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">{t('deviceDetail.typeLabel', 'Type')}</label>
               <input value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
                 className="w-full px-3 py-2 rounded-[var(--radius-sm)] text-sm" />
             </div>
             <div className="flex-1">
-              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">Status</label>
+              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">{t('deviceDetail.statusLabel', 'Status')}</label>
               <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
                 className="w-full px-3 py-2 rounded-[var(--radius-sm)] text-sm">
-                <option value="online">Online</option>
-                <option value="warning">Warning</option>
-                <option value="offline">Offline</option>
+                <option value="online">{t('deviceDetail.status.online', 'Online')}</option>
+                <option value="warning">{t('deviceDetail.status.warning', 'Warning')}</option>
+                <option value="offline">{t('deviceDetail.status.offline', 'Offline')}</option>
               </select>
             </div>
-            <button onClick={handleSave} className="px-4 py-2 rounded-[var(--radius-sm)] bg-[var(--emerald)] text-white text-sm font-medium">Save</button>
+            <button onClick={handleSave} className="px-4 py-2 rounded-[var(--radius-sm)] bg-[var(--emerald)] text-white text-sm font-medium">{t('deviceDetail.save', 'Save')}</button>
           </div>
         </Card>
       ) : null}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Device ID', value: device.id, icon: <Cpu size={14} /> },
-          { label: 'Type', value: device.type, icon: <Cpu size={14} /> },
-          { label: 'Status', value: device.status, icon: <Wifi size={14} /> },
-          { label: 'Last Seen', value: timeSince(device.last_seen), icon: <Clock size={14} /> },
+          { label: t('deviceDetail.statDeviceId', 'Device ID'), value: device.id, icon: <Cpu size={14} /> },
+          { label: t('deviceDetail.statType', 'Type'), value: device.type, icon: <Cpu size={14} /> },
+          { label: t('deviceDetail.statStatus', 'Status'), value: device.status, icon: <Wifi size={14} /> },
+          { label: t('deviceDetail.statLastSeen', 'Last Seen'), value: timeSince(device.last_seen), icon: <Clock size={14} /> },
         ].map(({ label, value, icon }) => (
           <Card key={label}>
             <div className="flex items-center gap-2 text-[var(--text-disabled)] text-[10px] uppercase mb-1">{icon} {label}</div>
@@ -134,20 +136,20 @@ export default function DeviceDetailPage() {
 
       {metadata && (
         <Card className="mb-6">
-          <div className="flex items-center gap-2 font-semibold mb-3"><MapPin size={14} /> Metadata</div>
+          <div className="flex items-center gap-2 font-semibold mb-3"><MapPin size={14} /> {t('deviceDetail.metadata', 'Metadata')}</div>
           <div className="grid grid-cols-2 gap-3 text-sm">
-            {metadata.location_lat && <div><span className="text-[var(--text-disabled)]">Lat:</span> {metadata.location_lat}</div>}
-            {metadata.location_lng && <div><span className="text-[var(--text-disabled)]">Lng:</span> {metadata.location_lng}</div>}
-            {metadata.firmware_version && <div><span className="text-[var(--text-disabled)]">Firmware:</span> {metadata.firmware_version}</div>}
-            {metadata.description && <div className="col-span-2"><span className="text-[var(--text-disabled)]">Description:</span> {metadata.description}</div>}
+            {metadata.location_lat && <div><span className="text-[var(--text-disabled)]">{t('deviceDetail.latLabel', 'Lat:')}</span> {metadata.location_lat}</div>}
+            {metadata.location_lng && <div><span className="text-[var(--text-disabled)]">{t('deviceDetail.lngLabel', 'Lng:')}</span> {metadata.location_lng}</div>}
+            {metadata.firmware_version && <div><span className="text-[var(--text-disabled)]">{t('deviceDetail.firmwareLabel', 'Firmware:')}</span> {metadata.firmware_version}</div>}
+            {metadata.description && <div className="col-span-2"><span className="text-[var(--text-disabled)]">{t('deviceDetail.descriptionLabel', 'Description:')}</span> {metadata.description}</div>}
           </div>
         </Card>
       )}
 
       <Card>
-        <div className="font-semibold mb-3">Recent Readings ({readings.length})</div>
+        <div className="font-semibold mb-3">{t('deviceDetail.recentReadings', 'Recent Readings ({count})', { count: readings.length })}</div>
         {readings.length === 0 ? (
-          <div className="text-[var(--text-disabled)] text-sm py-4 text-center">No readings recorded yet</div>
+          <div className="text-[var(--text-disabled)] text-sm py-4 text-center">{t('deviceDetail.noReadings', 'No readings recorded yet')}</div>
         ) : (
           <div className="max-h-[400px] overflow-y-auto space-y-2">
             {readings.slice(0, 50).map((r) => (

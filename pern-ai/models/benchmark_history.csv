@@ -1,0 +1,16 @@
+horizon,window_days,available,best_center,best_rmse,best_mae,tol3_accuracy,n_eval_pairs,verdict_24h
+1d,7,True,persistence,0.823,0.607,0.9521,480,above band
+1d,14,True,persistence,0.823,0.607,0.9521,480,above band
+1d,30,True,persistence,0.823,0.607,0.9521,480,above band
+1d,90,True,persistence,0.823,0.607,0.9521,480,above band
+1d,365,True,anomaly,0.746,0.572,0.9625,480,above band
+7d,7,True,persistence,1.667,1.339,0.6937,480,below band by 0.6 pts
+7d,14,True,persistence,1.667,1.339,0.6937,480,below band by 0.6 pts
+7d,30,True,persistence,1.667,1.339,0.6937,480,below band by 0.6 pts
+7d,90,True,persistence,1.667,1.339,0.6937,480,below band by 0.6 pts
+7d,365,True,anomaly,1.116,0.943,0.875,480,above band
+30d,7,True,persistence,2.563,2.096,0.4771,480,within band
+30d,14,True,persistence,2.563,2.096,0.4771,480,within band
+30d,30,True,persistence,2.563,2.096,0.4771,480,within band
+30d,90,True,persistence,2.563,2.096,0.4771,480,within band
+30d,365,True,climatology,1.723,1.413,0.6208,480,above band

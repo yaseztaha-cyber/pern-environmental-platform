@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PERN — Predictive Environmental Risk Network</title>
+    <meta
+      name="description"
+      content="Real-time monitoring, 24-hour pollution forecasting, and unified risk scoring for air, water, and soil. Built for the Nile Delta."
+    />
+    <meta name="theme-color" content="#020617" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23020617'/%3E%3Cpath d='M7 21c3 0 3-4 6-4s3 3 6 3 3-7 6-7' stroke='%2300d4aa' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='25' cy='13' r='2.2' fill='%2300d4aa'/%3E%3C/svg%3E"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PERN — Predictive Environmental Risk Network" />
+    <meta
+      property="og:description"
+      content="Real-time monitoring, 24-hour pollution forecasting, and unified risk scoring for air, water, and soil. Built for the Nile Delta."
+    />
+    <meta property="og:site_name" content="PERN" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="PERN — Predictive Environmental Risk Network" />
+    <meta
+      name="twitter:description"
+      content="Real-time monitoring, 24-hour pollution forecasting, and unified risk scoring for air, water, and soil."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Instant boot splash — shown while the single-file bundle parses,
+         auto-removed when React mounts. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: #020617;
+        color: #f8fafc;
+        font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+      }
+      #splash .sp-logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        text-transform: none;
+      }
+      #splash .sp-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        border: 1px solid rgba(0, 212, 170, 0.35);
+        background: linear-gradient(160deg, rgba(0, 212, 170, 0.25), rgba(14, 165, 233, 0.08));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.12),
+          0 0 24px -6px rgba(0, 212, 170, 0.7);
+      }
+      #splash .sp-bar {
+        width: 170px;
+        height: 2px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+      #splash .sp-bar::before {
+        content: "";
+        display: block;
+        height: 100%;
+        width: 40%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #00d4aa, #22d3ee);
+        animation: sp-load 1.1s ease-in-out infinite;
+      }
+      #splash .sp-sub {
+        font-size: 10px;
+        color: #94a3b8;
+      }
+      @keyframes sp-load {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(290%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash .sp-bar::before {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="splash" aria-hidden="true">
+        <div class="sp-logo">
+          <span class="sp-mark"></span>
+          PERN
+        </div>
+        <div class="sp-bar"></div>
+        <div class="sp-sub">Predictive Environmental Risk Network</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

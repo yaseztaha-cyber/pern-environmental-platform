@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 /**
  * PERN Device Context
  *

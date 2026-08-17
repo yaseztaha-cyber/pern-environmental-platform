@@ -175,6 +175,34 @@ function broadcastDeviceHeartbeat(payload) {
   });
 }
 
+function broadcastOtaStatus(payload) {
+  const message = JSON.stringify({
+    type: 'device-ota-status',
+    ...payload,
+    timestamp: Date.now(),
+  });
+
+  clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function broadcastConfigAck(payload) {
+  const message = JSON.stringify({
+    type: 'device-config-ack',
+    ...payload,
+    timestamp: Date.now(),
+  });
+
+  clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
 function getClientCount() {
   return clients.size;
 }
@@ -187,5 +215,7 @@ module.exports = {
   broadcastSensorReading,
   broadcastAlert,
   broadcastDeviceHeartbeat,
+  broadcastOtaStatus,
+  broadcastConfigAck,
   getClientCount,
 };

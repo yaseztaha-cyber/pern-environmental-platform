@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useData } from '../lib/data-provider';
 import { generateValidationReport } from '../lib/validation-service';
+import { useI18n } from '../lib/i18n';
 import { PageHeader, Card, Btn, SectionTitle, EmptyState } from '../components/ui';
 import { showToast } from '../components/Toast';
 import { ShieldCheck } from 'lucide-react';
 
 export default function RealDataValidation() {
+  const { t } = useI18n();
   const { data, hasRealData } = useData();
   const [city, setCity] = useState('Cairo');
   const [results, setResults] = useState<any>(null);
@@ -21,7 +23,7 @@ export default function RealDataValidation() {
       setResults(report);
     } catch (error) {
       console.error('Validation failed:', error);
-      showToast('Validation failed. Please try again.', 'error');
+      showToast(t('dataValidation.failed', 'Validation failed. Please try again.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -30,44 +32,44 @@ export default function RealDataValidation() {
   return (
     <div>
       <PageHeader
-        title="Real Data Validation"
-        subtitle="Compare PERN predictions with real-world OpenAQ data"
+        title={t('dataValidation.title', 'Real Data Validation')}
+        subtitle={t('dataValidation.subtitle', 'Compare PERN predictions with real-world OpenAQ data')}
       />
 
       {!hasRealData && (
         <EmptyState
           icon={<ShieldCheck size={22} />}
-          title="No live sensor data"
-          message="Connect a device and enter Live Mode to validate virtual sensor accuracy against real-world OpenAQ data."
+          title={t('dataValidation.noLiveData', 'No live sensor data')}
+          message={t('dataValidation.noLiveDataHint', 'Connect a device and enter Live Mode to validate virtual sensor accuracy against real-world OpenAQ data.')}
         />
       )}
 
       <Card className="mb-6" hover={false}>
         <div className="flex gap-4 items-end">
           <div className="flex-1">
-            <label className="text-xs text-[var(--text-tertiary)]">City</label>
+            <label className="text-xs text-[var(--text-tertiary)]">{t('dataValidation.city', 'City')}</label>
             <input
               type="text"
               value={city}
               onChange={e => setCity(e.target.value)}
               className="w-full mt-1 bg-[var(--surface)] px-4 py-3 rounded-[var(--radius-sm)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--emerald)]"
-              placeholder="Cairo"
+              placeholder={t('realDataValidation.cityPlaceholder', 'Cairo')}
             />
           </div>
           <Btn variant="primary" onClick={runValidation} disabled={loading || !hasRealData} loading={loading}>
-            {loading ? 'Validating...' : 'Compare with Real Data'}
+            {loading ? t('dataValidation.validating', 'Validating...') : t('dataValidation.compare', 'Compare with Real Data')}
           </Btn>
         </div>
       </Card>
 
       {results && (
         <Card hover={false}>
-          <SectionTitle>Validation Results</SectionTitle>
+          <SectionTitle>{t('dataValidation.results', 'Validation Results')}</SectionTitle>
 
           {results.success ? (
             <>
               <div className="mb-6">
-                <div className="text-sm text-[var(--text-tertiary)]">Average Accuracy</div>
+                <div className="text-sm text-[var(--text-tertiary)]">{t('dataValidation.averageAccuracy', 'Average Accuracy')}</div>
                 <div className="text-5xl font-semibold text-[var(--emerald)] tracking-tighter">
                   {results.averageAccuracy}%
                 </div>
@@ -79,11 +81,11 @@ export default function RealDataValidation() {
                     <div className="flex justify-between">
                       <div>
                         <div className="font-medium text-[var(--text-primary)]">{r.parameter}</div>
-                        <div className="text-sm text-[var(--text-tertiary)]">Difference: {r.difference}</div>
+                        <div className="text-sm text-[var(--text-tertiary)]">{t('dataValidation.difference', 'Difference: {value}', { value: r.difference })}</div>
                       </div>
                       <div className="text-right">
                         <div className="font-mono text-2xl text-[var(--text-primary)]">{r.accuracy}%</div>
-                        <div className="text-xs text-[var(--text-tertiary)]">Accuracy</div>
+                        <div className="text-xs text-[var(--text-tertiary)]">{t('dataValidation.accuracy', 'Accuracy')}</div>
                       </div>
                     </div>
                   </div>

@@ -37,28 +37,35 @@ async function verifyLogtoToken(token) {
  * Enforces authentication when ENFORCE_AUTH=true.
  */
 async function authenticateToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers.authorization || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match ? match[1] : null;
+  const enforceAuth = process.env.ENFORCE_AUTH === 'true';
 
   if (!token) {
-    if (ENFORCE_AUTH) {
+    if (enforceAuth) {
       return res.status(401).json({ error: 'Unauthorized: Access token is missing' });
     }
     // Graceful fallback for local development when auth is not enforced
     req.user = { sub: 'dev-user', role: 'admin' };
-    return next();
-  }
-
-  const result = await verifyLogtoToken(token);
-  if (!result.valid) {
-    if (ENFORCE_AUTH) {
-      return res.status(401).json({ error: 'Unauthorized: Invalid token', details: result.error });
+  } else {
+    const result = await verifyLogtoToken(token);
+    if (!result.valid) {
+      if (enforceAuth) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid token', details: result.error });
+      }
+      req.user = { sub: 'dev-user', role: 'admin' };
+    } else {
+      req.user = result.payload;
     }
-    req.user = { sub: 'dev-user', role: 'admin' };
-    return next();
   }
 
-  req.user = result.payload;
+  // Multi-tenancy: attach organization / user context from headers
+  const orgId = req.headers['x-organization-id'];
+  const userId = req.headers['x-user-id'];
+  if (orgId) req.orgId = orgId;
+  if (userId) req.userId = userId;
+
   next();
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useI18n } from '../lib/i18n';
 import {
   MessageCircle,
@@ -14,12 +14,14 @@ import {
   Check,
   PanelLeftClose,
   PanelLeftOpen,
+  Copy,
+  RotateCcw,
+  BookOpen,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiClient } from '../lib/api-client';
 import { useAuth } from '../lib/auth-context';
-import { Card, Btn, SectionTitle } from '../components/ui';
 
 interface Message {
   id: string;
@@ -27,6 +29,7 @@ interface Message {
   content: string;
   timestamp: string;
   toolsUsed?: string[];
+  citations?: string[];
 }
 
 interface Conversation {
@@ -36,6 +39,21 @@ interface Conversation {
   updatedAt: string;
 }
 
+function TypingIndicator() {
+  const { t } = useI18n();
+  return (
+    <span className="inline-flex items-center gap-1 py-1" aria-label={t('chatbot.typing', 'AI is typing')}>
+      {[0, 1, 2].map(i => (
+        <span
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] animate-bounce"
+          style={{ animationDelay: `${i * 0.15}s` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 export default function Chatbot() {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -43,8 +61,10 @@ export default function Chatbot() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const regenRef = useRef<{ text: string; convId: string | null } | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
@@ -52,16 +72,30 @@ export default function Chatbot() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
       const convs = await apiClient.getConversations();
       setConversations(Array.isArray(convs) ? convs : []);
     } catch {
       setConversations([]);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadConversations(); }, []);
+  useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  const loadMessages = useCallback(async (convId: string) => {
+    try {
+      const msgs = await apiClient.getConversationMessages(convId);
+      setMessages(Array.isArray(msgs) ? msgs.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp || m.created_at,
+        toolsUsed: Array.isArray(m.toolsUsed) ? m.toolsUsed : (Array.isArray(m.metadata?.toolsUsed) ? m.metadata.toolsUsed : undefined),
+        citations: Array.isArray(m.metadata?.citations) ? m.metadata.citations : undefined,
+      })) : []);
+    } catch { setMessages([]); }
+  }, []);
 
   useEffect(() => {
     if (currentConversationId) {
@@ -69,21 +103,12 @@ export default function Chatbot() {
     } else {
       setMessages([]);
     }
-  }, [currentConversationId]);
-
-  const loadMessages = async (convId: string) => {
-    try {
-      const msgs = await apiClient.getConversationMessages(convId);
-      setMessages(Array.isArray(msgs) ? msgs.map((m: any) => ({
-        id: m.id, role: m.role, content: m.content, timestamp: m.timestamp, toolsUsed: m.toolsUsed,
-      })) : []);
-    } catch { setMessages([]); }
-  };
+  }, [currentConversationId, loadMessages]);
 
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  const startNewConversation = () => { setCurrentConversationId(null); setMessages([]); inputRef.current?.focus(); };
+  const startNewConversation = () => { setCurrentConversationId(null); setMessages([]); regenRef.current = null; inputRef.current?.focus(); };
 
   const deleteConversation = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -108,13 +133,30 @@ export default function Chatbot() {
     } catch { /* ignore */ }
   };
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const copyMessage = async (msg: Message) => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      setCopiedId(msg.id);
+      setTimeout(() => setCopiedId(null), 1500);
+    } catch { /* ignore */ }
+  };
+
+  const regenerate = () => {
+    const lastUser = [...messages].reverse().find(m => m.role === 'user');
+    if (!lastUser || loading) return;
+    setMessages(prev => prev.filter(m => m.role === 'assistant'));
+    regenRef.current = { text: lastUser.content, convId: currentConversationId };
+    sendMessage(lastUser.content, currentConversationId);
+  };
+
+  const sendMessage = async (textOverride?: string, convOverride?: string | null) => {
+    const text = (textOverride ?? input).trim();
+    const convId = convOverride !== undefined ? convOverride : currentConversationId;
     if (!text || loading) return;
 
     const userMsg: Message = { id: `user-${Date.now()}`, role: 'user', content: text, timestamp: new Date().toISOString() };
     setMessages((prev) => [...prev, userMsg]);
-    setInput('');
+    if (!textOverride) setInput('');
     setLoading(true);
     setError(null);
 
@@ -125,42 +167,52 @@ export default function Chatbot() {
       const response = await fetch('/api/chatbot/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ message: text, conversationId: currentConversationId }),
+        body: JSON.stringify({ message: text, conversationId: convId }),
       });
 
-      if (!response.ok) throw new Error('Failed to get response');
+      if (!response.ok) throw new Error(t('chatbot.error.failed', 'Failed to get response'));
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response body');
+      if (!reader) throw new Error(t('chatbot.error.noBody', 'No response body'));
 
       const decoder = new TextDecoder();
       let accumulated = '';
-      let newConvId = currentConversationId;
+      let newConvId = convId;
       let toolsUsed: string[] = [];
+      let buffer = '';
+      let finished = false;
 
-      while (true) {
+      while (!finished) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const payload = JSON.parse(line.slice(6));
-              if (payload.error) { setError(payload.error); continue; }
-              if (payload.done) { if (payload.conversationId) newConvId = payload.conversationId; continue; }
-              if (payload.content) { accumulated += payload.content; }
-              if (payload.toolsUsed) { toolsUsed = payload.toolsUsed; }
-              setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: accumulated, toolsUsed } : m));
-            } catch { /* skip malformed */ }
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const raw of events) {
+          for (const line of raw.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            let payload: any;
+            try { payload = JSON.parse(line.slice(6)); } catch { continue; }
+            if (payload.type === 'error' || payload.error) { setError(payload.error || t('chatbot.error.stream', 'Stream error')); continue; }
+            if (payload.type === 'start' && payload.conversationId) newConvId = payload.conversationId;
+            if (payload.type === 'done') {
+              if (payload.conversationId) newConvId = payload.conversationId;
+              finished = true;
+              continue;
+            }
+            if (payload.content) accumulated += payload.content;
+            if (payload.toolsUsed) toolsUsed = payload.toolsUsed;
           }
+          setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: accumulated, toolsUsed } : m));
         }
       }
 
-      if (newConvId && !currentConversationId) { setCurrentConversationId(newConvId); loadConversations(); }
-      else if (newConvId) { loadConversations(); }
+      if (newConvId) {
+        if (!convId) { setCurrentConversationId(newConvId); regenRef.current = { text, convId: newConvId }; }
+        loadConversations();
+      }
     } catch (err: any) {
-      setError(err?.message || 'Failed to send message');
+      setError(err?.message || t('chatbot.error.sendFailed', 'Failed to send message'));
       setMessages((prev) => prev.filter((m) => m.id !== assistantId));
     } finally { setLoading(false); }
   };
@@ -177,10 +229,10 @@ export default function Chatbot() {
   };
 
   const quickActions = [
-    { label: 'EHI Summary', msg: 'What is the current Environmental Health Index reading and what are the main factors affecting it?' },
-    { label: 'All Sensors', msg: 'Show me a comprehensive reading of all connected sensors and their current status.' },
-    { label: 'Anomalies', msg: 'Are there any anomalous readings across the sensors that need attention?' },
-    { label: 'Maintenance', msg: 'Which devices may need maintenance soon based on their current readings and trends?' },
+    { label: t('chatbot.qa.ehi', 'EHI Summary'), msg: 'What is the current Environmental Health Index reading and what are the main factors affecting it?' },
+    { label: t('chatbot.qa.sensors', 'All Sensors'), msg: 'Show me a comprehensive reading of all connected sensors and their current status.' },
+    { label: t('chatbot.qa.anomalies', 'Anomalies'), msg: 'Are there any anomalous readings across the sensors that need attention?' },
+    { label: t('chatbot.qa.maintenance', 'Maintenance'), msg: 'Which devices may need maintenance soon based on their current readings and trends?' },
   ];
 
   const renderMarkdown = (content: string) => (
@@ -191,15 +243,15 @@ export default function Chatbot() {
     <div className="flex h-[calc(100vh-4rem)] -m-4 md:-m-6 lg:-m-8">
       {/* Sidebar */}
       {showSidebar && (
-        <div className="w-64 border-r border-[var(--border)] bg-[var(--bg-1)] flex flex-col shrink-0">
+        <div className="w-64 border-e border-[var(--border)] bg-[var(--bg-1)] flex flex-col shrink-0">
           <div className="p-3 border-b border-[var(--border)]">
             <button onClick={startNewConversation} className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[var(--emerald)] text-white rounded-[var(--radius-sm)] text-sm hover:bg-emerald-500 transition-colors">
-              <Plus size={14} /> New Chat
+              <Plus size={14} /> {t('chatbot.newChat', 'New Chat')}
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
             {conversations.length === 0 && (
-              <p className="p-3 text-xs text-[var(--text-disabled)]">No conversations yet</p>
+              <p className="p-3 text-xs text-[var(--text-disabled)]">{t('chatbot.noConversations', 'No conversations yet')}</p>
             )}
             {conversations.map((conv) => (
               <div
@@ -250,9 +302,9 @@ export default function Chatbot() {
             </div>
           </div>
           {user && (
-            <div className="ml-auto flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+            <div className="ms-auto flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
               <User size={14} />
-              <span>{user.name || user.email || 'User'}</span>
+              <span>{user.name || user.email || t('chatbot.user', 'User')}</span>
             </div>
           )}
         </div>
@@ -271,7 +323,7 @@ export default function Chatbot() {
                   <button
                     key={i}
                     onClick={() => setInput(action.msg)}
-                    className="p-3 text-left text-sm border border-[var(--border)] rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:border-[var(--border-hover)] transition-all"
+                    className="p-3 text-start text-sm border border-[var(--border)] rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:border-[var(--border-hover)] transition-all"
                   >
                     {action.label}
                   </button>
@@ -281,7 +333,7 @@ export default function Chatbot() {
           )}
 
           {messages.map((msg) => (
-            <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={msg.id} className={`group flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {msg.role === 'assistant' && (
                 <div className="w-8 h-8 rounded-[var(--radius-sm)] bg-gradient-to-br from-[var(--emerald)] to-emerald-600 flex items-center justify-center shrink-0 shadow-glow-sm">
                   <Bot size={16} className="text-white" />
@@ -294,13 +346,25 @@ export default function Chatbot() {
               }`}>
                 {msg.role === 'assistant' ? (
                   <div className="text-sm prose prose-sm max-w-none prose-p:text-[var(--text-primary)] prose-headings:text-[var(--text-primary)] prose-code:text-[var(--emerald)] prose-pre:bg-[var(--bg-0)]">
-                    {msg.content ? renderMarkdown(msg.content) : (
-                      <Loader2 size={16} className="animate-spin text-[var(--text-disabled)]" />
-                    )}
+                    {msg.content ? renderMarkdown(msg.content) : <TypingIndicator />}
                   </div>
                 ) : (
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                 )}
+
+                {msg.citations && msg.citations.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-[var(--border)]/60 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-disabled)] flex items-center gap-1 shrink-0">
+                      <BookOpen size={10} /> {t('chatbot.citations', 'Sources')}
+                    </span>
+                    {msg.citations.map((c, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[10px] text-[var(--text-tertiary)]">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[10px] opacity-50">
                     {new Date(msg.timestamp).toLocaleTimeString()}
@@ -314,6 +378,18 @@ export default function Chatbot() {
                       ))}
                     </div>
                   )}
+                  <div className="ms-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {msg.role === 'assistant' && msg.content && (
+                      <button onClick={regenerate} disabled={loading} title={t('chatbot.regenerate', 'Regenerate')} className="p-1 rounded-[var(--radius-xs)] hover:bg-[var(--surface-hover)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)] disabled:opacity-40">
+                        <RotateCcw size={12} />
+                      </button>
+                    )}
+                    {msg.content && (
+                      <button onClick={() => copyMessage(msg)} title={copiedId === msg.id ? t('chatbot.copied', 'Copied!') : t('chatbot.copy', 'Copy')} className="p-1 rounded-[var(--radius-xs)] hover:bg-[var(--surface-hover)] text-[var(--text-disabled)] hover:text-[var(--text-secondary)]">
+                        {copiedId === msg.id ? <Check size={12} className="text-[var(--emerald)]" /> : <Copy size={12} />}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               {msg.role === 'user' && (
@@ -331,7 +407,7 @@ export default function Chatbot() {
           <div className="mx-4 mb-2 p-3 bg-[var(--rose)]/10 border border-[var(--rose)]/20 rounded-[var(--radius-sm)] flex items-center gap-2 text-sm text-[var(--rose)]">
             <AlertTriangle size={16} />
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-auto hover:text-[var(--text-primary)]"><X size={14} /></button>
+            <button onClick={() => setError(null)} className="ms-auto hover:text-[var(--text-primary)]"><X size={14} /></button>
           </div>
         )}
 
@@ -349,7 +425,7 @@ export default function Chatbot() {
               disabled={loading}
             />
             <button
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={!input.trim() || loading}
               className="px-4 py-2.5 bg-[var(--emerald)] text-white rounded-[var(--radius-sm)] hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-glow-sm"
             >

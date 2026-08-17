@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Zap, Wand2, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Zap, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
-import { Badge, Btn } from '../components/ui';
+import { useI18n } from '../lib/i18n';
+import { Badge, Btn, PageHeader } from '../components/ui';
 
 interface GeneratedRule {
   name: string;
@@ -15,6 +16,7 @@ interface GeneratedRule {
 }
 
 export default function RuleGenerator() {
+  const { t } = useI18n();
   const [input, setInput] = useState('');
   const [rule, setRule] = useState<GeneratedRule | null>(null);
   const [error, setError] = useState('');
@@ -22,11 +24,11 @@ export default function RuleGenerator() {
   const [saved, setSaved] = useState(false);
 
   const examples = [
-    'If PM2.5 goes above 50, turn on the fan on device esp32-cario-001',
-    'When pH drops below 6.5, activate the water pump',
-    'If humidity is above 80%, send an alert notification',
-    'When CO2 exceeds 1000 ppm, turn on the ventilation',
-    'If water temperature goes above 30°C, activate cooling',
+    t('ruleGen.ex.0', 'If PM2.5 goes above 50, turn on the fan on device esp32-cario-001'),
+    t('ruleGen.ex.1', 'When pH drops below 6.5, activate the water pump'),
+    t('ruleGen.ex.2', 'If humidity is above 80%, send an alert notification'),
+    t('ruleGen.ex.3', 'When CO2 exceeds 1000 ppm, turn on the ventilation'),
+    t('ruleGen.ex.4', 'If water temperature goes above 30°C, activate cooling'),
   ];
 
   const generate = async () => {
@@ -45,10 +47,10 @@ export default function RuleGenerator() {
       if (result.success && result.rule) {
         setRule(result.rule);
       } else {
-        setError(result.error || 'Failed to generate rule');
+        setError(result.error || t('ruleGen.errorGenerate', 'Failed to generate rule'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed');
+      setError(err instanceof Error ? err.message : t('ruleGen.errorRequest', 'Request failed'));
     } finally {
       setLoading(false);
     }
@@ -60,31 +62,26 @@ export default function RuleGenerator() {
       await apiClient.post('/automation/rules', rule);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save rule');
+      setError(err instanceof Error ? err.message : t('ruleGen.errorSave', 'Failed to save rule'));
     }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Wand2 size={22} className="text-[var(--emerald)]" />
-          AI Rule Generator
-        </h1>
-        <p className="text-[var(--text-tertiary)] text-sm mt-1">
-          Describe an automation rule in natural language and let AI convert it to a structured rule.
-        </p>
-      </div>
+      <PageHeader
+        title={t('ruleGen.title', 'AI Rule Generator')}
+        subtitle={t('ruleGen.subtitle', 'Describe an automation rule in natural language and let AI convert it to a structured rule.')}
+      />
 
       {/* Input */}
       <div className="p-5 rounded-[var(--radius-md)] bg-[var(--bg-1)] border border-[var(--border)]">
         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-          Describe your rule
+          {t('ruleGen.describeRule', 'Describe your rule')}
         </label>
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="e.g. When PM2.5 exceeds 50 µg/m³, turn on the fan"
+          placeholder={t('ruleGen.inputPlaceholder', 'e.g. When PM2.5 exceeds 50 µg/m³, turn on the fan')}
           className="w-full h-28 px-4 py-3 rounded-[var(--radius-sm)] bg-[var(--surface)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)] focus:outline-none focus:border-[var(--emerald)] resize-none text-sm"
         />
         <Btn
@@ -95,21 +92,21 @@ export default function RuleGenerator() {
           className="mt-3 flex items-center gap-2"
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-          {loading ? 'Generating...' : 'Generate Rule'}
+          {loading ? t('ruleGen.generating', 'Generating...') : t('ruleGen.generateRule', 'Generate Rule')}
         </Btn>
       </div>
 
       {/* Examples */}
       <div className="p-4 rounded-[var(--radius-md)] bg-[var(--surface)] border border-[var(--border)]">
         <div className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider mb-2">
-          Example prompts
+          {t('ruleGen.examples', 'Example prompts')}
         </div>
         <div className="flex flex-wrap gap-2">
           {examples.map((ex) => (
             <button
               key={ex}
               onClick={() => setInput(ex)}
-              className="text-xs px-3 py-1.5 rounded-full bg-[var(--bg-1)] border border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--emerald)]/40 hover:text-[var(--emerald)] transition-colors text-left"
+              className="text-xs px-3 py-1.5 rounded-full bg-[var(--bg-1)] border border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--emerald)]/40 hover:text-[var(--emerald)] transition-colors text-left rtl:text-right"
             >
               {ex}
             </button>
@@ -138,28 +135,28 @@ export default function RuleGenerator() {
         >
           <div className="flex items-center gap-2 mb-4">
             <CheckCircle size={18} className="text-[var(--emerald)]" />
-            <span className="font-semibold text-sm">Generated Rule</span>
+            <span className="font-semibold text-sm">{t('ruleGen.generatedRule', 'Generated Rule')}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div>
-              <span className="text-[var(--text-tertiary)] text-xs">Name</span>
+              <span className="text-[var(--text-tertiary)] text-xs">{t('ruleGen.name', 'Name')}</span>
               <div className="font-medium">{rule.name}</div>
             </div>
             <div>
-              <span className="text-[var(--text-tertiary)] text-xs">Condition</span>
+              <span className="text-[var(--text-tertiary)] text-xs">{t('ruleGen.condition', 'Condition')}</span>
               <div className="font-medium">
                 {rule.sensor} {rule.operator} {rule.threshold}
               </div>
             </div>
             <div>
-              <span className="text-[var(--text-tertiary)] text-xs">Action</span>
+              <span className="text-[var(--text-tertiary)] text-xs">{t('ruleGen.action', 'Action')}</span>
               <div className="font-medium">
-                {rule.action.actuator} → {rule.action.command} on {rule.action.device}
+                {rule.action.actuator} → {rule.action.command} {t('ruleGen.onDevice', 'on {device}', { device: rule.action.device })}
               </div>
             </div>
             <div>
-              <span className="text-[var(--text-tertiary)] text-xs">Priority</span>
+              <span className="text-[var(--text-tertiary)] text-xs">{t('ruleGen.priority', 'Priority')}</span>
               <div className="font-medium">
                 <Badge variant={rule.priority >= 7 ? 'error' : rule.priority >= 4 ? 'warning' : 'success'}>
                   {rule.priority}/10
@@ -171,11 +168,11 @@ export default function RuleGenerator() {
           <div className="flex gap-2 mt-4">
             {!saved ? (
               <Btn variant="primary" size="sm" onClick={saveRule} className="text-xs">
-                <Zap size={14} /> Save Rule
+                <Zap size={14} /> {t('ruleGen.saveRule', 'Save Rule')}
               </Btn>
             ) : (
               <Badge variant="success">
-                <CheckCircle size={12} className="mr-1" /> Saved to Automation Rules
+                <CheckCircle size={12} className="mr-1 rtl:ml-1" /> {t('ruleGen.saved', 'Saved to Automation Rules')}
               </Badge>
             )}
           </div>

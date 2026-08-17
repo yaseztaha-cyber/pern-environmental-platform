@@ -11,6 +11,19 @@ function generateRequestId() {
   return `req_${crypto.randomBytes(12).toString('hex')}`;
 }
 
+/**
+ * Middleware that stamps an explicit audit label on a request. `auditLogger`
+ * honours these labels so routes keep meaningful action names (e.g.
+ * 'sensors.ingest') instead of the raw `METHOD /path`.
+ */
+function withAuditLabel(action, resourceType) {
+  return (req, res, next) => {
+    req.auditAction = action;
+    req.auditResource = resourceType;
+    next();
+  };
+}
+
 function auditLogger(req, res, next) {
   const requestId = generateRequestId();
   req.requestId = requestId;
@@ -30,9 +43,9 @@ function auditLogger(req, res, next) {
           request_id: requestId,
           user_id: req.userId || req.user?.sub || req.user?.id || 'anonymous',
           organization_id: req.orgId || null,
-          action: `${req.method} ${req.path}`,
-          resource_type: req.path.split('/')[3] || 'unknown',
-          resource_id: req.params?.id || body?.id || null,
+          action: req.auditAction || `${req.method} ${req.path}`,
+          resource_type: req.auditResource || req.path.split('/')[3] || 'unknown',
+          resource_id: req.params?.id || body?.id || req.body?.id || null,
           details: {
             method: req.method,
             path: req.path,
@@ -65,4 +78,4 @@ function auditLogger(req, res, next) {
   next();
 }
 
-module.exports = { auditLogger, generateRequestId };
+module.exports = { auditLogger, withAuditLabel, generateRequestId };

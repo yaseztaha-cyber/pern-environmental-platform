@@ -3,6 +3,7 @@
  * Open-Meteo based wind forecasting + forward plume trajectory model.
  */
 const logger = require('../utils/logger');
+const db = require('../db');
 
 class WindEngine {
   constructor() {
@@ -14,14 +15,46 @@ class WindEngine {
     const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`;
     const cached = this.cachedForecasts.get(cacheKey);
     if (cached && Date.now() - cached.ts < 3600000) return cached.data;
-    const data = {
-      latitude: lat, longitude: lng, forecasted_at: new Date().toISOString(),
-      hourly: Array.from({ length: 48 }, (_, i) => ({
-        hour: i, wind_speed: Math.round((2 + Math.random() * 15) * 10) / 10,
-        wind_direction: Math.round(Math.random() * 360),
-        temperature: Math.round((15 + Math.random() * 20) * 10) / 10,
-      })),
-    };
+
+    let data;
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=windspeed_10m,winddirection_10m,temperature_2m&forecast_days=2&timezone=UTC`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
+      const body = await res.json();
+      const hourly = body.hourly || {};
+      data = {
+        latitude: lat, longitude: lng, forecasted_at: new Date().toISOString(),
+        source: 'open-meteo',
+        hourly: (hourly.time || []).map((t, i) => ({
+          hour: i,
+          wind_speed: Math.round((hourly.windspeed_10m?.[i] || 0) * 10) / 10,
+          wind_direction: Math.round(hourly.winddirection_10m?.[i] || 0),
+          temperature: Math.round((hourly.temperature_2m?.[i] || 0) * 10) / 10,
+          time: t,
+        })),
+      };
+      // Persist wind trajectories for the first 12 forecast hours
+      for (let i = 0; i < Math.min(12, data.hourly.length); i++) {
+        const h = data.hourly[i];
+        db.saveWindTrajectory({
+          latitude: lat, longitude: lng, altitude: 10,
+          windSpeed: h.wind_speed, windDirection: h.wind_direction,
+          forecastHorizon: i, forecastedAt: h.time,
+        });
+      }
+    } catch (err) {
+      logger.warn('[Wind] Open-Meteo failed, using simulated forecast', { error: err.message });
+      data = {
+        latitude: lat, longitude: lng, forecasted_at: new Date().toISOString(),
+        source: 'simulated',
+        hourly: Array.from({ length: 48 }, (_, i) => ({
+          hour: i, wind_speed: Math.round((2 + Math.random() * 15) * 10) / 10,
+          wind_direction: Math.round(Math.random() * 360),
+          temperature: Math.round((15 + Math.random() * 20) * 10) / 10,
+        })),
+      };
+    }
     this.cachedForecasts.set(cacheKey, { data, ts: Date.now() });
     return data;
   }
@@ -59,6 +92,12 @@ class WindEngine {
     const event = { id: `plume_${Date.now()}`, detected_at: new Date().toISOString(), source_lat: lat, source_lon: lng, pollutant: 'PM2.5', trajectory_path: this.calculatePlumePath(lat, lng, 'PM2.5', 12).trajectory, affected_regions: ['Downwind area'], severity: readings?.pm25 > 100 ? 'critical' : 'moderate' };
     this.plumeEvents.push(event);
     if (this.plumeEvents.length > 100) this.plumeEvents.splice(0, this.plumeEvents.length - 100);
+    db.savePlumeEvent({
+      sourceLat: lat, sourceLon: lng, pollutant: event.pollutant,
+      concentration: readings?.pm25 ?? null,
+      trajectoryPath: event.trajectory_path,
+      affectedRegions: event.affected_regions,
+    });
     return event;
   }
 

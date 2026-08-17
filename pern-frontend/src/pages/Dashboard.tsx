@@ -6,11 +6,12 @@ import {
   AlertTriangle, Users, Droplet, Wind,
   Zap, ArrowRight, TrendingUp, Activity, Loader2,
   Download, FileSpreadsheet, FileText, Server, BarChart3,
-  Globe, Gauge, MapPin
+  Gauge as GaugeIcon
 } from 'lucide-react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
+import { ChartGrid, ChartTooltip, CHART_CURSOR, CHART_TICK } from '../components/charts';
 import { useDevice } from '../lib/device-context';
 import { getEHIHistory } from '../lib/historical-data';
 import { epaAQIMulti } from '../lib/epa-standards';
@@ -18,7 +19,7 @@ import { SENSOR_TYPES } from '../lib/constants';
 import { apiClient } from '../lib/api-client';
 import {
   PageHeader, StatCard, LiveBadge, Btn, Pill, Badge, Card,
-  SectionTitle, ProgressRing, fmt
+  SectionTitle, Gauge, fmt
 } from '../components/ui';
 
 function ComplianceWindBrief({ noRealData }: { noRealData: boolean }) {
@@ -76,7 +77,7 @@ function ComplianceWindBrief({ noRealData }: { noRealData: boolean }) {
   );
 }
 
-function EhiTrendChart({ ehi }: { ehi: number }) {
+function EhiTrendChart({ ehi: _ehi }: { ehi: number }) {
   const { selectedDevice } = useDevice();
   const history = getEHIHistory(selectedDevice?.id);
 
@@ -95,24 +96,18 @@ function EhiTrendChart({ ehi }: { ehi: number }) {
     <div className="h-40 md:h-56">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-          <XAxis dataKey="t" stroke="var(--text-disabled)" tick={false} />
-          <YAxis domain={[0, 100]} stroke="var(--text-disabled)" fontSize={11} />
-          <Tooltip
-            contentStyle={{
-              background: 'var(--bg-2)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 12,
-            }}
-          />
+          <ChartGrid />
+          <XAxis dataKey="t" tick={false} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 100]} tick={CHART_TICK} axisLine={false} tickLine={false} />
+          <Tooltip content={<ChartTooltip />} cursor={CHART_CURSOR} />
           <Line
             type="natural"
             dataKey="ehi"
+            name="EHI"
             stroke="var(--emerald)"
             strokeWidth={2.5}
             dot={{ fill: 'var(--emerald)', strokeWidth: 2, r: 3 }}
-            activeDot={{ r: 5, strokeWidth: 0 }}
+            activeDot={{ r: 5, strokeWidth: 0, fill: 'var(--emerald)' }}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -135,18 +130,11 @@ function ExportDropdown() {
   const handleExport = async (type: 'csv-readings' | 'csv-alerts') => {
     setExporting(true);
     try {
-      let url: string;
       if (type === 'csv-readings') {
-        url = apiClient.exportReadingsCSV(500);
+        await apiClient.downloadCSV(apiClient.exportReadingsCSV(500), 'readings.csv');
       } else {
-        url = apiClient.exportAlertsCSV(200);
+        await apiClient.downloadCSV(apiClient.exportAlertsCSV(200), 'alerts.csv');
       }
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
     } catch (err) {
       console.error('Export failed:', err);
     } finally {
@@ -164,7 +152,7 @@ function ExportDropdown() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-50 bg-[var(--bg-2)] border border-[var(--border)] rounded-[var(--radius-sm)] shadow-lg py-1 min-w-[180px] animate-fade-in">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-[var(--bg-2)] border border-[var(--border)] rounded-[var(--radius-sm)] shadow-lg py-1 min-w-[180px] animate-pop">
             <button onClick={() => handleExport('csv-readings')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors">
               <FileSpreadsheet size={14} /> Sensor Data (CSV)
             </button>
@@ -212,10 +200,6 @@ export default function Dashboard() {
   const aqiValue = aqiSensor ? aqiSensor.value : (noRealData ? '—' : computeAQI(data.physical.pm25));
   const wqiValue = wqiSensor ? wqiSensor.value : (noRealData ? '—' : computeWQI(data.physical.ph));
 
-  const ehiAccent = ehiValid
-    ? data.ehi >= 60 ? 'emerald' : data.ehi >= 40 ? 'amber' : 'rose'
-    : 'emerald';
-
   return (
     <div className="max-w-[1400px] mx-auto">
       <PageHeader
@@ -255,7 +239,7 @@ export default function Dashboard() {
       <Card className="mb-4 md:mb-6 stagger-1" hover={false}>
         <div className="p-4 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-6">
           <div className="flex items-center gap-4 md:gap-6">
-            <ProgressRing value={ehiValid ? data.ehi : 0} size={64} strokeWidth={5} accent={ehiAccent as 'emerald' | 'amber' | 'rose'} />
+            <Gauge value={ehiValid ? data.ehi : 0} max={100} size={96} label="EHI" unit="%" />
             <div>
               <SectionTitle className="text-[var(--emerald)] !mb-1">{t('dashboard.ehi.label')}</SectionTitle>
               <div className="text-3xl md:text-[48px] font-bold tracking-tighter mt-1">{ehiValid ? fmt(data.ehi) : '—'}</div>
@@ -269,13 +253,15 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <div className="text-left md:text-right w-full md:w-auto">
-            <div className="text-lg md:text-xl font-semibold text-[var(--text-primary)]">{data.virtualSensors.length} {t('dashboard.section.virtualSensors')}</div>
-            <div className="text-xs text-[var(--text-tertiary)] mt-1 max-w-[240px]">
-              {t('dashboard.subIndexList')}
-            </div>
-            <Btn variant="ghost" size="sm" className="mt-3 md:mt-4 md:ml-auto" onClick={() => navigate('/ai')}>
-              {t('dashboard.button.viewAiAnalysis')} <ArrowRight size={14} />
+          <div className="flex flex-wrap gap-2">
+            <Btn variant="ghost" size="sm" onClick={() => navigate('/virtual-sensors')}>
+              <GaugeIcon size={13} /> Virtual
+            </Btn>
+            <Btn variant="ghost" size="sm" onClick={() => navigate('/sensors')}>
+              <Activity size={13} /> Sensors
+            </Btn>
+            <Btn variant="primary" size="sm" onClick={() => navigate('/ai')}>
+              <TrendingUp size={13} /> AI Analysis <ArrowRight size={13} />
             </Btn>
           </div>
         </div>

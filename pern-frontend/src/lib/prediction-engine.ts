@@ -3,6 +3,14 @@
  * Holt's Double Exponential Smoothing + Weighted Moving Average + Holt-Winters + Ensemble
  */
 
+import { referencesForDomain, type SourceReference } from './ai-references';
+
+export interface EnsembleWeights {
+  des: number;
+  wma: number;
+  hw: number;
+}
+
 export interface PredictionResult {
   value: number;
   upperBound: number;
@@ -10,6 +18,15 @@ export interface PredictionResult {
   confidence: number;
   method: string;
   rSquared?: number;
+  references?: SourceReference[];
+}
+
+export type TrendDirection = 'rising' | 'falling' | 'stable';
+
+export interface TrendInfo {
+  direction: TrendDirection;
+  magnitude: number;
+  slope: number;
 }
 
 // ==================== Double Exponential Smoothing (Holt's) ====================
@@ -125,13 +142,43 @@ export function holtWinters(
   };
 }
 
+// ==================== Anomaly Detection (IQR method) ====================
+
+export function detectAnomalies(data: number[], threshold = 1.5): number[] {
+  if (data.length < 4) return [];
+  const sorted = [...data].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  const lower = q1 - threshold * iqr;
+  const upper = q3 + threshold * iqr;
+  return data.map((v, i) => (v < lower || v > upper) ? i : -1).filter(i => i >= 0);
+}
+
+// ==================== Trend Detection ====================
+
+export function detectTrendDirection(data: number[]): TrendInfo {
+  if (data.length < 3) return { direction: 'stable', magnitude: 0, slope: 0 };
+  const n = data.length;
+  const indices = Array.from({ length: n }, (_, i) => i);
+  const xMean = (n - 1) / 2;
+  const yMean = data.reduce((a, b) => a + b, 0) / n;
+  const num = indices.reduce((s, i) => s + (i - xMean) * (data[i] - yMean), 0);
+  const den = indices.reduce((s, i) => s + (i - xMean) * (i - xMean), 0);
+  const slope = den > 0 ? num / den : 0;
+  const magnitude = Math.abs(slope);
+  const direction: TrendDirection = slope > 0.01 * yMean ? 'rising' : slope < -0.01 * yMean ? 'falling' : 'stable';
+  return { direction, magnitude, slope };
+}
+
 // ==================== Ensemble Forecast ====================
 
 export function predictWithSeasonality(
   data: number[],
   horizon: number,
   alpha = 0.3,
-  beta = 0.1
+  beta = 0.1,
+  weights?: EnsembleWeights
 ): PredictionResult {
   const des = doubleExponentialSmoothing(data, alpha, beta);
   const wma = weightedMovingAverage(data, Math.min(5, data.length));
@@ -141,7 +188,10 @@ export function predictWithSeasonality(
   const lastWma = wma[wma.length - 1] || 0;
   const hwResult = hw.forecast(horizon);
 
-  const ensembleValue = lastDes * 0.35 + lastWma * 0.25 + hwResult.value * 0.4;
+  const wDes = weights?.des ?? 0.35;
+  const wWma = weights?.wma ?? 0.25;
+  const wHw  = weights?.hw  ?? 0.4;
+  const ensembleValue = lastDes * wDes + lastWma * wWma + hwResult.value * wHw;
 
   const smoothed = des.slice(-20);
   const actual = data.slice(-20);
@@ -163,6 +213,7 @@ export function predictWithSeasonality(
     confidence: calculateEnsembleConfidence(rSquared, data.length, rmse, horizon),
     method: 'Ensemble (DES + WMA + HW)',
     rSquared: Math.round(rSquared * 1000) / 1000,
+    references: referencesForDomain('forecast'),
   };
 }
 
@@ -178,7 +229,8 @@ function calculateEnsembleConfidence(rSquared: number, dataLength: number, rmse:
 
 export function generateAdvancedPrediction(
   data: number[],
-  horizon: number
+  horizon: number,
+  weights?: EnsembleWeights
 ): PredictionResult {
   if (data.length < 3) {
     const avg = data.length > 0 ? data.reduce((a, b) => a + b, 0) / data.length : 50;
@@ -188,8 +240,9 @@ export function generateAdvancedPrediction(
       lowerBound: Math.round(avg * 0.8 * 10) / 10,
       confidence: Math.max(20, 50 - data.length * 5),
       method: 'Insufficient Data (mean fallback)',
+      references: referencesForDomain('forecast'),
     };
   }
 
-  return predictWithSeasonality(data, horizon);
+  return predictWithSeasonality(data, horizon, 0.3, 0.1, weights);
 }

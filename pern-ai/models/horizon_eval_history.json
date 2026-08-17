@@ -1,0 +1,241 @@
+{
+  "alpha": 0.1,
+  "calib_frac": 0.6,
+  "anomaly_normal": "harmonic",
+  "anomaly_window": 1,
+  "anomaly_per_site": true,
+  "anomaly_harmonics": 3,
+  "anomaly_rho_fixed": null,
+  "anomaly_regional": false,
+  "tracks": {
+    "agriculture": {
+      "track": "agriculture",
+      "unit": "deg C",
+      "n_sites": 16,
+      "horizons": {
+        "1d_persistence": {
+          "horizon_days": 1,
+          "center": "persistence",
+          "n_calib_pairs": 10480,
+          "n_eval_pairs": 6992,
+          "rmse": 1.203,
+          "mae": 0.863,
+          "coverage": 0.8924,
+          "interval_width": 3.993,
+          "confidence": 89.3,
+          "target_std": 5.797,
+          "accuracy_within": {
+            "1": 0.6985,
+            "1.667": 0.878,
+            "2": 0.9086,
+            "3": 0.9713
+          },
+          "skill_vs_climatology": 0.705
+        },
+        "1d_climatology": {
+          "horizon_days": 1,
+          "center": "climatology",
+          "n_calib_pairs": 10480,
+          "n_eval_pairs": 6992,
+          "rmse": 2.215,
+          "mae": 1.788,
+          "coverage": 0.8451,
+          "interval_width": 6.508,
+          "confidence": 82.3,
+          "target_std": 5.797,
+          "accuracy_within": {
+            "1": 0.3274,
+            "1.667": 0.5382,
+            "2": 0.6313,
+            "3": 0.8228
+          },
+          "skill_vs_climatology": 0.0
+        },
+        "1d_anomaly": {
+          "horizon_days": 1,
+          "center": "anomaly",
+          "n_calib_pairs": 10480,
+          "n_eval_pairs": 6992,
+          "rmse": 1.131,
+          "mae": 0.815,
+          "coverage": 0.8824,
+          "interval_width": 3.724,
+          "confidence": 89.2,
+          "target_std": 5.797,
+          "accuracy_within": {
+            "1": 0.7107,
+            "1.667": 0.8876,
+            "2": 0.9263,
+            "3": 0.9788
+          },
+          "anomaly_rho": 0.748,
+          "demo": [
+            {
+              "trained_through": "2025-05-27",
+              "predicted_day": "2025-05-28",
+              "center": 24.14,
+              "actual": 22.69,
+              "error": -1.45
+            },
+            {
+              "trained_through": "2025-05-28",
+              "predicted_day": "2025-05-29",
+              "center": 24.04,
+              "actual": 24.44,
+              "error": 0.4
+            }
+          ],
+          "skill_vs_climatology": 0.739
+        },
+        "7d_persistence": {
+          "horizon_days": 7,
+          "center": "persistence",
+          "n_calib_pairs": 10416,
+          "n_eval_pairs": 6960,
+          "rmse": 2.309,
+          "mae": 1.77,
+          "coverage": 0.8596,
+          "interval_width": 7.907,
+          "confidence": 81.4,
+          "target_std": 5.81,
+          "accuracy_within": {
+            "1": 0.3685,
+            "1.667": 0.5685,
+            "2": 0.6467,
+            "3": 0.8287
+          },
+          "skill_vs_climatology": -0.096
+        },
+        "7d_climatology": {
+          "horizon_days": 7,
+          "center": "climatology",
+          "n_calib_pairs": 10416,
+          "n_eval_pairs": 6960,
+          "rmse": 2.206,
+          "mae": 1.78,
+          "coverage": 0.8418,
+          "interval_width": 6.478,
+          "confidence": 82.2,
+          "target_std": 5.81,
+          "accuracy_within": {
+            "1": 0.3286,
+            "1.667": 0.5409,
+            "2": 0.6333,
+            "3": 0.8233
+          },
+          "skill_vs_climatology": 0.0
+        },
+        "7d_anomaly": {
+          "horizon_days": 7,
+          "center": "anomaly",
+          "n_calib_pairs": 10416,
+          "n_eval_pairs": 6960,
+          "rmse": 1.796,
+          "mae": 1.345,
+          "coverage": 0.8572,
+          "interval_width": 5.342,
+          "confidence": 84.8,
+          "target_std": 5.81,
+          "accuracy_within": {
+            "1": 0.4704,
+            "1.667": 0.7124,
+            "2": 0.7908,
+            "3": 0.9188
+          },
+          "anomaly_rho": 0.0,
+          "demo": [
+            {
+              "trained_through": "2025-05-23",
+              "predicted_day": "2025-05-30",
+              "center": 27.97,
+              "actual": 25.74,
+              "error": -2.23
+            },
+            {
+              "trained_through": "2025-05-24",
+              "predicted_day": "2025-05-31",
+              "center": 28.37,
+              "actual": 25.07,
+              "error": -3.3
+            }
+          ],
+          "skill_vs_climatology": 0.337
+        },
+        "30d_persistence": {
+          "horizon_days": 30,
+          "center": "persistence",
+          "n_calib_pairs": 10192,
+          "n_eval_pairs": 6816,
+          "rmse": 3.633,
+          "mae": 2.965,
+          "coverage": 0.8616,
+          "interval_width": 12.25,
+          "confidence": 77.3,
+          "target_std": 5.857,
+          "accuracy_within": {
+            "1": 0.1962,
+            "1.667": 0.3129,
+            "2": 0.3806,
+            "3": 0.5558
+          },
+          "skill_vs_climatology": -1.842
+        },
+        "30d_climatology": {
+          "horizon_days": 30,
+          "center": "climatology",
+          "n_calib_pairs": 10192,
+          "n_eval_pairs": 6816,
+          "rmse": 2.155,
+          "mae": 1.736,
+          "coverage": 0.8512,
+          "interval_width": 6.476,
+          "confidence": 82.8,
+          "target_std": 5.857,
+          "accuracy_within": {
+            "1": 0.3393,
+            "1.667": 0.5552,
+            "2": 0.6458,
+            "3": 0.8345
+          },
+          "skill_vs_climatology": 0.0
+        },
+        "30d_anomaly": {
+          "horizon_days": 30,
+          "center": "anomaly",
+          "n_calib_pairs": 10192,
+          "n_eval_pairs": 6816,
+          "rmse": 1.802,
+          "mae": 1.33,
+          "coverage": 0.8316,
+          "interval_width": 5.195,
+          "confidence": 83.6,
+          "target_std": 5.857,
+          "accuracy_within": {
+            "1": 0.4878,
+            "1.667": 0.7218,
+            "2": 0.8011,
+            "3": 0.9192
+          },
+          "anomaly_rho": 0.0,
+          "demo": [
+            {
+              "trained_through": "2025-05-09",
+              "predicted_day": "2025-06-08",
+              "center": 28.73,
+              "actual": 26.7,
+              "error": -2.03
+            },
+            {
+              "trained_through": "2025-05-10",
+              "predicted_day": "2025-06-09",
+              "center": 28.82,
+              "actual": 27.41,
+              "error": -1.41
+            }
+          ],
+          "skill_vs_climatology": 0.301
+        }
+      }
+    }
+  }
+}

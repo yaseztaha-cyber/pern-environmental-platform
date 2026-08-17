@@ -10,9 +10,10 @@ const express = require('express');
 const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const mqtt = require('mqtt');
 const fetch = require('node-fetch');
-const { verifyLogtoToken } = require('./auth');
+const { authenticateToken } = require('./auth');
 const db = require('./db');
 const logger = require('./utils/logger');
 const { validateEnv } = require('./utils/env-validator');
@@ -21,6 +22,11 @@ const { requireRole, requireOrg } = require('./middleware/rbac');
 const { sanitizeInput } = require('./middleware/sanitize');
 const { validateSensorData } = require('./middleware/validator');
 const requestLogger = require('./middleware/request-logger');
+const { enhancedSecurityHeaders } = require('./middleware/security-headers');
+const { validateQueryParams } = require('./middleware/query-validator');
+const { auditLogger, withAuditLabel } = require('./middleware/audit-logger');
+const { bruteForceProtection } = require('./middleware/brute-force');
+const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 
 validateEnv();
 
@@ -38,9 +44,12 @@ const reportRoutes = require('./routes/reports');
 const alertEngine = require('./services/alert-engine');
 const notificationDispatcher = require('./services/notification-dispatcher');
 const anomalyDetector = require('./services/anomaly-detector');
-const { startActuatorWebSocket, stopActuatorWebSocket, broadcastNotification, broadcastSensorReading, broadcastAlert, broadcastActuatorStatus, broadcastDeviceHeartbeat, getClientCount } = require('./websocket/actuator-ws');
+const { startActuatorWebSocket, stopActuatorWebSocket, broadcastNotification, broadcastSensorReading, broadcastAlert, broadcastActuatorStatus, broadcastDeviceHeartbeat, broadcastOtaStatus, broadcastConfigAck, getClientCount } = require('./websocket/actuator-ws');
 const protocolManager = require('./protocols/protocol-manager');
 const deviceSimulator = require('./device-simulator');
+const { authenticateDevice, verifyDeviceApiKey } = require('./middleware/device-auth');
+const { SENSOR_THRESHOLDS } = require('./services/analysis-engine');
+const { referencesForSensor, toCitation } = require('./services/ai-references');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -72,6 +81,9 @@ app.use(helmet({
   },
 }));
 
+// Additional security headers layered on top of Helmet
+app.use(enhancedSecurityHeaders);
+
 // CORS — restrict origins in all environments
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
@@ -98,6 +110,14 @@ logger.info('PERN Backend starting...');
 // Capped to prevent unbounded memory growth.
 let sensorReadings = [];
 let automationRules = [];
+
+// Transport telemetry — per-channel ingestion counters surfaced in /api/live/status.
+const transportStats = {
+  http: { messages: 0, lastIngestAt: 0 },
+  mqtt: { messages: 0, lastMessageAt: 0 },
+  ws: { clients: 0, messages: 0, lastMessageAt: 0 },
+  adapter: { messages: 0, lastIngestAt: 0 },
+};
 let automationLogs = [];
 
 // Process-level guards — never let an unhandled error crash the service
@@ -121,6 +141,8 @@ mqttClient.on('connect', () => {
   mqttClient.subscribe('pern/devices/+/heartbeat');
   mqttClient.subscribe('pern/devices/+/actuators/+/status');
   mqttClient.subscribe('pern/actuator-status');
+  mqttClient.subscribe('pern/devices/+/ota/status');
+  mqttClient.subscribe('pern/devices/+/config/ack');
 });
 
 // Make MQTT client available to routes
@@ -137,6 +159,14 @@ mqttClient.on('error', (err) => {
 async function ingestReading(reading) {
   sensorReadings.unshift(reading);
   if (sensorReadings.length > 200) sensorReadings.pop();
+
+  // Track per-transport telemetry (source set by the calling entry point).
+  const source = reading._source || 'http';
+  if (transportStats[source]) {
+    transportStats[source].messages++;
+    transportStats[source].lastIngestAt = Date.now();
+    transportStats[source].lastMessageAt = Date.now();
+  }
 
   db.saveSensorReading(reading).catch(e => logger.error('[DB] Save sensor reading failed', { error: e.message }));
   db.saveDeviceReading(reading.device, reading.sensors).catch(e => logger.error('[DB] Save device reading failed', { error: e.message }));
@@ -158,12 +188,15 @@ async function ingestReading(reading) {
   alertEngine.evaluateAlertRules(reading).catch(e =>
     logger.warn('[Ingest] alert eval failed', { error: e.message }));
 
-  // Run anomaly detection (synchronous — lightweight Z-score only)
+  // Run anomaly detection (synchronous — lightweight Z-score only).
+  // Anomalies are broadcast with deterministic statistical evidence and
+  // curated citations attached — no LLM call in the hot path.
   if (reading.sensors) {
     for (const [sensor, value] of Object.entries(reading.sensors)) {
       if (typeof value === 'number') {
         const result = anomalyDetector.analyze(reading.device, sensor, value);
         if (result.isAnomaly) {
+          const threshold = SENSOR_THRESHOLDS[sensor] || null;
           broadcastAlert({
             device: reading.device,
             sensor,
@@ -171,6 +204,16 @@ async function ingestReading(reading) {
             title: `Anomaly detected: ${sensor}`,
             detail: result.reason,
             timestamp: Date.now(),
+            evidence: {
+              zScore: result.zScore,
+              mean: result.mean,
+              stdDev: result.stdDev,
+              value,
+              threshold: threshold ? { warn: threshold.warn, crit: threshold.crit } : null,
+              label: threshold?.label || sensor,
+              unit: threshold?.unit || '',
+            },
+            references: referencesForSensor(sensor).slice(0, 3).map(toCitation),
           });
         }
       }
@@ -184,11 +227,23 @@ mqttClient.on('message', async (topic, message) => {
 
     if (topic.includes('/sensors/') && payload.sensors) {
       const deviceId = payload.device || topic.split('/')[2];
+
+      // Message-level device auth for MQTT (enforced when ENFORCE_DEVICE_AUTH=true)
+      if (process.env.ENFORCE_DEVICE_AUTH === 'true') {
+        const apiKey = payload.apiKey || '';
+        const ok = await verifyDeviceApiKey(deviceId, apiKey);
+        if (!ok) {
+          logger.warn('[MQTT] Rejected unauthenticated sensor message', { deviceId });
+          return;
+        }
+      }
+
       const reading = {
         device: deviceId,
         timestamp: payload.timestamp || Date.now(),
         sensors: payload.sensors,
         _fromMqtt: true,
+        _source: 'mqtt',
       };
 
       // Auto-register device if new
@@ -248,6 +303,32 @@ mqttClient.on('message', async (topic, message) => {
         timestamp: payload.timestamp || Date.now(),
       });
     }
+
+    // Handle OTA progress/result from devices (pern/devices/{id}/ota/status)
+    if (topic.includes('/ota/status')) {
+      const deviceId = topic.split('/')[2];
+      broadcastOtaStatus({
+        device: deviceId,
+        state: payload.state,
+        percent: payload.percent,
+        message: payload.message,
+        version: payload.version,
+        detail: payload.detail || null,
+        timestamp: payload.timestamp || Date.now(),
+      });
+    }
+
+    // Handle config apply acknowledgements (pern/devices/{id}/config/ack)
+    if (topic.includes('/config/ack')) {
+      const deviceId = topic.split('/')[2];
+      broadcastConfigAck({
+        device: deviceId,
+        accepted: payload.accepted,
+        message: payload.message || null,
+        config: payload.config || null,
+        timestamp: payload.timestamp || Date.now(),
+      });
+    }
   } catch (e) {
     logger.error('[MQTT] Parse error', { error: e.message });
   }
@@ -281,34 +362,23 @@ async function sendNtfyNotification(notification) {
 // Enforces authentication when ENFORCE_AUTH=true. By default it degrades
 // gracefully (no token required) so local development without a Logto
 // instance keeps working.
-const ENFORCE_AUTH = process.env.ENFORCE_AUTH === 'true';
-app.use('/api', async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      if (ENFORCE_AUTH) return res.status(401).json({ error: 'Authentication required' });
-      return next();
-    }
-    const token = authHeader.replace('Bearer ', '');
-    const result = await verifyLogtoToken(token);
-    if (result.valid) {
-      req.user = result.payload;
-    } else if (ENFORCE_AUTH) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-  } catch (err) {
-    logger.error('[Auth] Middleware error', { error: err.message });
-    if (ENFORCE_AUTH) return res.status(401).json({ error: 'Authentication error' });
-  }
+app.use(cookieParser());
+app.use('/api', authenticateToken);
 
-  // Multi-tenancy: attach organization / user context from headers
-  const orgId = req.headers['x-organization-id'];
-  const userId = req.headers['x-user-id'];
-  if (orgId) req.orgId = orgId;
-  if (userId) req.userId = userId;
+// Guard every /api query string against injection / prototype pollution.
+app.use('/api', validateQueryParams);
 
-  next();
-});
+// Unify the audit trail: every state-changing /api request gets a request id
+// and (on success) an audit_logs row. Routes may override the default
+// "METHOD /path" label via withAuditLabel(...).
+app.use('/api', auditLogger);
+
+// CSRF (double-submit cookie). Enabled only when ENFORCE_CSRF=true.
+app.use('/api', csrfProtection);
+
+// Security posture + CSRF token endpoints (mounted before route modules so
+// they are not shadowed by catch-all routers).
+app.get('/api/security/csrf-token', csrfTokenEndpoint);
 
 // API Routes
 app.get('/api/health', async (req, res) => {
@@ -324,9 +394,21 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// Published tolerance-accuracy tables from the pern-ai microservice.
+app.get('/api/benchmark', async (req, res) => {
+  const benchmarkClient = require('./services/ai-benchmark-client');
+  const tables = await benchmarkClient.getBenchmark();
+  if (!tables) {
+    return res.status(503).json({ available: false, detail: 'AI benchmark unavailable' });
+  }
+  res.json(tables);
+});
+
 app.get('/api/live/status', async (req, res) => {
   const dbStatus = db.isAvailable() ? 'ok' : 'in-memory';
   const deviceCount = (await db.getDevices().catch(() => [])).length;
+  const adapterStatus = protocolManager.getStatus?.() || [];
+  const adaptersActive = Array.isArray(adapterStatus) ? adapterStatus.some(a => a.connected) : Boolean(adapterStatus);
   res.json({
     mqtt: mqttClient.connected,
     websocketClients: getClientCount(),
@@ -336,6 +418,13 @@ app.get('/api/live/status', async (req, res) => {
     uptime: process.uptime(),
     memoryUsage: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
     timestamp: Date.now(),
+    transports: {
+      http: { active: true, messages: transportStats.http.messages, lastIngestAt: transportStats.http.lastIngestAt || null },
+      mqtt: { active: mqttClient.connected, messages: transportStats.mqtt.messages, lastMessageAt: transportStats.mqtt.lastMessageAt || null },
+      websocket: { active: getClientCount() > 0, clients: getClientCount(), messages: transportStats.ws.messages, lastMessageAt: transportStats.ws.lastMessageAt || null },
+      adapters: { active: adaptersActive, messages: transportStats.adapter.messages, lastIngestAt: transportStats.adapter.lastIngestAt || null },
+    },
+    deviceAuth: { enforcementEnabled: process.env.ENFORCE_DEVICE_AUTH === 'true' },
   });
 });
 
@@ -343,8 +432,13 @@ app.use('/api/persistence', persistenceRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/ai-tools', aiToolsRoutes);
 
-// Audit logs endpoint
-app.get('/api/audit-logs', async (req, res) => {
+// Expose the canonical ingestion path to route modules (e.g. persistence)
+// so every ingest entry point shares the same pipeline.
+app.set('ingestReading', ingestReading);
+app.set('transportStats', transportStats);
+
+// Audit logs endpoint — restricted to admin/manager roles
+app.get('/api/audit-logs', requireRole('admin', 'manager'), async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
     const userId = req.query.userId || undefined;
@@ -358,6 +452,58 @@ app.get('/api/audit-logs', async (req, res) => {
     res.json([]);
   }
 });
+
+// Security posture — reports which protections are active. Powers the
+// SecurityAudit panel in the frontend.
+app.get('/api/security/status', (req, res) => {
+  res.json({
+    authentication: {
+      enforced: process.env.ENFORCE_AUTH === 'true',
+      provider: process.env.LOGTO_ENDPOINT || 'local (Logto)',
+    },
+    deviceAuthentication: {
+      enforced: process.env.ENFORCE_DEVICE_AUTH === 'true',
+      apiKeys: process.env.DEVICE_API_KEYS !== 'false',
+    },
+    helmet: { enabled: true },
+    securityHeaders: { enabled: true },
+    queryValidation: { enabled: true },
+    csrf: {
+      enabled: process.env.ENFORCE_CSRF === 'true',
+      cookie: 'pern_csrf',
+    },
+    rateLimiting: { enabled: true },
+    bruteForceProtection: { enabled: true, maxFailures: 5 },
+    auditLogging: { enabled: true },
+    requestIds: { enabled: true },
+    corsOrigins: (process.env.ALLOWED_ORIGINS || 'localhost:*').split(',').map(s => s.trim()),
+    db: db.isAvailable() ? 'postgres' : 'in-memory',
+    mqtt: Boolean(mqttClient && (mqttClient.connected || mqttClient.connecting)),
+    version: '2.7.0',
+    timestamp: Date.now(),
+  });
+});
+
+// Client-side audit sync (rate-limited so the trail cannot be spammed).
+// Writes a sanitized event into the same audit_logs table the UI reads.
+const clientAuditLimiter = rateLimiter(60000, 30);
+app.post('/api/security/log', clientAuditLimiter, (req, res) => {
+  const { action, resource, details } = req.body || {};
+  if (!action || typeof action !== 'string' || action.length > 100) {
+    return res.status(400).json({ error: 'action is required (max 100 chars)' });
+  }
+  const resourceType = typeof resource === 'string' && resource.length > 0 ? resource.slice(0, 100) : 'client';
+  db.logAuditEvent({
+    user_id: req.userId || req.user?.sub || 'anonymous',
+    action: action.slice(0, 100),
+    resource_type: resourceType,
+    resource_id: '',
+    details: details && typeof details === 'object' ? { client: true, ...details } : { client: true },
+    ip_address: req.ip || '',
+  }).catch(() => {});
+  res.json({ success: true });
+});
+
 app.use('/api/protocols', protocolRoutes);
 app.use('/api/automation', automationControlRoutes);
 app.use('/api/organizations', organizationRoutes);
@@ -372,6 +518,10 @@ app.use('/api/seed', require('./routes/seed'));
 
 // PERN v3 — Global Intelligence routes
 app.use('/api/v3', require('./routes/global-v3'));
+
+// PERN v3 — Public API gateway + key management
+app.use('/public/v1', require('./routes/public'));
+app.use('/api/keys', require('./routes/api-keys'));
 
 // Support tickets (in-memory store for demo, would be DB-backed in production)
 const supportTickets = [];
@@ -438,27 +588,10 @@ app.get('/api/openaq', async (req, res) => {
 const coreWriteLimiter = rateLimiter(60000, 60);
 const sensorWriteLimiter = rateLimiter(60000, 120);
 
-// Audit log middleware — logs the write event after response is sent
-function auditLog(action, resourceType) {
-  return (req, res, next) => {
-    const originalJson = res.json.bind(res);
-    res.json = (body) => {
-      // Log after response is sent (non-blocking)
-      process.nextTick(() => {
-        db.logAuditEvent({
-          user_id: req.userId || req.user?.sub || 'anonymous',
-          action,
-          resource_type: resourceType,
-          resource_id: String(req.params.id || req.body?.id || ''),
-          details: { method: req.method, path: req.path },
-          ip_address: req.ip || '',
-        }).catch(() => {});
-      });
-      return originalJson(body);
-    };
-    next();
-  };
-}
+// Counts any 4xx/5xx JSON error response as a failed attempt, then bans the
+// IP with exponential backoff after MAX_FAILURES. Used on device-auth and
+// actuator command endpoints.
+const isFailure = (req, body) => Boolean(body && body.error);
 
 app.get('/api/sensors', async (req, res) => {
   try {
@@ -470,7 +603,7 @@ app.get('/api/sensors', async (req, res) => {
   }
 });
 
-app.post('/api/sensors', sensorWriteLimiter, validateSensorData, auditLog('sensors.ingest', 'sensor_reading'), async (req, res) => {
+app.post('/api/sensors', sensorWriteLimiter, bruteForceProtection(isFailure), validateSensorData, authenticateDevice, withAuditLabel('sensors.ingest', 'sensor_reading'), async (req, res) => {
   const reading = req.body;
   if (!reading || typeof reading !== 'object' || !reading.sensors || typeof reading.sensors !== 'object') {
     return res.status(400).json({ error: 'Invalid reading: expected { device?, sensors: {} }' });
@@ -481,10 +614,56 @@ app.post('/api/sensors', sensorWriteLimiter, validateSensorData, auditLog('senso
       device: reading.device || 'http-device',
       timestamp: reading.timestamp || Date.now(),
       sensors: reading.sensors,
+      _source: 'http',
     });
     res.json({ success: true });
   } catch (e) {
     logger.error('[API] POST /api/sensors ingest failed', { error: e.message });
+    res.status(500).json({ error: 'Failed to ingest reading' });
+  }
+});
+
+// Unified device ingestion endpoint.
+// Accepts both { device, sensors } and { deviceId, readings } schemas, coerces
+// numeric values, applies device auth (when ENFORCE_DEVICE_AUTH=true), and runs
+// the exact same ingestion pipeline as /api/sensors.
+app.post('/api/readings', sensorWriteLimiter, bruteForceProtection(isFailure), authenticateDevice, withAuditLabel('readings.ingest', 'reading'), async (req, res) => {
+  const body = req.body || {};
+  const device = body.device || body.deviceId || req.deviceId || null;
+  const rawSensors = body.sensors || body.readings || null;
+
+  if (!device || typeof device !== 'string' || device.trim().length < 3) {
+    return res.status(400).json({ error: 'Invalid device id (min 3 chars)' });
+  }
+  if (!rawSensors || typeof rawSensors !== 'object' || Object.keys(rawSensors).length === 0) {
+    return res.status(400).json({ error: 'Invalid payload: expected { device, sensors: {} }' });
+  }
+
+  const sensors = {};
+  for (const [key, value] of Object.entries(rawSensors)) {
+    const num = typeof value === 'number' ? value : Number.parseFloat(value);
+    if (!Number.isFinite(num)) {
+      return res.status(400).json({ error: `Sensor "${key}" must be numeric, got ${JSON.stringify(value)}` });
+    }
+    sensors[key] = num;
+  }
+
+  try {
+    await ingestReading({
+      device: device.trim(),
+      timestamp: body.timestamp ? Number(body.timestamp) : Date.now(),
+      sensors,
+      _source: 'http',
+    });
+    res.json({
+      success: true,
+      device: device.trim(),
+      timestamp: body.timestamp || Date.now(),
+      count: Object.keys(sensors).length,
+      accepted: true,
+    });
+  } catch (e) {
+    logger.error('[API] POST /api/readings ingest failed', { error: e.message });
     res.status(500).json({ error: 'Failed to ingest reading' });
   }
 });
@@ -499,7 +678,7 @@ app.post('/api/ehi-history', coreWriteLimiter, async (req, res) => {
     await db.saveEHIHistory(deviceId, ehi, category);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -540,12 +719,12 @@ app.get('/api/alerts', async (req, res) => {
   }
 });
 
-app.post('/api/alerts', coreWriteLimiter, auditLog('alert.create', 'alert'), async (req, res) => {
+app.post('/api/alerts', coreWriteLimiter, withAuditLabel('alert.create', 'alert'), async (req, res) => {
   try {
     const row = await db.saveAlert(req.body);
     res.json({ success: true, id: row.id });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -554,7 +733,7 @@ app.post('/api/alerts/:id/acknowledge', coreWriteLimiter, async (req, res) => {
     await db.acknowledgeAlert(req.params.id);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -567,14 +746,14 @@ app.get('/api/thresholds', async (req, res) => {
   }
 });
 
-app.post('/api/thresholds', coreWriteLimiter, requireRole('admin', 'manager'), auditLog('threshold.save', 'threshold'), async (req, res) => {
+app.post('/api/thresholds', coreWriteLimiter, requireRole('admin', 'manager'), withAuditLabel('threshold.save', 'threshold'), async (req, res) => {
   const { sensor, min, max, enabled } = req.body;
   if (!sensor) return res.status(400).json({ error: 'sensor required' });
   try {
     await db.saveThreshold(sensor, min, max, enabled !== false);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -587,7 +766,7 @@ app.get('/api/automation/rules', async (req, res) => {
   }
 });
 
-app.post('/api/automation/rules', coreWriteLimiter, requireRole('admin', 'manager'), auditLog('rule.save', 'automation_rule'), async (req, res) => {
+app.post('/api/automation/rules', coreWriteLimiter, requireRole('admin', 'manager'), withAuditLabel('rule.save', 'automation_rule'), async (req, res) => {
   const rule = { ...req.body, id: req.body.id || 'r' + Date.now() };
   try {
     await db.saveAutomationRule(rule);
@@ -595,18 +774,18 @@ app.post('/api/automation/rules', coreWriteLimiter, requireRole('admin', 'manage
     automationEngine.reloadRules(automationRules);
     res.json(rule);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
-app.delete('/api/automation/rules/:id', coreWriteLimiter, requireRole('admin'), auditLog('rule.delete', 'automation_rule'), async (req, res) => {
+app.delete('/api/automation/rules/:id', coreWriteLimiter, requireRole('admin'), withAuditLabel('rule.delete', 'automation_rule'), async (req, res) => {
   try {
     automationRules = automationRules.filter(r => r.id !== req.params.id);
     await db.deleteAutomationRule(req.params.id);
     automationEngine.reloadRules(automationRules);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
@@ -624,12 +803,12 @@ app.post('/api/notifications/send', coreWriteLimiter, async (req, res) => {
     await sendNtfyNotification(req.body);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e);
   }
 });
 
 // ---- Actuator commands routed through backend (audit trail) ----
-app.post('/api/actuators/command', coreWriteLimiter, auditLog('actuator.command', 'actuator'), async (req, res) => {
+app.post('/api/actuators/command', coreWriteLimiter, bruteForceProtection(isFailure), withAuditLabel('actuator.command', 'actuator'), async (req, res) => {
   const { deviceId, actuator, command, params } = req.body || {};
   if (!deviceId || !actuator || !command) {
     return res.status(400).json({ error: 'deviceId, actuator, and command are required' });
@@ -678,8 +857,12 @@ app.post('/api/actuators/command', coreWriteLimiter, auditLog('actuator.command'
 
 // Root cause analysis is now in routes/ai-tools.js
 
+// 404 handler — uniform JSON response for unmatched routes (MUST be before
+// the error handler but after every route module).
+app.use(require('./middleware/not-found'));
+
 // Global error handler (MUST be last)
-const errorHandler = require('./middleware/error-handler');
+const { errorHandler, sendError } = require('./middleware/error-handler');
 app.use(errorHandler);
 
 // Initialize database then load rules, then start simulator
@@ -713,6 +896,16 @@ automationEngine.setBroadcastAlert(broadcastAlert);
 automationEngine.start();
 logger.info('Automation Engine started');
 
+// Start global ingestion scheduler + seed compliance frameworks
+const globalIngestion = require('./services/global-ingestion');
+globalIngestion.setMqttClient(mqttClient);
+const complianceEngine = require('./services/compliance-engine');
+complianceEngine.seedFrameworks().then(() => {
+  if (process.env.ENABLE_INGESTION !== 'false') {
+    globalIngestion.startScheduler();
+  }
+});
+
 // Start WebSocket server for actuator feedback
 startActuatorWebSocket(8081);
 
@@ -739,6 +932,7 @@ const httpServer = app.listen(PORT, () => {
         device: data.device,
         timestamp: data.timestamp || Date.now(),
         sensors: data.sensors,
+        _source: 'adapter',
       }).catch(e => logger.error('[Protocol] Ingest error', { error: e.message }));
     }
   });

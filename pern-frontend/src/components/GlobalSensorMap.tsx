@@ -6,10 +6,11 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { ChartTooltip, CHART_TICK } from './charts';
 import { ResponsiveTable } from './ResponsiveTable';
 import { Card, StatCard, Pill, SectionTitle, Btn } from './ui';
 import { Activity, Thermometer, Wind, CloudRain, Radio, Droplets, RefreshCw } from 'lucide-react';
-import { fetchSensorCommunityData, type SensorCommunityReading } from '../lib/sensor-community-service';
+import { fetchSensorCommunityData } from '../lib/sensor-community-service';
 import { fetchOpenAQData } from '../lib/openaq-service';
 import { apiClient } from '../lib/api-client';
 
@@ -220,12 +221,12 @@ export default function GlobalSensorMap() {
   }, []);
 
   const filtered = filter === 'all' ? sensors : sensors.filter(s => s.source === filter);
-  const counts = {
+  const counts = useMemo(() => ({
     all: sensors.length,
     device: sensors.filter(s => s.source === 'device').length,
     community: sensors.filter(s => s.source === 'community').length,
     openaq: sensors.filter(s => s.source === 'openaq').length,
-  };
+  }), [sensors]);
 
   const sensorsWithPM25 = sensors.filter(s => s.pm25 != null);
 
@@ -380,12 +381,9 @@ export default function GlobalSensorMap() {
                 <SectionTitle>AQI Distribution (PM2.5)</SectionTitle>
                 <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={aqiDist.length ? aqiDist : [{ name: 'No data', value: 1, fill: '#374151' }]}>
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                    <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
                     <YAxis hide />
-                    <Tooltip
-                      contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-                      labelStyle={{ color: '#e2e8f0' }}
-                    />
+                    <Tooltip content={<ChartTooltip />} />
                     <Bar dataKey="value" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -399,9 +397,7 @@ export default function GlobalSensorMap() {
                       <Pie data={sourceDist} cx="50%" cy="50%" innerRadius={30} outerRadius={55} dataKey="value" paddingAngle={2}>
                         {sourceDist.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                       </Pie>
-                      <Tooltip
-                        contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-                      />
+                      <Tooltip content={<ChartTooltip />} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="space-y-2 text-xs">

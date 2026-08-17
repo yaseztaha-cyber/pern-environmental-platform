@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../lib/api-client';
+import { useI18n } from '../lib/i18n';
 import { PageHeader, Card, Pill, Btn, ProgressRing } from '../components/ui';
 import { CheckCircle2, XCircle, AlertTriangle, Download, Globe, BarChart3 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { ChartGrid, ChartTooltip, CHART_TICK } from '../components/charts';
 import type { ComplianceStandard, ComplianceCheck, ComplianceStats, ComplianceTrend } from '../lib/types';
 
 const STANDARDS: ComplianceStandard[] = [
@@ -23,6 +25,7 @@ const STANDARDS: ComplianceStandard[] = [
 const BODIES = ['all', 'WHO', 'EPA', 'Egypt'] as const;
 
 export default function CompliancePage() {
+  const { t } = useI18n();
   const [readings, setReadings] = useState<any[]>([]);
   const [filterBody, setFilterBody] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -41,13 +44,16 @@ export default function CompliancePage() {
     }).catch(() => {});
   }, []);
 
-  const latestSensors: Record<string, number> = {};
-  for (const r of readings.slice(0, 50)) {
-    const sensors = typeof r.sensors === 'string' ? (() => { try { return JSON.parse(r.sensors); } catch { return {}; } })() : (r.sensors || {});
-    for (const [k, v] of Object.entries(sensors)) {
-      if (typeof v === 'number' && !latestSensors[k]) latestSensors[k] = v;
+  const latestSensors: Record<string, number> = useMemo(() => {
+    const latest: Record<string, number> = {};
+    for (const r of readings.slice(0, 50)) {
+      const sensors = typeof r.sensors === 'string' ? (() => { try { return JSON.parse(r.sensors); } catch { return {}; } })() : (r.sensors || {});
+      for (const [k, v] of Object.entries(sensors)) {
+        if (typeof v === 'number' && !latest[k]) latest[k] = v;
+      }
     }
-  }
+    return latest;
+  }, [readings]);
 
   const checks: ComplianceCheck[] = useMemo(() => STANDARDS.map(s => {
     const val = latestSensors[s.sensorKey];
@@ -59,34 +65,42 @@ export default function CompliancePage() {
     return { ...s, current: val, pass, status: pass ? 'pass' as const : 'fail' as const };
   }).filter(c => filterBody === 'all' || c.body === filterBody), [latestSensors, filterBody]);
 
+  const periodLabel = (p: string): string => {
+    switch (p) {
+      case '24-hour': return t('compliance.period.24h', '24-hour');
+      case 'Annual': return t('compliance.period.annual', 'Annual');
+      case '8-hour': return t('compliance.period.8h', '8-hour');
+      case 'Continuous': return t('compliance.period.continuous', 'Continuous');
+      default: return p;
+    }
+  };
+
   const passed = checks.filter(c => c.pass === true).length;
   const failed = checks.filter(c => c.pass === false).length;
   const noData = checks.filter(c => c.pass === null).length;
   const score = checks.length > 0 ? Math.round((checks.filter(c => c.pass === true).length / checks.length) * 100) : 0;
 
-  const tooltipStyle = { background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' };
-
   return (
     <div className="max-w-[1200px] mx-auto">
       <PageHeader
-        title="Environmental Compliance"
-        subtitle="WHO / EPA / Egypt regulatory thresholds"
+        title={t('compliance.title', 'Environmental Compliance')}
+        subtitle={t('compliance.subtitle', 'WHO / EPA / Egypt regulatory thresholds')}
         right={
           <div className="flex items-center gap-3">
             <ProgressRing value={score} size={44} strokeWidth={4} accent={score >= 80 ? 'emerald' : score >= 50 ? 'amber' : 'rose'} />
-            <Pill tone={score >= 80 ? 'emerald' : score >= 50 ? 'amber' : 'rose'}>{score}% compliant</Pill>
-            <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}>
-              <Download size={14} /> Export
+            <Pill tone={score >= 80 ? 'emerald' : score >= 50 ? 'amber' : 'rose'}>{t('compliance.compliant', '{score}% compliant', { score })}</Pill>
+            <Btn variant="ghost" size="sm" onClick={() => apiClient.downloadCSV(apiClient.exportReadingsCSV(), 'readings.csv').catch(() => {})}>
+              <Download size={14} /> {t('common.export', 'Export')}
             </Btn>
           </div>
         }
       />
 
-      <div className="flex gap-2 mb-6 flex-wrap" role="group" aria-label="Filter by regulatory body">
+      <div className="flex gap-2 mb-6 flex-wrap" role="group" aria-label={t('compliance.filterAriaLabel', 'Filter by regulatory body')}>
         {BODIES.map(b => (
           <Btn key={b} variant={filterBody === b ? 'primary' : 'ghost'} size="sm"
             onClick={() => setFilterBody(b)} aria-pressed={filterBody === b}>
-            {b === 'all' ? 'All Standards' : b}
+            {b === 'all' ? t('compliance.allStandards', 'All Standards') : b}
           </Btn>
         ))}
       </div>
@@ -94,39 +108,39 @@ export default function CompliancePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 grid-entrance">
         <Card hover={false} className="text-center">
           <div className="text-2xl font-bold text-[var(--emerald)]">{passed}</div>
-          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">Passing</div>
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">{t('compliance.passing', 'Passing')}</div>
         </Card>
         <Card hover={false} className="text-center">
           <div className="text-2xl font-bold text-[var(--rose)]">{failed}</div>
-          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">Exceeding</div>
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">{t('compliance.exceeding', 'Exceeding')}</div>
         </Card>
         <Card hover={false} className="text-center">
           <div className="text-2xl font-bold text-[var(--amber)]">{noData}</div>
-          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">No Data</div>
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">{t('compliance.noDataStat', 'No Data')}</div>
         </Card>
         <Card hover={false} className="text-center">
           <div className="text-2xl font-bold text-[var(--text-primary)]">{checks.length}</div>
-          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">Filtered Standards</div>
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-1">{t('compliance.filteredStandards', 'Filtered Standards')}</div>
         </Card>
       </div>
 
       {geoStats && (
         <Card hover={false} className="mb-6">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)] mb-3">
-            <Globe size={14} /> Geo-Compliance Overview
+            <Globe size={14} /> {t('compliance.geoOverview', 'Geo-Compliance Overview')}
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-[var(--emerald)]">{geoStats.countries}</div>
-              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Countries</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{t('compliance.countries', 'Countries')}</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-[var(--cyan)]">{geoStats.frameworks}</div>
-              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Frameworks</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{t('compliance.frameworks', 'Frameworks')}</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-[var(--violet)]">{geoStats.overallPct}%</div>
-              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">Avg Compliance</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase">{t('compliance.avgCompliance', 'Avg Compliance')}</div>
             </div>
           </div>
         </Card>
@@ -136,16 +150,16 @@ export default function CompliancePage() {
         <Card className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <BarChart3 size={14} className="text-[var(--violet)]" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Compliance by Country</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">{t('compliance.byCountry', 'Compliance by Country')}</span>
           </div>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trends}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="country" stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
-                <YAxis domain={[0, 100]} stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="compliance" fill="var(--violet)" radius={[4, 4, 0, 0]} />
+                <ChartGrid />
+                <XAxis dataKey="country" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-hover)' }} />
+                <Bar dataKey="compliance" name={t('compliance.chart.compliancePct', 'Compliance %')} fill="var(--violet)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -153,7 +167,7 @@ export default function CompliancePage() {
       )}
 
       {loading ? (
-        <Card hover={false} className="text-center py-12 text-[var(--text-tertiary)]">Loading sensor data...</Card>
+        <Card hover={false} className="text-center py-12 text-[var(--text-tertiary)]">{t('compliance.loading', 'Loading sensor data...')}</Card>
       ) : (
         <Card hover={false}>
           <div className="space-y-1">
@@ -164,17 +178,17 @@ export default function CompliancePage() {
                    c.pass === false ? <XCircle size={16} className="text-[var(--rose)] shrink-0" /> :
                    <AlertTriangle size={16} className="text-[var(--amber)] shrink-0" />}
                   <div className="min-w-0">
-                    <span className="font-medium text-[var(--text-primary)]">{c.param}</span>
-                    <span className="text-[var(--text-tertiary)] ml-2 text-xs">({c.body} {c.period})</span>
+                    <span className="font-medium text-[var(--text-primary)]">{c.param === 'Dissolved O₂' ? t('compliance.param.dissolvedO2', 'Dissolved O₂') : c.param}</span>
+                    <span className="text-[var(--text-tertiary)] ml-2 rtl:ml-0 rtl:mr-2 text-xs">({c.body} {periodLabel(c.period)})</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
-                  <span className="text-xs text-[var(--text-tertiary)]">Limit: {c.limit} {c.unit}</span>
+                  <span className="text-xs text-[var(--text-tertiary)]">{t('compliance.limit', 'Limit: {limit} {unit}', { limit: c.limit, unit: c.unit })}</span>
                   <span className={`text-xs font-mono ${c.pass === true ? 'text-[var(--emerald)]' : c.pass === false ? 'text-[var(--rose)]' : 'text-[var(--amber)]'}`}>
-                    {c.current !== null ? `${c.current} ${c.unit}` : 'N/A'}
+                    {c.current !== null ? `${c.current} ${c.unit}` : t('compliance.na', 'N/A')}
                   </span>
                   <Pill tone={c.pass === true ? 'emerald' : c.pass === false ? 'rose' : 'amber'}>
-                    {c.pass === true ? 'PASS' : c.pass === false ? 'FAIL' : 'N/A'}
+                    {c.pass === true ? t('compliance.status.pass', 'PASS') : c.pass === false ? t('compliance.status.fail', 'FAIL') : t('compliance.na', 'N/A')}
                   </Pill>
                 </div>
               </div>

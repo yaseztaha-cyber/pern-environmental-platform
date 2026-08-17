@@ -1,8 +1,14 @@
 /**
  * HTTP/REST Protocol Adapter
- * Allows devices to send data via simple HTTP POST requests
+ * Allows devices to send data via simple HTTP POST requests.
+ *
+ * Commands are delivered via a poll-based queue:
+ * - sendCommand() enqueues a command for the device
+ * - device polls GET  /api/devices/:deviceId/commands   (returns + drains queue)
+ * - device acks      POST /api/devices/:deviceId/commands/:commandId/ack
  */
 
+const { randomUUID } = require('crypto');
 const express = require('express');
 const ProtocolAdapter = require('./protocol-adapter');
 const logger = require('../utils/logger');
@@ -14,6 +20,12 @@ class HttpAdapter extends ProtocolAdapter {
     this.app = express();
     this.server = null;
     this.dataCallback = null;
+    this.commandQueue = new Map(); // deviceId -> [{ id, command, queuedAt }]
+  }
+
+  _queueFor(deviceId) {
+    if (!this.commandQueue.has(deviceId)) this.commandQueue.set(deviceId, []);
+    return this.commandQueue.get(deviceId);
   }
 
   connect() {
@@ -21,7 +33,7 @@ class HttpAdapter extends ProtocolAdapter {
 
     this.app.post('/api/devices/:deviceId/data', (req, res) => {
       const { deviceId } = req.params;
-      const payload = req.body;
+      const payload = req.body || {};
 
       if (this.dataCallback) {
         this.dataCallback({
@@ -33,6 +45,21 @@ class HttpAdapter extends ProtocolAdapter {
       }
 
       res.json({ success: true, received: true });
+    });
+
+    // Device polls for pending commands (drain on read)
+    this.app.get('/api/devices/:deviceId/commands', (req, res) => {
+      const { deviceId } = req.params;
+      const queue = this._queueFor(deviceId);
+      const batch = queue.splice(0, queue.length);
+      res.json({ success: true, commands: batch });
+    });
+
+    // Device acknowledges a delivered command
+    this.app.post('/api/devices/:deviceId/commands/:commandId/ack', (req, res) => {
+      const { deviceId, commandId } = req.params;
+      logger.debug('[HTTP Adapter] Command acknowledged', { deviceId, commandId });
+      res.json({ success: true, acknowledged: true, commandId });
     });
 
     this.app.get('/health', (req, res) => {
@@ -59,8 +86,14 @@ class HttpAdapter extends ProtocolAdapter {
   }
 
   sendCommand(deviceId, command) {
-    logger.debug('[HTTP Adapter] Command queued', { deviceId, actuator: command.actuator });
-    return { success: true, message: 'Command queued (HTTP push not implemented)' };
+    const id = randomUUID();
+    this._queueFor(deviceId).push({ id, command, queuedAt: new Date().toISOString() });
+    logger.debug('[HTTP Adapter] Command queued', { deviceId, actuator: command.actuator, commandId: id });
+    return { success: true, queued: true, commandId: id, message: 'Command queued for HTTP device (poll /api/devices/:id/commands)' };
+  }
+
+  getPendingCommands(deviceId) {
+    return this._queueFor(deviceId).slice();
   }
 }
 

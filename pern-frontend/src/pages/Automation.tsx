@@ -117,8 +117,8 @@ function AutomationContent() {
   const deleteRule = async (id: string) => {
     setRules(prev => prev.filter(r => r.id !== id));
     await apiClient.deleteAutomationRule(id);
-    addLog(`Deleted rule ${id}`);
-    showToast('Rule deleted', 'success');
+    addLog(t('automation.log.ruleDeleted', 'Deleted rule {id}', { id }));
+    showToast(t('automation.toast.ruleDeleted', 'Rule deleted'), 'success');
   };
 
   const createRule = async () => {
@@ -147,8 +147,8 @@ function AutomationContent() {
         cooldown: 300,
         lastTriggered: 0,
       }]);
-      addLog(`Created rule: ${newRule.name}`);
-      showToast('Rule created', 'success');
+      addLog(t('automation.log.ruleCreated', 'Created rule: {name}', { name: newRule.name }));
+      showToast(t('automation.toast.ruleCreated', 'Rule created'), 'success');
       setShowCreate(false);
       setNewRule({ name: '', sensor: 'pm25', operator: '>', threshold: 45, actuatorDevice: 'ESP32-Cairo-001', actuatorType: 'fan', actuatorCommand: 'on' });
     }
@@ -167,7 +167,7 @@ function AutomationContent() {
         if (value !== undefined) {
           executeAutomationRule(rule, value).then(triggered => {
             if (triggered) {
-              addLog(`Executed: ${rule.name}`);
+              addLog(t('automation.log.ruleExecuted', 'Executed: {name}', { name: rule.name }));
               notifyAutomationTrigger(rule.name, value);
 
               const newStatus: ActuatorStatus = {
@@ -187,7 +187,7 @@ function AutomationContent() {
       });
     }, 8000);
     return () => clearInterval(interval);
-  }, [rules]);
+  }, [rules, t]);
 
   useEffect(() => {
     connectActuatorWebSocket();
@@ -232,36 +232,36 @@ function AutomationContent() {
 
   const testNtfy = async () => {
     const success = await sendNtfyNotification({
-      title: '🧪 PERN Automation Test',
-      message: t('automation.ntfy.testMessage', undefined, { ehi: data.ehi }),
+      title: t('automation.ntfy.testTitle', '🧪 PERN Automation Test'),
+      message: t('automation.ntfy.testMessage', 'Test notification from automation engine. Current EHI: {ehi}', { ehi: data.ehi }),
       priority: 4,
       tags: ['test', 'automation'],
       topic: ntfyTopic
     });
 
     if (success) {
-      addLog('Test notification sent via ntfy.sh');
-      showToast(t('automation.toast.testSent'), 'success');
+      addLog(t('automation.log.testSentViaNtfy', 'Test notification sent via ntfy.sh'));
+      showToast(t('automation.toast.testSent', 'Test notification sent!'), 'success');
     } else {
-      addLog('Failed to send notification');
-      showToast(t('automation.toast.testFailed'), 'error');
+      addLog(t('automation.log.sendFailed', 'Failed to send notification'));
+      showToast(t('automation.toast.testFailed', 'Failed to send notification'), 'error');
     }
   };
 
   const saveTopic = () => {
     localStorage.setItem('pern_ntfy_topic', ntfyTopic);
-    addLog(`ntfy topic saved: ${ntfyTopic}`);
+    addLog(t('automation.log.topicSaved', 'ntfy topic saved: {topic}', { topic: ntfyTopic }));
   };
 
   return (
     <div>
       <PageHeader
-        title={t('automation.title')}
-        subtitle={t('automation.subtitle')}
+        title={t('automation.title', 'Automation Engine')}
+        subtitle={t('automation.subtitle', 'Real ntfy.sh push notifications + device control')}
         right={
           <div className="flex items-center gap-2">
             <Btn variant="primary" onClick={testNtfy}>
-              {t('automation.button.sendTestNotification')}
+              {t('automation.button.sendTestNotification', 'Send Test ntfy Notification')}
             </Btn>
           </div>
         }
@@ -270,7 +270,7 @@ function AutomationContent() {
       <Card hover={false} className="mb-8">
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <label className="section-label block mb-1">{t('automation.label.ntfyTopic')}</label>
+            <label className="section-label block mb-1">{t('automation.label.ntfyTopic', 'ntfy.sh Topic')}</label>
             <input
               type="text"
               value={ntfyTopic}
@@ -279,16 +279,16 @@ function AutomationContent() {
             />
           </div>
           <Btn variant="ghost" onClick={saveTopic} className="mt-5">
-            {t('automation.button.saveTopic')}
+            {t('automation.button.saveTopic', 'Save Topic')}
           </Btn>
         </div>
       </Card>
 
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
-          <SectionTitle>{t('automation.section.activeRules')}</SectionTitle>
+          <SectionTitle>{t('automation.section.activeRules', 'Active Automation Rules (Ordered Execution)')}</SectionTitle>
           <Btn variant="ghost" onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-1 text-sm">
-            <Plus size={14} /> New Rule
+            <Plus size={14} /> {t('automation.newRule', 'New Rule')}
           </Btn>
         </div>
 
@@ -296,17 +296,17 @@ function AutomationContent() {
           <Card hover={false} className="mb-3 border-[var(--emerald)]/30">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div>
-                <label className="text-xs text-[var(--text-tertiary)]">Name</label>
-                <input value={newRule.name} onChange={e => setNewRule(p => ({ ...p, name: e.target.value }))} className="w-full bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded text-sm" placeholder="Rule name" />
+                <label className="text-xs text-[var(--text-tertiary)]">{t('automation.label.name', 'Name')}</label>
+                <input value={newRule.name} onChange={e => setNewRule(p => ({ ...p, name: e.target.value }))} className="w-full bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded text-sm" placeholder={t('automation.placeholder.ruleName', 'Rule name')} />
               </div>
               <div>
-                <label className="text-xs text-[var(--text-tertiary)]">Sensor</label>
+                <label className="text-xs text-[var(--text-tertiary)]">{t('automation.label.sensor', 'Sensor')}</label>
                 <select value={newRule.sensor} onChange={e => setNewRule(p => ({ ...p, sensor: e.target.value }))} className="w-full bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded text-sm">
                   {Object.entries(SENSOR_TYPES).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs text-[var(--text-tertiary)]">Condition</label>
+                <label className="text-xs text-[var(--text-tertiary)]">{t('automation.label.condition', 'Condition')}</label>
                 <div className="flex gap-1">
                   <select value={newRule.operator} onChange={e => setNewRule(p => ({ ...p, operator: e.target.value }))} className="bg-[var(--surface)] border border-[var(--border)] px-2 py-1.5 rounded text-sm w-16">
                     <option value=">">{`>`}</option><option value="<">{`<`}</option><option value=">=">{`>=`}</option><option value="<=">{`<=`}</option><option value="==">==</option>
@@ -315,7 +315,7 @@ function AutomationContent() {
                 </div>
               </div>
               <div>
-                <label className="text-xs text-[var(--text-tertiary)]">Actuator</label>
+                <label className="text-xs text-[var(--text-tertiary)]">{t('automation.label.actuator', 'Actuator')}</label>
                 <div className="flex gap-1">
                   <select value={newRule.actuatorType} onChange={e => setNewRule(p => ({ ...p, actuatorType: e.target.value }))} className="bg-[var(--surface)] border border-[var(--border)] px-2 py-1.5 rounded text-sm flex-1">
                     <option>fan</option><option>pump</option><option>relay</option><option>buzzer</option><option>led</option>
@@ -327,8 +327,8 @@ function AutomationContent() {
               </div>
             </div>
             <div className="flex gap-2 mt-3">
-              <Btn variant="primary" onClick={createRule} className="text-xs">Create Rule</Btn>
-              <Btn variant="ghost" onClick={() => setShowCreate(false)} className="text-xs">Cancel</Btn>
+              <Btn variant="primary" onClick={createRule} className="text-xs">{t('automation.createRule', 'Create Rule')}</Btn>
+              <Btn variant="ghost" onClick={() => setShowCreate(false)} className="text-xs">{t('common.cancel', 'Cancel')}</Btn>
             </div>
           </Card>
         )}
@@ -339,16 +339,16 @@ function AutomationContent() {
               <div>
                 <div className="font-semibold text-[var(--text-primary)]">{rule.name}</div>
                 <div className="text-xs text-[var(--text-tertiary)] mt-px">
-                   IF {SENSOR_TYPES[rule.sensor as keyof typeof SENSOR_TYPES]?.name ?? rule.sensor} {rule.operator} {rule.threshold} → {rule.action.actuator} {rule.action.command}
+                   {t('automation.if', 'IF')} {SENSOR_TYPES[rule.sensor as keyof typeof SENSOR_TYPES]?.name ?? rule.sensor} {rule.operator} {rule.threshold} → {rule.action.actuator} {rule.action.command}
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <Toggle
                   checked={rule.enabled}
                   onChange={() => toggleRule(rule.id)}
-                  label={rule.enabled ? t('automation.status.enabled') : t('automation.status.disabled')}
+                  label={rule.enabled ? t('automation.status.enabled', 'ENABLED') : t('automation.status.disabled', 'DISABLED')}
                 />
-                <button onClick={() => deleteRule(rule.id)} className="text-[var(--text-tertiary)] hover:text-[var(--rose)] transition-colors p-1" title="Delete rule">
+                <button onClick={() => deleteRule(rule.id)} className="text-[var(--text-tertiary)] hover:text-[var(--rose)] transition-colors p-1" title={t('automation.deleteRule', 'Delete rule')}>
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -359,12 +359,12 @@ function AutomationContent() {
 
       <div className="mb-8">
         <SectionTitle className="flex items-center gap-2">
-          {t('automation.section.actuatorStatus')}
-          <Pill tone="emerald">{t('automation.badge.live')}</Pill>
+          {t('automation.section.actuatorStatus', 'Real Actuator Status')}
+          <Pill tone="emerald">{t('automation.badge.live', 'LIVE')}</Pill>
         </SectionTitle>
         {actuatorStatuses.length === 0 ? (
           <Card hover={false} className="text-sm text-[var(--text-tertiary)] border-l-[3px] border-l-[var(--emerald)]">
-            {t('automation.emptyState.noActuatorCommands')}
+            {t('automation.emptyState.noActuatorCommands', 'No actuator commands sent yet. Rules will update this section when triggered.')}
           </Card>
         ) : (
           <div className="grid md:grid-cols-2 gap-3 grid-entrance">
@@ -372,7 +372,7 @@ function AutomationContent() {
               <Card key={i} hover={false} className="flex justify-between items-center">
                 <div>
                   <div className="font-medium text-[var(--text-primary)]">{status.device} — {status.actuator}</div>
-                  <div className="text-xs text-[var(--text-tertiary)]">{t('automation.label.lastChanged')}{new Date(status.lastChanged).toLocaleTimeString()}</div>
+                  <div className="text-xs text-[var(--text-tertiary)]">{t('automation.label.lastChanged', 'Last changed: ')}{new Date(status.lastChanged).toLocaleTimeString()}</div>
                 </div>
                 <Pill tone={status.state === 'on' ? 'emerald' : 'slate'}>
                   {status.state.toUpperCase()}
@@ -384,10 +384,10 @@ function AutomationContent() {
       </div>
 
       <div>
-        <SectionTitle>{t('automation.section.executionLog')}</SectionTitle>
+        <SectionTitle>{t('automation.section.executionLog', 'Execution Log + Real Actuator Commands')}</SectionTitle>
         <Card hover={false} className="font-mono text-xs bg-black/40 p-4 h-52 overflow-auto">
           {logs.length === 0 ? (
-            <div className="text-[var(--text-disabled)]">{t('automation.emptyState.logPlaceholder')}</div>
+            <div className="text-[var(--text-disabled)]">{t('automation.emptyState.logPlaceholder', 'Rules evaluated every 8s. Real MQTT actuator commands are sent when conditions met.')}</div>
           ) : logs.map((log, i) => <div key={i} className="py-px text-[var(--text-secondary)]">{log}</div>)}
         </Card>
       </div>

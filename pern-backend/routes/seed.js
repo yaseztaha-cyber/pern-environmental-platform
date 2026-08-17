@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../middleware/rbac');
+const { sendError } = require('../middleware/error-handler');
 
 router.post('/demo', requireRole('admin', 'manager'), async (req, res) => {
   try {
@@ -51,7 +52,7 @@ router.post('/demo', requireRole('admin', 'manager'), async (req, res) => {
 
     res.json({ success: true, message: 'Demo data seeded successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 

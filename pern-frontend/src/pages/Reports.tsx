@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { useData } from '../lib/data-provider';
 import { useI18n } from '../lib/i18n';
 import jsPDF from 'jspdf';
-import { FileSpreadsheet, FileText, Download, Loader2, ArrowLeft, Check, BarChart3, Wind } from 'lucide-react';
+import { FileSpreadsheet, FileText, Download, Loader2, Check, BarChart3, Wind } from 'lucide-react';
 import { apiClient } from '../lib/api-client';
-import { PageHeader, Btn, Card, SectionTitle, Pill } from '../components/ui';
+import { PageHeader, Btn, Card, SectionTitle } from '../components/ui';
 
 export default function ReportsPage() {
   const { data } = useData();
@@ -34,18 +34,18 @@ export default function ReportsPage() {
       const date = new Date().toLocaleDateString();
 
       doc.setFontSize(22);
-      doc.text('PERN Environmental Report', 20, 25);
+      doc.text(t('reports.pdfTitle', 'PERN Environmental Report'), 20, 25);
       doc.setFontSize(12);
-      doc.text(`Generated: ${date}  •  ${data.location}`, 20, 33);
-      doc.text(`Report Type: ${type.toUpperCase()}`, 20, 40);
+      doc.text(t('reports.generated', 'Generated: {date}  •  {location}', { date, location: data.location }), 20, 33);
+      doc.text(t('reports.pdfReportType', 'Report Type: {type}', { type: type.toUpperCase() }), 20, 40);
 
       doc.setFontSize(16);
-      doc.text('Environmental Health Index', 20, 55);
+      doc.text(t('reports.pdfEhi', 'Environmental Health Index'), 20, 55);
       doc.setFontSize(32);
       doc.text(String(data.ehi), 20, 68);
 
       doc.setFontSize(14);
-      doc.text('Virtual Sensors Summary', 20, 85);
+      doc.text(t('reports.pdfVirtualSensors', 'Virtual Sensors Summary'), 20, 85);
       
       let y = 95;
       data.virtualSensors.slice(0, 8).forEach((vs, i) => {
@@ -55,7 +55,7 @@ export default function ReportsPage() {
 
       y += 8 * 7;
       doc.setFontSize(14);
-      doc.text('Key Physical Readings', 20, y + 10);
+      doc.text(t('reports.pdfKeyReadings', 'Key Physical Readings'), 20, y + 10);
       y += 20;
       Object.entries(data.physical).slice(0, 6).forEach(([key, val], i) => {
         doc.setFontSize(11);
@@ -66,18 +66,18 @@ export default function ReportsPage() {
       if ((type === 'compliance' || type === 'comprehensive') && complianceStats) {
         y += 50;
         doc.setFontSize(14);
-        doc.text('Compliance Summary', 20, y);
+        doc.text(t('reports.pdfComplianceSummary', 'Compliance Summary'), 20, y);
         y += 8;
         doc.setFontSize(11);
-        doc.text(`Countries monitored: ${complianceStats.countries}`, 25, y);
+        doc.text(t('reports.pdfCountriesMonitored', 'Countries monitored: {count}', { count: complianceStats.countries }), 25, y);
         y += 7;
-        doc.text(`Frameworks tracked: ${complianceStats.frameworks}`, 25, y);
+        doc.text(t('reports.pdfFrameworksTracked', 'Frameworks tracked: {count}', { count: complianceStats.frameworks }), 25, y);
         y += 7;
-        doc.text(`Average Compliance: ${complianceStats.overallPct}%`, 25, y);
+        doc.text(t('reports.pdfAvgCompliance', 'Average Compliance: {pct}%', { pct: complianceStats.overallPct }), 25, y);
         y += 10;
         if (complianceTrends.length > 0) {
           doc.setFontSize(12);
-          doc.text('Compliance by Country:', 20, y);
+          doc.text(t('reports.pdfComplianceByCountry', 'Compliance by Country:'), 20, y);
           y += 7;
           complianceTrends.forEach((ct, i) => {
             doc.setFontSize(10);
@@ -89,11 +89,12 @@ export default function ReportsPage() {
       if ((type === 'wind' || type === 'comprehensive') && windData.length > 0) {
         y += windData.length > 0 ? complianceTrends.length * 6 + 15 : 15;
         doc.setFontSize(14);
-        doc.text('Wind Forecast', 20, y);
+        doc.text(t('reports.pdfWindForecast', 'Wind Forecast'), 20, y);
         y += 8;
         windData.slice(0, 6).forEach((w, i) => {
           doc.setFontSize(10);
-          doc.text(`${w.time || `Period ${i+1}`}: ${w.speed.toFixed(1)} m/s, ${w.direction}° direction`, 25, y + (i * 6));
+          const windTime = w.time || t('reports.period', 'Period {n}', { n: i + 1 });
+          doc.text(t('reports.windEntry', '{time}: {speed} m/s, {direction}° direction', { time: windTime, speed: w.speed.toFixed(1), direction: w.direction }), 25, y + (i * 6));
         });
       }
 
@@ -108,51 +109,51 @@ export default function ReportsPage() {
     }
   };
 
-  const downloadCSV = (type: 'readings' | 'alerts') => {
-    const url = type === 'readings'
-      ? apiClient.exportReadingsCSV(500)
-      : apiClient.exportAlertsCSV(200);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setExported(type);
-    setTimeout(() => setExported(null), 2000);
+  const downloadCSV = async (type: 'readings' | 'alerts') => {
+    try {
+      if (type === 'readings') {
+        await apiClient.downloadCSV(apiClient.exportReadingsCSV(500), 'readings.csv');
+      } else {
+        await apiClient.downloadCSV(apiClient.exportAlertsCSV(200), 'alerts.csv');
+      }
+      setExported(type);
+      setTimeout(() => setExported(null), 2000);
+    } catch (err) {
+      console.error('CSV export failed:', err);
+    }
   };
 
   return (
     <div className="max-w-[1200px] mx-auto">
       <PageHeader
-        title={t('reports.title') || 'Report Generation'}
-        subtitle={`${data.virtualSensors.length} Virtual Sensors • 6 Report Types • CSV + PDF Export`}
+        title={t('reports.title', 'Report Generation')}
+        subtitle={t('reports.subtitle', '{count} Virtual Sensors • 6 Report Types • CSV + PDF Export', { count: data.virtualSensors.length })}
         right={
           <div className="flex items-center gap-2">
             <Btn variant="ghost" size="sm" onClick={() => downloadCSV('readings')}>
               {exported === 'readings' ? <Check size={14} /> : <FileSpreadsheet size={14} />}
-              <span className="hidden sm:inline">Sensors CSV</span>
+              <span className="hidden sm:inline">{t('reports.sensorsCsv', 'Sensors CSV')}</span>
             </Btn>
             <Btn variant="ghost" size="sm" onClick={() => downloadCSV('alerts')}>
               {exported === 'alerts' ? <Check size={14} /> : <FileText size={14} />}
-              <span className="hidden sm:inline">Alerts CSV</span>
+              <span className="hidden sm:inline">{t('reports.alertsCsv', 'Alerts CSV')}</span>
             </Btn>
           </div>
         }
       />
 
       {/* PDF Reports Grid */}
-      <SectionTitle className="mb-4">PDF Reports</SectionTitle>
+      <SectionTitle className="mb-4">{t('reports.sectionPdfReports', 'PDF Reports')}</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
         {[
-          { type: 'daily', label: 'Daily Summary', desc: 'EHI + Key Metrics', bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]', icon: <FileText size={18} /> },
-          { type: 'water', label: 'Water Quality', desc: 'WQI + Virtual Sensors', bg: 'bg-[var(--cyan-dim)]', fg: 'text-[var(--cyan)]', icon: <FileText size={18} /> },
-          { type: 'air', label: 'Air Quality', desc: 'AQI + Pollutant Analysis', bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]', icon: <FileText size={18} /> },
-          { type: 'compliance', label: 'Compliance', desc: `${complianceStats ? `${complianceStats.countries} countries, ${complianceStats.frameworks} frameworks` : 'WHO / EPA / Egypt'}`, bg: 'bg-[rgba(167,139,250,0.12)]', fg: 'text-[var(--violet)]', icon: <BarChart3 size={18} /> },
-          { type: 'wind', label: 'Wind Forecast', desc: `${windData.length > 0 ? `${windData.length} forecast periods` : 'Speed / Direction'}`, bg: 'bg-[var(--amber-dim)]', fg: 'text-[var(--amber)]', icon: <Wind size={18} /> },
-          { type: 'risk', label: 'Risk Assessment', desc: 'Environmental Risk Score', bg: 'bg-[var(--rose-dim)]', fg: 'text-[var(--rose)]', icon: <FileText size={18} /> },
-          { type: 'vulnerable', label: 'Vulnerable Groups', desc: 'Sensitivity Analysis', bg: 'bg-[var(--amber-dim)]', fg: 'text-[var(--amber)]', icon: <FileText size={18} /> },
-          { type: 'comprehensive', label: 'Comprehensive', desc: 'All metrics combined', bg: 'bg-[rgba(34,211,238,0.08)]', fg: 'text-[var(--cyan)]', icon: <FileText size={18} /> },
+          { type: 'daily', label: t('reports.card.daily', 'Daily Summary'), desc: t('reports.card.dailyDesc', 'EHI + Key Metrics'), bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]', icon: <FileText size={18} /> },
+          { type: 'water', label: t('reports.card.water', 'Water Quality'), desc: t('reports.card.waterDesc', 'WQI + Virtual Sensors'), bg: 'bg-[var(--cyan-dim)]', fg: 'text-[var(--cyan)]', icon: <FileText size={18} /> },
+          { type: 'air', label: t('reports.card.air', 'Air Quality'), desc: t('reports.card.airDesc', 'AQI + Pollutant Analysis'), bg: 'bg-[var(--emerald-dim)]', fg: 'text-[var(--emerald)]', icon: <FileText size={18} /> },
+          { type: 'compliance', label: t('reports.card.compliance', 'Compliance'), desc: complianceStats ? t('reports.compliance.countries', '{countries} countries, {frameworks} frameworks', { countries: complianceStats.countries, frameworks: complianceStats.frameworks }) : t('reports.compliance.standards', 'WHO / EPA / Egypt'), bg: 'bg-[rgba(167,139,250,0.12)]', fg: 'text-[var(--violet)]', icon: <BarChart3 size={18} /> },
+          { type: 'wind', label: t('reports.card.wind', 'Wind Forecast'), desc: windData.length > 0 ? t('reports.wind.periods', '{count} forecast periods', { count: windData.length }) : t('reports.wind.fallback', 'Speed / Direction'), bg: 'bg-[var(--amber-dim)]', fg: 'text-[var(--amber)]', icon: <Wind size={18} /> },
+          { type: 'risk', label: t('reports.card.risk', 'Risk Assessment'), desc: t('reports.card.riskDesc', 'Environmental Risk Score'), bg: 'bg-[var(--rose-dim)]', fg: 'text-[var(--rose)]', icon: <FileText size={18} /> },
+          { type: 'vulnerable', label: t('reports.card.vulnerable', 'Vulnerable Groups'), desc: t('reports.card.vulnerableDesc', 'Sensitivity Analysis'), bg: 'bg-[var(--amber-dim)]', fg: 'text-[var(--amber)]', icon: <FileText size={18} /> },
+          { type: 'comprehensive', label: t('reports.card.comprehensive', 'Comprehensive'), desc: t('reports.card.comprehensiveDesc', 'All metrics combined'), bg: 'bg-[rgba(34,211,238,0.08)]', fg: 'text-[var(--cyan)]', icon: <FileText size={18} /> },
         ].map((report) => (
           <Card key={report.type} className="flex flex-col p-4 md:p-5">
             <div className="flex items-center gap-3 mb-3">
@@ -171,9 +172,9 @@ export default function ReportsPage() {
               className="mt-auto w-full"
             >
               {generating === report.type ? (
-                <><Loader2 size={14} className="animate-spin" /> Generating...</>
+                <><Loader2 size={14} className="animate-spin" /> {t('reports.generating', 'Generating...')}</>
               ) : (
-                <><Download size={14} /> Download PDF</>
+                <><Download size={14} /> {t('reports.downloadPdf', 'Download PDF')}</>
               )}
             </Btn>
           </Card>
@@ -181,7 +182,7 @@ export default function ReportsPage() {
       </div>
 
       {/* CSV Quick Export Section */}
-      <SectionTitle className="mb-4">CSV Data Export</SectionTitle>
+      <SectionTitle className="mb-4">{t('reports.csvExport', 'CSV Data Export')}</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
         <Card className="p-4 md:p-5">
           <div className="flex items-center gap-3 mb-3">
@@ -189,12 +190,12 @@ export default function ReportsPage() {
               <FileSpreadsheet size={18} className="text-[var(--emerald)]" />
             </div>
             <div>
-              <div className="font-semibold text-[var(--text-primary)]">Sensor Readings</div>
-              <div className="text-xs text-[var(--text-tertiary)]">All sensor data with timestamps (max 5000 rows)</div>
+              <div className="font-semibold text-[var(--text-primary)]">{t('reports.sensorReadings', 'Sensor Readings')}</div>
+              <div className="text-xs text-[var(--text-tertiary)]">{t('reports.sensorReadingsDesc', 'All sensor data with timestamps (max 5000 rows)')}</div>
             </div>
           </div>
           <Btn variant="primary" onClick={() => downloadCSV('readings')} className="w-full">
-            {exported === 'readings' ? <><Check size={14} /> Downloaded!</> : <><Download size={14} /> Download CSV</>}
+            {exported === 'readings' ? <><Check size={14} /> {t('reports.downloaded', 'Downloaded!')}</> : <><Download size={14} /> {t('reports.downloadCsv', 'Download CSV')}</>}
           </Btn>
         </Card>
         <Card className="p-4 md:p-5">
@@ -203,8 +204,8 @@ export default function ReportsPage() {
               <FileText size={18} className="text-[var(--rose)]" />
             </div>
             <div>
-              <div className="font-semibold text-[var(--text-primary)]">Alert History</div>
-              <div className="text-xs text-[var(--text-tertiary)]">All triggered alerts with severity (max 2000 rows)</div>
+              <div className="font-semibold text-[var(--text-primary)]">{t('reports.alertHistory', 'Alert History')}</div>
+              <div className="text-xs text-[var(--text-tertiary)]">{t('reports.alertHistoryDesc', 'All triggered alerts with severity (max 2000 rows)')}</div>
             </div>
           </div>
           <Btn variant="primary" onClick={() => downloadCSV('alerts')} className="w-full">

@@ -16,18 +16,18 @@ router.post('/virtual-sensors', (req, res) => {
 router.get('/virtual-sensors', (req, res) => {
   res.json(satelliteEngine.listVirtualSensors(req.query.region, req.query.type));
 });
+router.post('/virtual-sensors/schedule', (req, res) => {
+  satelliteEngine.scheduleRegionalScan(req.body.bounds, req.body.interval).then(r => res.json(r));
+});
+router.get('/virtual-sensors/coverage', (req, res) => {
+  res.json(satelliteEngine.getCoverage());
+});
 router.get('/virtual-sensors/:id', (req, res) => {
   const s = satelliteEngine.getVirtualSensor(req.params.id);
   s ? res.json(s) : res.status(404).json({ error: 'Not found' });
 });
 router.delete('/virtual-sensors/:id', (req, res) => {
   res.json({ deleted: true, id: req.params.id });
-});
-router.post('/virtual-sensors/schedule', (req, res) => {
-  satelliteEngine.scheduleRegionalScan(req.body.bounds, req.body.interval).then(r => res.json(r));
-});
-router.get('/virtual-sensors/coverage', (req, res) => {
-  res.json(satelliteEngine.getCoverage());
 });
 
 // ── Global Ingestion ──
@@ -88,8 +88,7 @@ router.get('/compliance/stats', (req, res) => {
 // ── Wind & Plume ──
 router.get('/wind/forecast', (req, res) => {
   const { lat, lng } = req.query;
-  if (!lat || !lng) return res.status(400).json({ error: 'lat and lng query params required' });
-  windEngine.fetchForecast(parseFloat(lat), parseFloat(lng)).then(d => res.json(d));
+  windEngine.fetchForecast(parseFloat(lat || 30), parseFloat(lng || 31)).then(d => res.json(d)).catch(() => res.status(500).json({ error: 'Wind forecast failed' }));
 });
 router.get('/wind/trajectory', (req, res) => {
   const { lat, lng, pollutant, hours } = req.query;

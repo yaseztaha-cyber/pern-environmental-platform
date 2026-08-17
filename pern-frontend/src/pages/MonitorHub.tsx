@@ -1,19 +1,22 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { History, Activity, RadioTower } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 import HistoryPage from './History';
 import SystemStatus from './SystemStatus';
 import ConnectionTest from './ConnectionTest';
 
 type Tab = 'history' | 'status' | 'connection';
-const tabs = [
-  { id: 'history' as const, label: 'History', icon: <History size={14} /> },
-  { id: 'status' as const, label: 'System Status', icon: <Activity size={14} /> },
-  { id: 'connection' as const, label: 'Connection Test', icon: <RadioTower size={14} /> },
+const getTabs = (t: (key: string, fallback?: string) => string) => [
+  { id: 'history' as const, label: t('nav.history', 'History'), icon: <History size={14} /> },
+  { id: 'status' as const, label: t('monitorHub.tab.systemStatus', 'System Status'), icon: <Activity size={14} /> },
+  { id: 'connection' as const, label: t('nav.connectionTest', 'Connection Test'), icon: <RadioTower size={14} /> },
 ];
 
 export default function MonitorHub() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('history');
+  const tabs = getTabs(t);
 
   return (
     <div className="max-w-[1100px] mx-auto">

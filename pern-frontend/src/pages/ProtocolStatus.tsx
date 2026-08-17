@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiClient } from '../lib/api-client';
 import { PageHeader, Card, Pill, SectionTitle, EmptyState } from '../components/ui';
 import { Radio, ServerCrash } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 
 interface ProtocolStatus {
   protocols: Record<string, boolean>;
@@ -9,6 +10,7 @@ interface ProtocolStatus {
 }
 
 export default function ProtocolStatusDashboard() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<ProtocolStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [backendDown, setBackendDown] = useState(false);
@@ -50,19 +52,19 @@ export default function ProtocolStatusDashboard() {
   return (
     <div className="max-w-[1100px] mx-auto">
       <PageHeader
-        title="Protocol Status"
-        subtitle="Multi-protocol device connection monitoring"
+        title={t('protocol.title', 'Protocol Status')}
+        subtitle={t('protocol.subtitle', 'Multi-protocol device connection monitoring')}
         right={
           backendDown
-            ? <Pill tone="rose">Backend offline</Pill>
+            ? <Pill tone="rose">{t('protocol.backendOffline', 'Backend offline')}</Pill>
             : lastUpdated
-              ? <Pill tone="emerald">Live · {lastUpdated}</Pill>
+              ? <Pill tone="emerald">{t('protocol.liveSince', 'Live · {time}', { time: lastUpdated })}</Pill>
               : undefined
         }
       />
 
       {loading ? (
-        <Card className="text-center py-12">Loading protocol status…</Card>
+        <Card className="text-center py-12">{t('protocol.loading', 'Loading protocol status…')}</Card>
       ) : status && Object.keys(status.protocols).length > 0 ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 grid-entrance">
           {Object.entries(status.protocols).map(([name, connected]) => (
@@ -72,7 +74,7 @@ export default function ProtocolStatusDashboard() {
                 <div>
                   <div className="font-semibold text-lg text-[var(--text-primary)]">{name}</div>
                   <div className={`text-sm ${connected ? 'text-[var(--emerald)]' : 'text-[var(--rose)]'}`}>
-                    {connected ? 'Connected' : 'Disconnected'}
+                    {connected ? t('protocol.connected', 'Connected') : t('protocol.disconnected', 'Disconnected')}
                   </div>
                 </div>
               </div>
@@ -83,32 +85,32 @@ export default function ProtocolStatusDashboard() {
         <Card>
           <EmptyState
             icon={backendDown ? <ServerCrash size={22} /> : <Radio size={22} />}
-            title={backendDown ? 'Backend offline' : 'No protocol data'}
+            title={backendDown ? t('protocol.backendOffline', 'Backend offline') : t('protocol.noData', 'No protocol data')}
             message={backendDown
-              ? 'The PERN backend is not reachable. Start it (npm start in pern-backend) to see live protocol status. The page will reconnect automatically.'
-              : 'Protocol status is not available right now.'}
+              ? t('protocol.backendDownHint', 'The PERN backend is not reachable. Start it (npm start in pern-backend) to see live protocol status. The page will reconnect automatically.')
+              : t('protocol.noDataHint', 'Protocol status is not available right now.')}
           />
         </Card>
       )}
 
       <Card className="mt-8" hover={false}>
-        <SectionTitle>Supported Protocols</SectionTitle>
+        <SectionTitle>{t('protocol.section.supported', 'Supported Protocols')}</SectionTitle>
         <div className="grid md:grid-cols-2 gap-4 text-sm grid-entrance">
           <div>
-            <div className="font-medium">MQTT (Primary)</div>
-            <div className="text-[var(--text-tertiary)]">Best for real-time IoT devices</div>
+            <div className="font-medium">{t('protocol.mqttPrimary', 'MQTT (Primary)')}</div>
+            <div className="text-[var(--text-tertiary)]">{t('protocol.mqttPrimary.desc', 'Best for real-time IoT devices')}</div>
           </div>
           <div>
             <div className="font-medium">HTTP/REST</div>
-            <div className="text-[var(--text-tertiary)]">Simple devices &amp; webhooks</div>
+            <div className="text-[var(--text-tertiary)]">{t('protocol.httpRest.desc', 'Simple devices & webhooks')}</div>
           </div>
           <div>
             <div className="font-medium">WebSocket</div>
-            <div className="text-[var(--text-tertiary)]">Browser-based devices</div>
+            <div className="text-[var(--text-tertiary)]">{t('protocol.websocket.desc', 'Browser-based devices')}</div>
           </div>
           <div>
             <div className="font-medium">CoAP / LoRaWAN</div>
-            <div className="text-[var(--text-tertiary)]">Low-power &amp; long-range devices</div>
+            <div className="text-[var(--text-tertiary)]">{t('protocol.coapLorawan.desc', 'Low-power & long-range devices')}</div>
           </div>
         </div>
       </Card>

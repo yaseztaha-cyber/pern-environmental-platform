@@ -5,11 +5,16 @@
  *   - WiFi Captive Portal for zero-edit configuration
  *   - Bidirectional MQTT (sensor data OUT, actuator commands IN)
  *   - Device heartbeat with RSSI, uptime, free heap, firmware version
- *   - OTA firmware updates via MQTT
- *   - Actuator control (relays, LEDs, servos)
+ *   - MQTT OTA firmware updates (chunked base64 over pern/devices/{id}/ota)
+ *   - Actuator control (relays, LEDs, servos) — canonical command topic
+ *   - HTTP fallback ingestion (POST /api/readings) when MQTT is unreachable
+ *   - MQTT username/password auth (username=deviceId, password=apiKey)
+ *   - NTP-synced epoch timestamps (no more millis() since boot)
+ *   - Runtime config push over MQTT (interval + sensor enable) with persistence
  *   - mDNS discovery (pern-esp32.local)
  *   - Deep sleep support for battery devices
  *   - Sensor averaging and error handling
+ *   - Soft watchdog + MQTT reconnect backoff
  *
  * Libraries needed (install via Library Manager):
  *   - PubSubClient (by Nick O'Leary)
@@ -25,6 +30,18 @@
  *
  * FIRST BOOT: ESP32 starts as AP → connect to "PERN-Setup-XXXX" →
  * enter WiFi + MQTT credentials → saved to flash → reboots.
+ *
+ * MQTT CONTRACT (must match backend):
+ *   OUT pern/sensors/{deviceId}/data                { device, timestamp, sensors, fw, apiKey }
+ *   OUT pern/devices/{deviceId}/heartbeat           { device, timestamp, uptime, freeHeap, ... }
+ *   OUT pern/devices/{deviceId}/status              { device, status: 'online', fwVersion }
+ *   OUT pern/devices/{deviceId}/actuators/{act}/status
+ *   OUT pern/devices/{deviceId}/config/ack          { device, accepted, config }
+ *   OUT pern/devices/{deviceId}/ota/status          { device, state, percent, message }
+ *   IN  pern/devices/{deviceId}/actuators/+/command { device, actuator, command, params, source }
+ *   IN  pern/actuators/{deviceId}/command           (legacy: { actuator, action })
+ *   IN  pern/devices/{deviceId}/config              { interval, sensors, source }
+ *   IN  pern/devices/{deviceId}/ota                 { index:-1 kind:begin size | index:n chunk64 | index:-2 kind:end }
  */
 
 #include <WiFi.h>
@@ -34,10 +51,12 @@
 #include <WebServer.h>
 #include <Preferences.h>
 #include <Update.h>
+#include <HTTPClient.h>
+#include <time.h>
 
 // ============ FIRMWARE INFO ============
 #define FW_NAME    "PERN-ESP32"
-#define FW_VERSION "2.0.0"
+#define FW_VERSION "2.1.0"
 #define FW_AUTHOR  "PERN IoT Platform"
 
 // ============ PIN DEFINITIONS ============
@@ -59,6 +78,8 @@
 #define SENSOR_SAMPLES     5       // averaging
 #define AP_SSID_PREFIX     "PERN-Setup-"
 #define AP_PASSWORD         "pern1234"
+#define MQTT_BUFFER_SIZE    8192   // must fit the largest OTA chunk JSON
+#define WATCHDOG_MS         90000  // soft watchdog — restart if the loop stalls
 
 // ============ GLOBALS ============
 Preferences prefs;
@@ -74,13 +95,29 @@ int    mqttPort = DEFAULT_MQTT_PORT;
 String deviceId = "ESP32-" + String((uint32_t)ESP.getEfuseMac(), HEX);
 String mqttUser = "";
 String mqttPass = "";
+String apiKey = "";
+String serverUrl = "";
 
 // Runtime
 unsigned long lastSend = 0;
 unsigned long lastHeartbeat = 0;
 unsigned long bootTime = 0;
+unsigned long sendInterval = SEND_INTERVAL_MS;
+unsigned long lastLoopActivity = 0;
+unsigned long lastMqttAttempt = 0;
+unsigned long mqttBackoffMs = 1000;
 int msgCount = 0;
+int httpFallbackOk = 0;
+int httpFallbackFail = 0;
 bool configMode = false;
+
+// OTA state
+bool otaActive = false;
+unsigned long otaSize = 0;
+unsigned long otaReceived = 0;
+int otaLastPercent = -1;
+char mqttMsgBuf[MQTT_BUFFER_SIZE];       // global — keep big buffers off the stack
+unsigned char otaDecodeBuf[4608];        // max decode of a 4096-char base64 chunk
 
 // Sensor pins as configured
 struct SensorPin { const char* key; int pin; bool enabled; };
@@ -103,6 +140,35 @@ Actuator actuators[] = {
   {"led",    PIN_LED,    false},
 };
 const int NUM_ACTUATORS = sizeof(actuators) / sizeof(actuators[0]);
+
+// ============================================================
+//  Time — NTP-synced epoch timestamps
+// ============================================================
+
+unsigned long long epochMillis() {
+  time_t nowT = time(nullptr);
+  if (nowT > 1600000000) return ((unsigned long long)nowT) * 1000ULL;
+  return (unsigned long long)millis();  // before NTP sync — uptime offset
+}
+
+void syncNtp() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("[NTP] Syncing");
+  int attempts = 0;
+  while (time(nullptr) < 1600000000 && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  if (time(nullptr) > 1600000000) {
+    struct tm t;
+    getLocalTime(&t);
+    Serial.printf(" OK (%04d-%02d-%02d %02d:%02d:%02d UTC)\n",
+                  t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+  } else {
+    Serial.println(" TIMEOUT — using uptime offsets until synced");
+  }
+}
 
 // ============================================================
 //  CONFIGURATION — Captive Portal
@@ -129,7 +195,7 @@ const char PORTAL_HTML[] PROGMEM = R"rawliteral(
   .note{font-size:.75em;color:#64748b;margin-top:10px}
   .chip{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:2px 8px;font-size:.75em;margin:2px}
 </style></head><body>
-<h1>🌱 PERN IoT Setup</h1>
+<h1>PERN IoT Setup</h1>
 <p class="sub">Configure your ESP32 sensor node</p>
 <form method="POST" action="/save">
   <label>Device ID</label>
@@ -144,7 +210,11 @@ const char PORTAL_HTML[] PROGMEM = R"rawliteral(
     <div><label>MQTT Port</label><input name="mqttport" value="1883" type="number"></div>
     <div><label>Send Interval (ms)</label><input name="interval" value="5000" type="number"></div>
   </div>
-  <label>MQTT Username (optional)</label>
+  <label>Backend URL (HTTP fallback, optional)</label>
+  <input name="serverurl" value="%SERVER_URL%" placeholder="http://192.168.1.100:3000">
+  <label>Device API Key (optional)</label>
+  <input name="apikey" value="%API_KEY%" placeholder="pern_... (issued on dashboard)">
+  <label>MQTT Username (optional, overrides API key)</label>
   <input name="mqttuser" placeholder="leave empty if none">
   <label>MQTT Password (optional)</label>
   <input name="mqttpass" type="password" placeholder="leave empty if none">
@@ -163,10 +233,44 @@ void loadConfig() {
   deviceId   = prefs.getString("deviceId", deviceId);
   mqttUser   = prefs.getString("mqttuser", "");
   mqttPass   = prefs.getString("mqttpass", "");
+  apiKey     = prefs.getString("apikey", "");
+  serverUrl  = prefs.getString("serverurl", "");
+
+  // Runtime state (send interval + sensor enable map) — persisted across reboots
+  sendInterval = (unsigned long)prefs.getInt("sintv", SEND_INTERVAL_MS);
+  String sensJson = prefs.getString("senscfg", "");
+  if (sensJson.length() > 0) {
+    StaticJsonDocument<256> d;
+    if (deserializeJson(d, sensJson) == DeserializationOk) {
+      for (int i = 0; i < NUM_SENSORS; i++) {
+        if (d.containsKey(sensors[i].key)) {
+          sensors[i].enabled = d[sensors[i].key].as<bool>();
+        }
+      }
+    }
+  }
   prefs.end();
 }
 
-void saveConfig(String ssid, String pass, String mqtt, int port, String devId, String mUser, String mPass) {
+String sensorConfigJson() {
+  StaticJsonDocument<256> d;
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    d[sensors[i].key] = sensors[i].enabled;
+  }
+  String out;
+  serializeJson(d, out);
+  return out;
+}
+
+void saveRuntimeState() {
+  prefs.begin("pern", false);
+  prefs.putInt("sintv", (int)sendInterval);
+  prefs.putString("senscfg", sensorConfigJson());
+  prefs.end();
+}
+
+void saveConfig(String ssid, String pass, String mqtt, int port, String devId,
+                String mUser, String mPass, String apiKeyIn, String serverUrlIn) {
   prefs.begin("pern", false);
   prefs.putString("ssid", ssid);
   prefs.putString("wifipass", pass);
@@ -175,6 +279,8 @@ void saveConfig(String ssid, String pass, String mqtt, int port, String devId, S
   prefs.putString("deviceId", devId);
   prefs.putString("mqttuser", mUser);
   prefs.putString("mqttpass", mPass);
+  prefs.putString("apikey", apiKeyIn);
+  prefs.putString("serverurl", serverUrlIn);
   prefs.putBool("configured", true);
   prefs.end();
 }
@@ -194,6 +300,8 @@ void startPortal() {
   portal.on("/", []() {
     String html = PORTAL_HTML;
     html.replace("%DEVICE_ID%", deviceId);
+    html.replace("%SERVER_URL%", serverUrl);
+    html.replace("%API_KEY%", apiKey);
     portal.send(200, "text/html", html);
   });
 
@@ -205,14 +313,18 @@ void startPortal() {
     String devId    = portal.arg("deviceId");
     String mUser    = portal.arg("mqttuser");
     String mPass    = portal.arg("mqttpass");
+    String aKey     = portal.arg("apikey");
+    String sUrl     = portal.arg("serverurl");
 
     if (devId.length() > 0) deviceId = devId;
+    if (aKey.length() > 0) apiKey = aKey;
+    if (sUrl.length() > 0) serverUrl = sUrl;
 
-    saveConfig(ssid, pass, mqtt, port, devId, mUser, mPass);
+    saveConfig(ssid, pass, mqtt, port, devId, mUser, mPass, aKey, sUrl);
 
     portal.send(200, "text/html",
       "<html><body style='background:#0a0f1a;color:#10b981;font-family:system-ui;text-align:center;padding:40px'>"
-      "<h1>✅ Saved!</h1><p>Device will reboot in 3 seconds...</p>"
+      "<h1>Saved!</h1><p>Device will reboot in 3 seconds...</p>"
       "</body></html>");
     delay(3000);
     ESP.restart();
@@ -242,6 +354,7 @@ void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("\n[WiFi] Connected: %s (RSSI %d dBm)\n",
                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    syncNtp();
   } else {
     Serial.println("\n[WiFi] FAILED — starting configuration portal...");
     WiFi.disconnect();
@@ -249,35 +362,71 @@ void connectWiFi() {
   }
 }
 
+void subscribeTopics() {
+  String cmdTopic  = "pern/devices/" + deviceId + "/actuators/+/command";
+  String legacyCmd = "pern/actuators/" + deviceId + "/command";
+  String cfgTopic  = "pern/devices/" + deviceId + "/config";
+  String otaTopic  = "pern/devices/" + deviceId + "/ota";
+  mqtt.subscribe(cmdTopic.c_str());
+  mqtt.subscribe(legacyCmd.c_str());
+  mqtt.subscribe(cfgTopic.c_str());
+  mqtt.subscribe(otaTopic.c_str());
+  Serial.println("[MQTT] Subscribed:");
+  Serial.println("   " + cmdTopic);
+  Serial.println("   " + legacyCmd);
+  Serial.println("   " + cfgTopic);
+  Serial.println("   " + otaTopic);
+}
+
+bool tryMqttConnect() {
+  if (mqttServer.length() == 0) return false;
+  if (mqtt.connected()) return true;
+
+  bool ok;
+  if (mqttUser.length() > 0) {
+    ok = mqtt.connect(deviceId.c_str(), mqttUser.c_str(), mqttPass.c_str());
+  } else if (apiKey.length() > 0) {
+    ok = mqtt.connect(deviceId.c_str(), deviceId.c_str(), apiKey.c_str());
+  } else {
+    ok = mqtt.connect(deviceId.c_str());
+  }
+
+  if (ok) {
+    Serial.println("[MQTT] Connected to " + mqttServer);
+    subscribeTopics();
+    publishDeviceStatus();
+  }
+  return ok;
+}
+
 void connectMQTT() {
   if (mqttServer.length() == 0) return;
-  Serial.print("[MQTT] Connecting to " + mqttServer + "... ");
-  int attempts = 0;
-  while (!mqtt.connected() && attempts < 5) {
-    bool ok;
-    if (mqttUser.length() > 0) {
-      ok = mqtt.connect(deviceId.c_str(), mqttUser.c_str(), mqttPass.c_str());
-    } else {
-      ok = mqtt.connect(deviceId.c_str());
-    }
-    if (ok) {
+  Serial.print("[MQTT] Initial connect to " + mqttServer + "... ");
+  for (int i = 0; i < 5; i++) {
+    if (tryMqttConnect()) {
       Serial.println("OK");
-      // Subscribe to actuator commands
-      String cmdTopic = "pern/actuators/" + deviceId + "/command";
-      mqtt.subscribe(cmdTopic.c_str());
-      Serial.println("[MQTT] Subscribed to: " + cmdTopic);
-
-      // Subscribe to config updates
-      String cfgTopic = "pern/devices/" + deviceId + "/config";
-      mqtt.subscribe(cfgTopic.c_str());
-      Serial.println("[MQTT] Subscribed to: " + cfgTopic);
       return;
     }
-    Serial.print(".");
-    delay(2000);
-    attempts++;
+    delay(1000);
   }
-  Serial.println("FAILED");
+  Serial.println("FAILED — will retry in background with backoff");
+}
+
+// Non-blocking reconnect with exponential backoff (1s → 60s max)
+void ensureMqtt() {
+  if (mqtt.connected()) {
+    mqttBackoffMs = 1000;
+    return;
+  }
+  unsigned long now = millis();
+  if (now - lastMqttAttempt < mqttBackoffMs) return;
+  lastMqttAttempt = now;
+  if (tryMqttConnect()) {
+    mqttBackoffMs = 1000;
+  } else {
+    mqttBackoffMs = mqttBackoffMs >= 60000 ? 60000 : mqttBackoffMs * 2;
+    Serial.printf("[MQTT] Retry in %lus\n", mqttBackoffMs / 1000);
+  }
 }
 
 // ============================================================
@@ -345,38 +494,113 @@ void readAllSensors(JsonObject& obj) {
 }
 
 // ============================================================
-//  Publish Sensor Data
+//  Publish Sensor Data (+ HTTP fallback)
 // ============================================================
 
+void sendHttpFallback(JsonDocument& src) {
+  if (serverUrl.length() == 0) {
+    Serial.println("[HTTP] Fallback skipped (no server URL configured)");
+    return;
+  }
+
+  // The /api/readings endpoint rejects null sensors — send numerics only.
+  StaticJsonDocument<768> out;
+  out["device"] = deviceId;
+  out["timestamp"] = epochMillis();
+  JsonObject dst = out.createNestedObject("sensors");
+  JsonVariant srcSensors = src["sensors"];
+  if (srcSensors.is<JsonObject>()) {
+    JsonObject ss = srcSensors.as<JsonObject>();
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      if (!sensors[i].enabled) continue;
+      JsonVariant v = ss[sensors[i].key];
+      if (v.is<float>()) dst[sensors[i].key] = v.as<float>();
+      else if (v.is<int>()) dst[sensors[i].key] = v.as<int>();
+    }
+  }
+  if (dst.size() == 0) {
+    Serial.println("[HTTP] No numeric sensors to send — skipped");
+    return;
+  }
+
+  String body;
+  serializeJson(out, body);
+
+  String url = serverUrl;
+  if (!url.endsWith("/")) url += "/";
+  url += "api/readings";
+
+  HTTPClient http;
+  http.setTimeout(4000);
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  if (apiKey.length() > 0) http.addHeader("X-Api-Key", apiKey);
+
+  Serial.printf("[HTTP] Fallback POST %s ... ", url.c_str());
+  int code = http.POST(body);
+  if (code == 200 || code == 201) {
+    httpFallbackOk++;
+    Serial.printf("OK (%d)\n", code);
+  } else {
+    httpFallbackFail++;
+    Serial.printf("FAILED (%d)\n", code);
+  }
+  http.end();
+}
+
 void publishData() {
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<768> doc;
   doc["device"]    = deviceId;
-  doc["timestamp"] = millis();
+  doc["timestamp"] = epochMillis();
   doc["fw"]        = FW_VERSION;
+  if (apiKey.length() > 0) doc["apiKey"] = apiKey;   // used for MQTT message-level auth
 
   JsonObject s = doc.createNestedObject("sensors");
   readAllSensors(s);
 
-  char buf[512];
+  char buf[768];
   size_t len = serializeJson(doc, buf, sizeof(buf));
 
   String topic = "pern/sensors/" + deviceId + "/data";
-  if (mqtt.publish(topic.c_str(), buf, len)) {
-    msgCount++;
-    Serial.printf("#%d [%s] published OK\n", msgCount, deviceId.c_str());
+  bool sent = false;
+  if (mqtt.connected()) {
+    if (mqtt.publish(topic.c_str(), buf, len)) {
+      msgCount++;
+      sent = true;
+      Serial.printf("#%d [%s] published OK\n", msgCount, deviceId.c_str());
+    } else {
+      Serial.println("[MQTT] Publish FAILED");
+    }
   } else {
-    Serial.println("[MQTT] Publish FAILED");
+    Serial.println("[MQTT] Not connected — trying HTTP fallback");
+  }
+
+  if (!sent) {
+    sendHttpFallback(doc);
   }
 }
 
 // ============================================================
-//  Heartbeat — device health
+//  Heartbeat + device status — device health
 // ============================================================
 
-void publishHeartbeat() {
+void publishDeviceStatus() {
   StaticJsonDocument<256> doc;
+  doc["device"]    = deviceId;
+  doc["name"]      = deviceId;
+  doc["type"]      = "esp32";
+  doc["status"]    = "online";
+  doc["fwVersion"] = FW_VERSION;
+  doc["timestamp"] = epochMillis();
+  char buf[256];
+  size_t len = serializeJson(doc, buf, sizeof(buf));
+  mqtt.publish(("pern/devices/" + deviceId + "/status").c_str(), buf, len);
+}
+
+void publishHeartbeat() {
+  StaticJsonDocument<384> doc;
   doc["device"]      = deviceId;
-  doc["timestamp"]   = millis();
+  doc["timestamp"]   = epochMillis();
   doc["uptime"]      = (millis() - bootTime) / 1000;
   doc["freeHeap"]    = ESP.getFreeHeap();
   doc["rssi"]        = WiFi.RSSI();
@@ -385,6 +609,8 @@ void publishHeartbeat() {
   doc["fwName"]      = FW_NAME;
   doc["wifiChannel"] = WiFi.channel();
   doc["cpuFreq"]     = ESP.getCpuFreqMHz();
+  doc["httpFallbackOk"]   = httpFallbackOk;
+  doc["httpFallbackFail"] = httpFallbackFail;
 
   // Actuator states
   JsonObject act = doc.createNestedObject("actuators");
@@ -392,91 +618,289 @@ void publishHeartbeat() {
     act[actuators[i].key] = actuators[i].state;
   }
 
-  char buf[256];
+  char buf[384];
   size_t len = serializeJson(doc, buf, sizeof(buf));
 
   String topic = "pern/devices/" + deviceId + "/heartbeat";
   mqtt.publish(topic.c_str(), buf, len);
 
-  if (import.meta?.env?.DEV) {
-    Serial.printf("[HB] uptime=%lus heap=%d rssi=%d\n",
-                  (unsigned long)(millis() - bootTime) / 1000,
-                  ESP.getFreeHeap(), WiFi.RSSI());
-  }
+  #ifdef DEBUG
+  Serial.printf("[HB] uptime=%lus heap=%d rssi=%d\n",
+                (unsigned long)(millis() - bootTime) / 1000,
+                ESP.getFreeHeap(), WiFi.RSSI());
+  #endif
 }
 
 // ============================================================
-//  MQTT Message Handler (actuator commands + config)
+//  Actuator handling
 // ============================================================
 
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  char msg[512];
-  unsigned int copyLen = length < sizeof(msg) - 1 ? length : sizeof(msg) - 1;
-  memcpy(msg, payload, copyLen);
-  msg[copyLen] = '\0';
-
-  String topicStr = String(topic);
-
-  // Handle actuator commands: pern/actuators/{deviceId}/command
-  if (topicStr.includes("/actuators/") && topicStr.includes("/command")) {
-    StaticJsonDocument<128> cmd;
-    if (deserializeJson(cmd, msg) == DeserializationOk) {
-      const char* actuator = cmd["actuator"];
-      const char* action   = cmd["action"];
-      if (actuator && action) {
-        handleActuatorCommand(actuator, action);
-      }
+bool resolveCommandState(const char* command, JsonDocument& cmd) {
+  if (strcmp(command, "on") == 0 || strcmp(command, "1") == 0 || strcmp(command, "true") == 0) return true;
+  if (strcmp(command, "off") == 0 || strcmp(command, "0") == 0 || strcmp(command, "false") == 0) return false;
+  if (strcmp(command, "set") == 0) {
+    JsonVariant v = cmd["params"]["value"];
+    if (v.is<bool>()) return v.as<bool>();
+    if (v.is<int>()) return v.as<int>() > 0;
+    if (v.is<float>()) return v.as<float>() > 0;
+    if (v.is<const char*>()) {
+      const char* sv = v.as<const char*>();
+      return sv && (strcmp(sv, "on") == 0 || strcmp(sv, "true") == 0 || strcmp(sv, "1") == 0);
     }
-    return;
   }
-
-  // Handle config updates: pern/devices/{deviceId}/config
-  if (topicStr.includes("/config")) {
-    StaticJsonDocument<256> cfg;
-    if (deserializeJson(cfg, msg) == DeserializationOk) {
-      if (cfg.containsKey("interval")) {
-        // Update send interval at runtime
-        Serial.printf("[CFG] New interval: %d ms\n", cfg["interval"].as<int>());
-      }
-      if (cfg.containsKey("sensors")) {
-        // Enable/disable sensors dynamically
-        JsonObject s = cfg["sensors"];
-        for (int i = 0; i < NUM_SENSORS; i++) {
-          if (s.containsKey(sensors[i].key)) {
-            sensors[i].enabled = s[sensors[i].key].as<bool>();
-          }
-        }
-      }
-    }
-    return;
-  }
+  return false;
 }
 
-void handleActuatorCommand(const char* actuatorKey, const char* action) {
+void publishActuatorStatus(const char* actuatorKey, bool state) {
+  StaticJsonDocument<192> fb;
+  fb["device"]    = deviceId;
+  fb["actuator"]  = actuatorKey;
+  fb["state"]     = state ? "on" : "off";
+  fb["timestamp"] = epochMillis();
+  fb["source"]    = "device";
+  char buf[192];
+  serializeJson(fb, buf, sizeof(buf));
+  String statusTopic = "pern/devices/" + deviceId + "/actuators/" + actuatorKey + "/status";
+  mqtt.publish(statusTopic.c_str(), buf);
+}
+
+void handleActuatorCommand(const char* actuatorKey, const char* command, JsonDocument& cmd) {
   for (int i = 0; i < NUM_ACTUATORS; i++) {
     if (String(actuators[i].key) == actuatorKey) {
-      bool newState = (String(action) == "on" || String(action) == "1");
+      bool newState = resolveCommandState(command, cmd);
       actuators[i].state = newState;
       digitalWrite(actuators[i].pin, newState ? HIGH : LOW);
-
-      Serial.printf("[ACT] %s → %s\n", actuatorKey, newState ? "ON" : "OFF");
-
-      // Publish status feedback
-      StaticJsonDocument<128> fb;
-      fb["device"]    = deviceId;
-      fb["actuator"]  = actuatorKey;
-      fb["state"]     = newState ? "on" : "off";
-      fb["timestamp"] = millis();
-      fb["source"]    = "device";
-
-      char buf[128];
-      serializeJson(fb, buf, sizeof(buf));
-      String statusTopic = "pern/devices/" + deviceId + "/actuators/" + actuatorKey + "/status";
-      mqtt.publish(statusTopic.c_str(), buf);
+      Serial.printf("[ACT] %s -> %s\n", actuatorKey, newState ? "ON" : "OFF");
+      publishActuatorStatus(actuatorKey, newState);
       return;
     }
   }
   Serial.printf("[ACT] Unknown actuator: %s\n", actuatorKey);
+}
+
+// ============================================================
+//  Config apply (interval + sensors) with ACK + persistence
+// ============================================================
+
+void applyConfig(JsonDocument& cfg) {
+  bool changed = false;
+
+  if (cfg.containsKey("interval")) {
+    long v = cfg["interval"].as<long>();
+    if (v >= 500 && v <= 3600000) {
+      sendInterval = (unsigned long)v;
+      changed = true;
+      Serial.printf("[CFG] interval -> %lu ms\n", sendInterval);
+    }
+  }
+
+  if (cfg.containsKey("sensors")) {
+    JsonVariant sensorsVariant = cfg["sensors"];
+    if (sensorsVariant.is<JsonObject>()) {
+      JsonObject s = sensorsVariant.as<JsonObject>();
+      for (int i = 0; i < NUM_SENSORS; i++) {
+        if (s.containsKey(sensors[i].key)) {
+          bool en = s[sensors[i].key].as<bool>();
+          if (sensors[i].enabled != en) {
+            sensors[i].enabled = en;
+            changed = true;
+            Serial.printf("[CFG] sensor %s -> %s\n", sensors[i].key, en ? "ON" : "OFF");
+          }
+        }
+      }
+    }
+  }
+
+  if (changed) saveRuntimeState();
+
+  // ACK with the effective config so the backend can confirm the apply.
+  StaticJsonDocument<512> ack;
+  ack["device"]    = deviceId;
+  ack["accepted"]  = true;
+  ack["timestamp"] = epochMillis();
+  JsonObject a = ack.createNestedObject("config");
+  a["interval"] = sendInterval;
+  JsonObject sa = a.createNestedObject("sensors");
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    sa[sensors[i].key] = sensors[i].enabled;
+  }
+  char buf[512];
+  size_t len = serializeJson(ack, buf, sizeof(buf));
+  mqtt.publish(("pern/devices/" + deviceId + "/config/ack").c_str(), buf, len);
+  Serial.println("[CFG] applied + acked");
+}
+
+// ============================================================
+//  MQTT OTA (chunked base64)
+// ============================================================
+
+void publishOtaStatus(const char* state, int percent, const char* message) {
+  StaticJsonDocument<192> doc;
+  doc["device"]    = deviceId;
+  doc["state"]     = state;
+  doc["percent"]   = percent;
+  doc["message"]   = message ? message : "";
+  doc["version"]   = FW_VERSION;
+  doc["timestamp"] = epochMillis();
+  char buf[192];
+  size_t len = serializeJson(doc, buf, sizeof(buf));
+  String topic = "pern/devices/" + deviceId + "/ota/status";
+  mqtt.publish(topic.c_str(), buf, len);
+}
+
+bool base64Decode(const char* in, unsigned char* out, size_t outMax, size_t* outLen) {
+  static const char tbl[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  size_t o = 0;
+  int val = 0;
+  int bits = 0;
+  for (const unsigned char* p = (const unsigned char*)in; *p; ++p) {
+    if (*p == '=') break;                       // padding — stop
+    if (*p == '\n' || *p == '\r') continue;
+    const char* pos = strchr(tbl, (char)*p);
+    if (!pos) return false;
+    val = (val << 6) | (int)(pos - tbl);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      if (o < outMax) out[o++] = (unsigned char)((val >> bits) & 0xFF);
+    }
+  }
+  *outLen = o;
+  return true;
+}
+
+void handleOtaMessage(char* msg) {
+  DynamicJsonDocument doc(4600);
+  if (deserializeJson(doc, msg) != DeserializationOk) {
+    publishOtaStatus("error", -1, "invalid JSON");
+    return;
+  }
+
+  long index = doc["index"] | -9;
+
+  if (index == -1) {
+    // begin
+    unsigned long size = doc["size"] | 0UL;
+    otaSize = size;
+    otaReceived = 0;
+    otaLastPercent = -1;
+    if (Update.begin(size)) {
+      otaActive = true;
+      Serial.printf("[OTA] Begin size=%lu\n", size);
+      publishOtaStatus("begin", 0, "started");
+    } else {
+      Serial.printf("[OTA] Update.begin failed (err %d)\n", (int)Update.getError());
+      publishOtaStatus("error", -1, "Update.begin failed");
+    }
+  } else if (index == -2) {
+    // end
+    if (!otaActive) {
+      publishOtaStatus("error", -1, "end without begin");
+      return;
+    }
+    if (Update.end()) {
+      Serial.println("[OTA] Done — restarting");
+      publishOtaStatus("done", 100, "success");
+      delay(1000);
+      ESP.restart();
+    } else {
+      Serial.printf("[OTA] Update.end failed (err %d)\n", (int)Update.getError());
+      publishOtaStatus("error", -1, "Update.end failed");
+      otaActive = false;
+    }
+  } else if (index >= 0) {
+    // chunk
+    if (!otaActive) {
+      publishOtaStatus("error", -1, "chunk before begin");
+      return;
+    }
+    const char* chunk64 = doc["chunk64"];
+    if (!chunk64) {
+      publishOtaStatus("error", -1, "missing chunk64");
+      otaActive = false;
+      Update.abort();
+      return;
+    }
+    size_t decodedLen = 0;
+    if (!base64Decode(chunk64, otaDecodeBuf, sizeof(otaDecodeBuf), &decodedLen)) {
+      publishOtaStatus("error", -1, "bad base64");
+      otaActive = false;
+      Update.abort();
+      return;
+    }
+    if (Update.write(otaDecodeBuf, decodedLen) != decodedLen) {
+      publishOtaStatus("error", -1, "write failed");
+      otaActive = false;
+      Update.abort();
+      return;
+    }
+    otaReceived += decodedLen;
+    if (otaSize > 0) {
+      int percent = (int)((unsigned long long)otaReceived * 100 / otaSize);
+      if (percent - otaLastPercent >= 10) {
+        otaLastPercent = percent;
+        publishOtaStatus("progress", percent, "");
+      }
+    }
+  }
+}
+
+// ============================================================
+//  MQTT Message Handler (actuator commands + config + OTA)
+// ============================================================
+
+// Canonical topic: pern/devices/{id}/actuators/{actuator}/command → actuator in topic.
+// Legacy topic:    pern/actuators/{id}/command                  → actuator in payload.
+String actuatorFromTopic(const String& topic) {
+  if (topic.indexOf("/devices/") < 0) return "";  // legacy topic — no actuator in path
+  int i1 = topic.lastIndexOf("/actuators/");
+  if (i1 < 0) return "";
+  String rest = topic.substring(i1 + 11);
+  int slash = rest.indexOf("/");
+  return slash > 0 ? rest.substring(0, slash) : "";
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  unsigned int copyLen = length < sizeof(mqttMsgBuf) - 1 ? length : sizeof(mqttMsgBuf) - 1;
+  memcpy(mqttMsgBuf, payload, copyLen);
+  mqttMsgBuf[copyLen] = '\0';
+
+  String topicStr = String(topic);
+
+  // OTA (highest priority)
+  if (topicStr.endsWith("/ota")) {
+    handleOtaMessage(mqttMsgBuf);
+    return;
+  }
+
+  // Actuator commands — canonical + legacy
+  if (topicStr.indexOf("/actuators/") >= 0 && topicStr.endsWith("/command")) {
+    String topicActuator = actuatorFromTopic(topicStr);
+    StaticJsonDocument<512> cmd;
+    if (deserializeJson(cmd, mqttMsgBuf) != DeserializationOk) return;
+
+    const char* actuator = cmd["actuator"] | "";
+    if ((actuator == nullptr || actuator[0] == '\0') && topicActuator.length() > 0) {
+      actuator = topicActuator.c_str();
+    }
+    const char* command = cmd["command"] | "";
+    if (command == nullptr || command[0] == '\0') {
+      command = cmd["action"] | "";
+    }
+    if (actuator && actuator[0] && command && command[0]) {
+      handleActuatorCommand(actuator, command, cmd);
+    }
+    return;
+  }
+
+  // Config updates: pern/devices/{id}/config
+  if (topicStr.endsWith("/config")) {
+    StaticJsonDocument<512> cfg;
+    if (deserializeJson(cfg, mqttMsgBuf) == DeserializationOk) {
+      applyConfig(cfg);
+    }
+    return;
+  }
 }
 
 // ============================================================
@@ -487,10 +911,11 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   bootTime = millis();
+  lastLoopActivity = millis();
 
-  Serial.println("\n╔══════════════════════════════════════╗");
-  Serial.println("║  PERN IoT Platform — ESP32 Node v" FW_VERSION " ║");
-  Serial.println("╚══════════════════════════════════════╝\n");
+  Serial.println("\n================================");
+  Serial.println(" PERN IoT Platform — ESP32 Node v" FW_VERSION);
+  Serial.println("================================");
 
   // Init actuator pins
   for (int i = 0; i < NUM_ACTUATORS; i++) {
@@ -521,10 +946,10 @@ void setup() {
   if (!configMode) {
     mqtt.setServer(mqttServer.c_str(), mqttPort);
     mqtt.setCallback(mqttCallback);
-    mqtt.setBufferSize(512);
+    mqtt.setBufferSize(MQTT_BUFFER_SIZE);
     connectMQTT();
     startMDNS();
-    Serial.println("\n[BOOT] Ready. Sending data every " + String(SEND_INTERVAL_MS) + "ms\n");
+    Serial.println("\n[BOOT] Ready. Sending data every " + String(sendInterval) + "ms\n");
   }
 
   digitalWrite(PIN_LED, LOW);
@@ -536,21 +961,36 @@ void loop() {
     return;
   }
 
+  unsigned long now = millis();
+
+  // Soft watchdog — restart if the loop ever stalls
+  if (now - lastLoopActivity > WATCHDOG_MS) {
+    Serial.println("[WATCHDOG] Loop stalled — restarting");
+    ESP.restart();
+  }
+  lastLoopActivity = now;
+
   if (WiFi.status() != WL_CONNECTED) {
     connectWiFi();
     if (configMode) return;
   }
 
   if (!mqtt.connected()) {
-    connectMQTT();
+    ensureMqtt();
   }
 
   mqtt.loop();
 
-  unsigned long now = millis();
+  // During OTA keep pumping MQTT but pause normal publishing
+  if (otaActive) {
+    digitalWrite(PIN_LED, (millis() / 200) % 2 == 0 ? HIGH : LOW);
+    return;
+  }
+
+  now = millis();
 
   // Publish sensor data
-  if (now - lastSend >= SEND_INTERVAL_MS) {
+  if (now - lastSend >= sendInterval) {
     lastSend = now;
     publishData();
   }

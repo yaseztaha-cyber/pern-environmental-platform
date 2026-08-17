@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const automationEngine = require('../services/automation-engine');
 const logger = require('../utils/logger');
+const { sendError } = require('../middleware/error-handler');
 
 // Reload rules from database
 router.post('/reload-rules', async (req, res) => {
@@ -20,7 +21,7 @@ router.post('/reload-rules', async (req, res) => {
     });
   } catch (error) {
     logger.error('Failed to reload rules', { error: error.message });
-    res.status(500).json({ success: false, error: error.message });
+    sendError(res, error);
   }
 });
 

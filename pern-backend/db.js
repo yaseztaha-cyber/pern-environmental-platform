@@ -28,6 +28,7 @@ const memory = {
   alerts: [],
   thresholds: {},
   sensorReadings: [],
+  deviceApiKeys: {},
 };
 
 let dbAvailable = true;
@@ -63,6 +64,57 @@ function isAvailable() {
 async function initDatabase() {
   const client = await pool.connect();
   try {
+    // ------------------------------------------------------------
+    // v3.1 idempotent schema migration
+    // CREATE TABLE IF NOT EXISTS never alters existing tables. Older
+    // deployments can carry a live schema that drifted from the code DDL
+    // below (e.g. compliance_frameworks, virtual_sensors, external_readings,
+    // wind_trajectories, sensor_confidence_scores). These are transient /
+    // re-seedable data-fabric tables, so drop them here and let the
+    // CREATE TABLE IF NOT EXISTS block recreate them with the current DDL.
+    // ------------------------------------------------------------
+    const driftChecks = [
+      { table: 'compliance_frameworks', requiredColumn: 'pollutant' },
+      { table: 'virtual_sensors', requiredColumn: 'grid_cell' },
+      { table: 'external_readings', requiredColumn: 'virtual_sensor_id' },
+      { table: 'wind_trajectories', requiredColumn: 'created_at' },
+      { table: 'sensor_confidence_scores', primaryKeyColumn: 'sensor_id' },
+      { table: 'global_data_sources', column: 'id', dataType: 'integer' },
+    ];
+    for (const check of driftChecks) {
+      let drifted = false;
+      if (check.requiredColumn) {
+        const { rows } = await client.query(
+          `SELECT column_name FROM information_schema.columns WHERE table_name = $1`,
+          [check.table]
+        );
+        drifted = !rows.some((r) => r.column_name === check.requiredColumn);
+      } else if (check.primaryKeyColumn) {
+        const { rows } = await client.query(
+          `SELECT kcu.column_name
+           FROM information_schema.table_constraints tc
+           JOIN information_schema.key_column_usage kcu
+             ON tc.constraint_name = kcu.constraint_name
+            AND tc.table_schema = kcu.table_schema
+           WHERE tc.table_schema = 'public'
+             AND tc.table_name = $1
+             AND tc.constraint_type = 'PRIMARY KEY'`,
+          [check.table]
+        );
+        drifted = !rows.some((r) => r.column_name === check.primaryKeyColumn);
+      } else if (check.dataType) {
+        const { rows } = await client.query(
+          `SELECT data_type FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+          [check.table, check.column]
+        );
+        drifted = rows.length === 0 || rows[0].data_type !== check.dataType;
+      }
+      if (drifted) {
+        await client.query(`DROP TABLE IF EXISTS ${check.table} CASCADE`);
+        logger.warn(`[DB] Rebuilding drifted table ${check.table} (v3.1 schema migration)`);
+      }
+    }
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS sensor_readings (
         id SERIAL PRIMARY KEY,
@@ -100,6 +152,12 @@ async function initDatabase() {
         region VARCHAR(100),
         status VARCHAR(20) DEFAULT 'online',
         last_seen TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS device_api_keys (
+        device_id VARCHAR(100) PRIMARY KEY,
+        key_hash VARCHAR(64),
+        created_at TIMESTAMP DEFAULT NOW()
       );
 
       CREATE TABLE IF NOT EXISTS ehi_history (
@@ -295,6 +353,120 @@ async function initDatabase() {
         recorded_at TIMESTAMP DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_device_health_device_ts ON device_health (device_id, recorded_at DESC);
+
+      -- Data Fabric (global) tables
+      CREATE TABLE IF NOT EXISTS global_data_sources (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(200) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        api_endpoint TEXT,
+        country VARCHAR(100),
+        active BOOLEAN DEFAULT TRUE,
+        last_fetch TIMESTAMP,
+        confidence_weight NUMERIC(4,3) DEFAULT 0.5,
+        priority INTEGER DEFAULT 5,
+        created_at TIMESTAMP DEFAULT NOW(),
+        CONSTRAINT uq_global_sources_name UNIQUE (name)
+      );
+
+      CREATE TABLE IF NOT EXISTS virtual_sensors (
+        id SERIAL PRIMARY KEY,
+        source_type VARCHAR(50) NOT NULL,
+        latitude NUMERIC(10,6),
+        longitude NUMERIC(10,6),
+        grid_cell VARCHAR(20),
+        parameters TEXT[] DEFAULT '{}',
+        source_id VARCHAR(200),
+        last_reading_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        CONSTRAINT uq_virtual_sensors_src_cell UNIQUE (source_type, grid_cell)
+      );
+
+      CREATE TABLE IF NOT EXISTS external_readings (
+        id SERIAL PRIMARY KEY,
+        source_type VARCHAR(50) NOT NULL,
+        source_id VARCHAR(200),
+        virtual_sensor_id INTEGER REFERENCES virtual_sensors(id) ON DELETE SET NULL,
+        timestamp TIMESTAMP DEFAULT NOW(),
+        parameters JSONB DEFAULT '{}',
+        raw_response JSONB DEFAULT '{}',
+        data_quality NUMERIC(4,3) DEFAULT 0.5
+      );
+
+      CREATE TABLE IF NOT EXISTS sensor_confidence_scores (
+        sensor_id VARCHAR(200) PRIMARY KEY,
+        source_type VARCHAR(50) NOT NULL,
+        overall_score NUMERIC(4,3) DEFAULT 0.5,
+        freshness_score NUMERIC(4,3) DEFAULT 0.5,
+        spatial_consistency NUMERIC(4,3) DEFAULT 0.5,
+        calibration_status VARCHAR(50) DEFAULT 'unknown',
+        last_evaluated_at TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS compliance_frameworks (
+        id SERIAL PRIMARY KEY,
+        country VARCHAR(100) NOT NULL,
+        region VARCHAR(100),
+        authority VARCHAR(200),
+        framework_name VARCHAR(200),
+        pollutant VARCHAR(50) NOT NULL,
+        standard_value NUMERIC(12,4),
+        averaging_period VARCHAR(50),
+        effective_date DATE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        CONSTRAINT uq_compliance_key UNIQUE (country, pollutant, averaging_period)
+      );
+
+      CREATE TABLE IF NOT EXISTS wind_trajectories (
+        id SERIAL PRIMARY KEY,
+        latitude NUMERIC(10,6),
+        longitude NUMERIC(10,6),
+        altitude INTEGER,
+        wind_speed NUMERIC(8,3),
+        wind_direction NUMERIC(8,3),
+        forecast_horizon INTEGER,
+        forecasted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS plume_events (
+        id SERIAL PRIMARY KEY,
+        source_lat NUMERIC(10,6),
+        source_lon NUMERIC(10,6),
+        pollutant VARCHAR(50),
+        concentration NUMERIC(12,4),
+        trajectory_path JSONB DEFAULT '[]',
+        affected_regions JSONB DEFAULT '[]',
+        detected_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS global_api_keys (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(200),
+        key_hash VARCHAR(64) NOT NULL UNIQUE,
+        tier VARCHAR(20) DEFAULT 'free',
+        enabled BOOLEAN DEFAULT TRUE,
+        daily_requests INTEGER DEFAULT 0,
+        quota_per_day INTEGER DEFAULT 1000,
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_used_at TIMESTAMP
+      );
+
+      -- v4.0 AI engine: aligned feature vectors for model training/serving
+      CREATE TABLE IF NOT EXISTS feature_vectors (
+        id BIGSERIAL PRIMARY KEY,
+        feature_group TEXT NOT NULL,
+        latitude NUMERIC(10,6) NOT NULL,
+        longitude NUMERIC(10,6) NOT NULL,
+        ts TIMESTAMPTZ NOT NULL,
+        source_id TEXT NOT NULL,
+        snapshot TEXT NOT NULL DEFAULT 'local',
+        features JSONB NOT NULL DEFAULT '{}',
+        target JSONB,
+        quality NUMERIC(5,4) DEFAULT 0.5,
+        provenance TEXT[] DEFAULT '{}'
+      );
     `);
 
     // Performance indexes
@@ -318,6 +490,15 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_device_metadata_tags ON device_metadata USING GIN (tags);
       CREATE INDEX IF NOT EXISTS idx_ai_conversations_user ON ai_conversations (user_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation ON ai_messages (conversation_id, created_at ASC);
+      CREATE INDEX IF NOT EXISTS idx_ext_readings_source_ts ON external_readings (source_type, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_ext_readings_vsensor ON external_readings (virtual_sensor_id, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_vsensors_grid ON virtual_sensors (grid_cell, source_type);
+      CREATE INDEX IF NOT EXISTS idx_sources_active ON global_data_sources (active, priority);
+      CREATE INDEX IF NOT EXISTS idx_compliance_country ON compliance_frameworks (country, pollutant);
+      CREATE INDEX IF NOT EXISTS idx_wind_trajectories_ts ON wind_trajectories (forecasted_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_plume_events_ts ON plume_events (detected_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_feature_vectors_gt ON feature_vectors (feature_group, ts);
+      CREATE INDEX IF NOT EXISTS idx_feature_vectors_xy ON feature_vectors (latitude, longitude);
     `);
 
     logger.info('[DB] PostgreSQL tables and indexes initialized');
@@ -635,6 +816,44 @@ async function deleteDevice(id) {
   } catch {
     // no-op
   }
+}
+
+// ---- Device API keys (per-device authentication) ----
+
+async function storeDeviceApiKey(deviceId, keyHash) {
+  try {
+    return await withFallback(() => pool.query(
+      `INSERT INTO device_api_keys (device_id, key_hash) VALUES ($1, $2)
+       ON CONFLICT (device_id) DO UPDATE SET key_hash = EXCLUDED.key_hash, created_at = NOW()`,
+      [deviceId, keyHash]
+    ));
+  } catch {
+    memory.deviceApiKeys[deviceId] = { key_hash: keyHash, created_at: new Date() };
+  }
+}
+
+async function getDeviceApiKeyHash(deviceId) {
+  try {
+    const result = await withFallback(() => pool.query(
+      `SELECT key_hash FROM device_api_keys WHERE device_id = $1`, [deviceId]
+    ));
+    return result.rows[0]?.key_hash || null;
+  } catch {
+    return memory.deviceApiKeys[deviceId]?.key_hash || null;
+  }
+}
+
+async function revokeDeviceApiKey(deviceId) {
+  try {
+    await withFallback(() => pool.query(`DELETE FROM device_api_keys WHERE device_id = $1`, [deviceId]));
+  } catch {
+    delete memory.deviceApiKeys[deviceId];
+  }
+}
+
+async function deviceHasApiKey(deviceId) {
+  const hash = await getDeviceApiKeyHash(deviceId);
+  return Boolean(hash);
 }
 
 // ============================================================
@@ -997,6 +1216,38 @@ async function deleteNotificationPreference(userId, channel) {
 }
 
 // ============================================================
+// DATA RETENTION
+// ============================================================
+
+const RETENTION_WHITELIST = new Set([
+  'external_readings', 'wind_trajectories', 'plume_events',
+  'sensor_confidence_scores', 'sensor_readings', 'device_readings',
+  'ehi_history', 'alert_history', 'audit_logs', 'automation_logs',
+]);
+
+async function runRetention(rules) {
+  const summary = {};
+  for (const rule of rules || []) {
+    const table = rule.table;
+    const column = rule.column;
+    const days = Math.max(1, Math.min(3650, Number(rule.days) || 90));
+    if (!RETENTION_WHITELIST.has(table) || !/^[a-z_]+$/.test(column)) {
+      summary[table] = 0;
+      continue;
+    }
+    try {
+      const result = await pool.query(
+        `DELETE FROM ${table} WHERE ${column} < NOW() - INTERVAL '${days} days'`
+      );
+      summary[table] = result.rowCount || 0;
+    } catch {
+      summary[table] = 0;
+    }
+  }
+  return summary;
+}
+
+// ============================================================
 // FIRMWARE VERSIONS
 // ============================================================
 
@@ -1334,6 +1585,10 @@ module.exports = {
   getDevices,
   getDevice,
   deleteDevice,
+  storeDeviceApiKey,
+  getDeviceApiKeyHash,
+  revokeDeviceApiKey,
+  deviceHasApiKey,
 
   // Actuator commands
   logActuatorCommand,
@@ -1397,6 +1652,7 @@ module.exports = {
   saveDataRetentionPolicy,
   deleteDataRetentionPolicy,
   cleanupOldData,
+  runRetention,
 
   // AI Conversations
   createConversation,
@@ -1412,6 +1668,33 @@ module.exports = {
   saveDeviceHealth,
   getLatestDeviceHealth,
   getDeviceHealthHistory,
+
+  // Data Fabric (global)
+  upsertGlobalDataSource,
+  getGlobalDataSources,
+  setSourceLastFetch,
+  createVirtualSensor,
+  getVirtualSensors,
+  saveExternalReading,
+  getExternalReadings,
+  saveFeatureVector,
+  getFeatureVectors,
+  upsertSensorConfidence,
+  getSensorConfidence,
+  listConfidenceScores,
+  upsertComplianceFramework,
+  getComplianceFrameworks,
+  saveWindTrajectory,
+  getWindTrajectories,
+  savePlumeEvent,
+  getPlumeEvents,
+
+  // Public API keys
+  saveGlobalApiKey,
+  getGlobalApiKeyByHash,
+  listGlobalApiKeys,
+  revokeGlobalApiKey,
+  incrementApiKeyUsage,
 };
 
 // ============================================================
@@ -1466,5 +1749,490 @@ async function getDeviceHealthHistory(deviceId, limit = 50) {
     return rows;
   } catch {
     return [];
+  }
+}
+
+// ============================================================
+//  Data Fabric Functions (global)
+// ============================================================
+
+// --- global_data_sources ---
+async function upsertGlobalDataSource(source) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO global_data_sources (name, type, api_endpoint, country, active, confidence_weight, priority)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (name) DO UPDATE SET
+        api_endpoint = EXCLUDED.api_endpoint,
+        country = EXCLUDED.country,
+        active = EXCLUDED.active,
+        confidence_weight = EXCLUDED.confidence_weight,
+        priority = EXCLUDED.priority
+      RETURNING *
+    `, [
+      source.name,
+      source.type,
+      source.apiEndpoint ?? null,
+      source.country ?? null,
+      source.active ?? true,
+      source.confidenceWeight ?? 0.5,
+      source.priority ?? 5,
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] upsertGlobalDataSource failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getGlobalDataSources(options = {}) {
+  try {
+    const params = [];
+    let where = 'WHERE 1=1';
+    if (options.active !== undefined) {
+      params.push(options.active);
+      where += ` AND active = $${params.length}`;
+    }
+    if (options.type) {
+      params.push(options.type);
+      where += ` AND type = $${params.length}`;
+    }
+    const { rows } = await pool.query(`
+      SELECT * FROM global_data_sources ${where}
+      ORDER BY priority ASC, name ASC
+    `, params);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+async function setSourceLastFetch(name) {
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query(`
+      UPDATE global_data_sources SET last_fetch = NOW() WHERE name = $1
+    `, [name]);
+  } catch (err) {
+    logger.warn('[DB] setSourceLastFetch failed', { error: err.message });
+  } finally {
+    if (client) client.release();
+  }
+}
+
+// --- virtual_sensors ---
+async function createVirtualSensor(sensor) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO virtual_sensors (source_type, latitude, longitude, grid_cell, parameters, source_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (source_type, grid_cell) DO UPDATE SET
+        latitude = EXCLUDED.latitude,
+        longitude = EXCLUDED.longitude,
+        parameters = EXCLUDED.parameters,
+        source_id = EXCLUDED.source_id,
+        last_reading_at = NOW()
+      RETURNING *
+    `, [
+      sensor.sourceType,
+      sensor.latitude ?? null,
+      sensor.longitude ?? null,
+      sensor.gridCell ?? null,
+      Array.isArray(sensor.parameters) ? sensor.parameters : [],
+      sensor.sourceId ?? null,
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] createVirtualSensor failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getVirtualSensors(options = {}) {
+  try {
+    const params = [];
+    let where = 'WHERE 1=1';
+    if (options.sourceType) {
+      params.push(options.sourceType);
+      where += ` AND source_type = $${params.length}`;
+    }
+    if (options.gridCell) {
+      params.push(options.gridCell);
+      where += ` AND grid_cell = $${params.length}`;
+    }
+    const { rows } = await pool.query(`
+      SELECT * FROM virtual_sensors ${where}
+      ORDER BY last_reading_at DESC
+    `, params);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+// --- external_readings ---
+async function saveExternalReading(reading) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO external_readings (source_type, source_id, virtual_sensor_id, timestamp, parameters, raw_response, data_quality)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [
+      reading.sourceType,
+      reading.sourceId ?? null,
+      reading.virtualSensorId ?? null,
+      reading.timestamp ? new Date(reading.timestamp) : new Date(),
+      JSON.stringify(reading.parameters || {}),
+      JSON.stringify(reading.rawResponse || {}),
+      reading.dataQuality ?? 0.5,
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] saveExternalReading failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getExternalReadings(options = {}) {
+  try {
+    const params = [];
+    let where = 'WHERE 1=1';
+    if (options.sourceType) {
+      params.push(options.sourceType);
+      where += ` AND source_type = $${params.length}`;
+    }
+    if (options.virtualSensorId) {
+      params.push(options.virtualSensorId);
+      where += ` AND virtual_sensor_id = $${params.length}`;
+    }
+    const limit = options.limit || 100;
+    params.push(limit);
+    const { rows } = await pool.query(`
+      SELECT * FROM external_readings ${where}
+      ORDER BY timestamp DESC LIMIT $${params.length}
+    `, params);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+// --- feature_vectors (v4.0 AI engine) ---
+async function saveFeatureVector(row) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO feature_vectors (feature_group, latitude, longitude, ts, source_id, snapshot, features, target, quality, provenance)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id
+    `, [
+      row.feature_group,
+      row.latitude,
+      row.longitude,
+      new Date(row.ts),
+      row.source_id,
+      row.snapshot || 'local',
+      JSON.stringify(row.features || {}),
+      row.target ? JSON.stringify(row.target) : null,
+      row.quality ?? 0.5,
+      row.provenance || [],
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] saveFeatureVector failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getFeatureVectors(options = {}) {
+  const conditions = ['1=1'];
+  const params = [];
+  const { featureGroup, from, to, limit = 5000 } = options;
+  if (featureGroup) { params.push(featureGroup); conditions.push(`feature_group = $${params.length}`); }
+  if (from) { params.push(new Date(from)); conditions.push(`ts >= $${params.length}`); }
+  if (to) { params.push(new Date(to)); conditions.push(`ts <= $${params.length}`); }
+  params.push(limit);
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM feature_vectors WHERE ${conditions.join(' AND ')}
+      ORDER BY ts ASC LIMIT $${params.length}
+    `, params);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+// --- sensor_confidence_scores ---
+async function upsertSensorConfidence(score) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO sensor_confidence_scores (sensor_id, source_type, overall_score, freshness_score, spatial_consistency, calibration_status)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (sensor_id) DO UPDATE SET
+        source_type = EXCLUDED.source_type,
+        overall_score = EXCLUDED.overall_score,
+        freshness_score = EXCLUDED.freshness_score,
+        spatial_consistency = EXCLUDED.spatial_consistency,
+        calibration_status = EXCLUDED.calibration_status,
+        last_evaluated_at = NOW()
+      RETURNING *
+    `, [
+      score.sensorId,
+      score.sourceType,
+      score.overallScore ?? 0.5,
+      score.freshnessScore ?? 0.5,
+      score.spatialConsistency ?? 0.5,
+      score.calibrationStatus ?? 'unknown',
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] upsertSensorConfidence failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getSensorConfidence(sensorId) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM sensor_confidence_scores WHERE sensor_id = $1
+    `, [sensorId]);
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function listConfidenceScores(limit = 50) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM sensor_confidence_scores ORDER BY overall_score DESC LIMIT $1
+    `, [limit]);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+// --- compliance_frameworks ---
+async function upsertComplianceFramework(fw) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO compliance_frameworks (country, region, authority, framework_name, pollutant, standard_value, averaging_period, effective_date)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (country, pollutant, averaging_period) DO UPDATE SET
+        region = EXCLUDED.region,
+        authority = EXCLUDED.authority,
+        framework_name = EXCLUDED.framework_name,
+        standard_value = EXCLUDED.standard_value,
+        effective_date = EXCLUDED.effective_date
+      RETURNING *
+    `, [
+      fw.country,
+      fw.region ?? null,
+      fw.authority ?? null,
+      fw.frameworkName ?? null,
+      fw.pollutant,
+      fw.standardValue ?? null,
+      fw.averagingPeriod ?? null,
+      fw.effectiveDate ?? null,
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] upsertComplianceFramework failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getComplianceFrameworks(options = {}) {
+  try {
+    const params = [];
+    let where = 'WHERE 1=1';
+    if (options.country) {
+      params.push(options.country);
+      where += ` AND country = $${params.length}`;
+    }
+    if (options.pollutant) {
+      params.push(options.pollutant);
+      where += ` AND pollutant = $${params.length}`;
+    }
+    const { rows } = await pool.query(`
+      SELECT * FROM compliance_frameworks ${where}
+      ORDER BY country ASC, pollutant ASC
+    `, params);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+// --- wind_trajectories ---
+async function saveWindTrajectory(traj) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO wind_trajectories (latitude, longitude, altitude, wind_speed, wind_direction, forecast_horizon, forecasted_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [
+      traj.latitude ?? null,
+      traj.longitude ?? null,
+      traj.altitude ?? null,
+      traj.windSpeed ?? null,
+      traj.windDirection ?? null,
+      traj.forecastHorizon ?? null,
+      traj.forecastedAt ? new Date(traj.forecastedAt) : new Date(),
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] saveWindTrajectory failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getWindTrajectories(limit = 50) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM wind_trajectories ORDER BY forecasted_at DESC LIMIT $1
+    `, [limit]);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+// --- plume_events ---
+async function savePlumeEvent(event) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO plume_events (source_lat, source_lon, pollutant, concentration, trajectory_path, affected_regions)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [
+      event.sourceLat ?? null,
+      event.sourceLon ?? null,
+      event.pollutant ?? null,
+      event.concentration ?? null,
+      JSON.stringify(event.trajectoryPath || []),
+      JSON.stringify(event.affectedRegions || []),
+    ]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] savePlumeEvent failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getPlumeEvents(limit = 50) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM plume_events ORDER BY detected_at DESC LIMIT $1
+    `, [limit]);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+// --- global_api_keys ---
+async function saveGlobalApiKey(keyRecord) {
+  let client;
+  try {
+    client = await pool.connect();
+    const { rows } = await client.query(`
+      INSERT INTO global_api_keys (name, email, key_hash, tier, quota_per_day)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [keyRecord.name, keyRecord.email ?? null, keyRecord.keyHash, keyRecord.tier || 'free', keyRecord.quotaPerDay ?? 1000]);
+    return rows[0] || null;
+  } catch (err) {
+    logger.warn('[DB] saveGlobalApiKey failed', { error: err.message });
+    return null;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getGlobalApiKeyByHash(keyHash) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM global_api_keys WHERE key_hash = $1
+    `, [keyHash]);
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function listGlobalApiKeys() {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, name, email, tier, enabled, daily_requests, quota_per_day, created_at, last_used_at
+      FROM global_api_keys ORDER BY created_at DESC
+    `);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+async function revokeGlobalApiKey(keyHash) {
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query(`
+      UPDATE global_api_keys SET enabled = FALSE WHERE key_hash = $1
+    `, [keyHash]);
+    return true;
+  } catch (err) {
+    logger.warn('[DB] revokeGlobalApiKey failed', { error: err.message });
+    return false;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function incrementApiKeyUsage(keyHash) {
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query(`
+      UPDATE global_api_keys SET daily_requests = daily_requests + 1, last_used_at = NOW() WHERE key_hash = $1
+    `, [keyHash]);
+  } catch (err) {
+    logger.warn('[DB] incrementApiKeyUsage failed', { error: err.message });
+  } finally {
+    if (client) client.release();
   }
 }

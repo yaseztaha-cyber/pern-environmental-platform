@@ -1,13 +1,32 @@
 /**
  * PERN v3 — Sentinel-5P Satellite Integration Service
- * Simulates satellite-derived environmental data at any GPS coordinate.
- * Real implementation would use Copernicus Data Space Ecosystem API.
+ * Fetches satellite-derived air-quality data from the Copernicus-backed
+ * Open-Meteo Air Quality API (CAMS reanalysis) for any GPS coordinate.
+ * Falls back to deterministic simulation when offline / ENABLE_REAL_DATA=false.
  */
 const logger = require('../utils/logger');
+
+const AQ_ENDPOINT = 'https://air-quality-api.open-meteo.com/v1/air-quality';
+
+const VARIABLE_MAP = {
+  nitrogen_dioxide: 'no2',
+  ozone: 'o3',
+  sulphur_dioxide: 'so2',
+  carbon_monoxide: 'co',
+  methane: 'ch4',
+  pm2_5: 'pm25',
+  aerosol_optical_depth: 'aerosol_index',
+};
+
+const UNITS = {
+  no2: 'ug/m3', o3: 'ug/m3', so2: 'ug/m3', co: 'ug/m3',
+  ch4: 'ug/m3', pm25: 'ug/m3', aerosol_index: '',
+};
 
 class SatelliteEngine {
   constructor() {
     this.virtualSensors = new Map();
+    this.lastSource = 'sentinel_5p_simulated';
   }
 
   /** Generate realistic simulated satellite data for coordinates */
@@ -18,21 +37,75 @@ class SatelliteEngine {
       Math.abs(lat) < 20 ? 0.3 : 0.5
     ));
     return {
-      no2: { value: Math.round((15 + urbanFactor * 30 + Math.random() * 5) * 10) / 10, unit: 'ppb' },
-      o3: { value: Math.round((30 + (1 - urbanFactor) * 40 + Math.random() * 8) * 10) / 10, unit: 'ppb' },
-      so2: { value: Math.round((2 + urbanFactor * 12 + Math.random() * 2) * 10) / 10, unit: 'ppb' },
-      co: { value: Math.round((150 + urbanFactor * 200 + Math.random() * 30) * 10) / 10, unit: 'ppb' },
-      ch4: { value: Math.round((1800 + urbanFactor * 150 + Math.random() * 20) * 10) / 10, unit: 'ppb' },
-      hcho: { value: Math.round((0.5 + urbanFactor * 2 + Math.random() * 0.4) * 100) / 100, unit: 'ppb' },
+      no2: { value: Math.round((15 + urbanFactor * 30 + Math.random() * 5) * 10) / 10, unit: 'ug/m3' },
+      o3: { value: Math.round((30 + (1 - urbanFactor) * 40 + Math.random() * 8) * 10) / 10, unit: 'ug/m3' },
+      so2: { value: Math.round((2 + urbanFactor * 12 + Math.random() * 2) * 10) / 10, unit: 'ug/m3' },
+      co: { value: Math.round((150 + urbanFactor * 200 + Math.random() * 30) * 10) / 10, unit: 'ug/m3' },
+      ch4: { value: Math.round((1400 + urbanFactor * 200 + Math.random() * 30) * 10) / 10, unit: 'ug/m3' },
+      hcho: { value: Math.round((0.5 + urbanFactor * 2 + Math.random() * 0.4) * 100) / 100, unit: 'ug/m3' },
       aerosol_index: { value: Math.round((urbanFactor * 1.5 + Math.random() * 0.5) * 10) / 10, unit: '' },
     };
   }
 
+  /** Fetch latest satellite-derived concentrations for a coordinate. */
+  async _fetchReal(lat, lng) {
+    const params = new URLSearchParams({
+      latitude: String(lat),
+      longitude: String(lng),
+      hourly: Object.keys(VARIABLE_MAP).join(','),
+      past_days: '1',
+      forecast_days: '1',
+      timezone: 'UTC',
+    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    try {
+      const res = await fetch(`${AQ_ENDPOINT}?${params.toString()}`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const hourly = body?.hourly;
+      if (!hourly || !Array.isArray(hourly.time) || hourly.time.length === 0) {
+        throw new Error('empty response');
+      }
+      const idx = hourly.time.length - 1;
+      const output = {};
+      for (const [apiKey, shortKey] of Object.entries(VARIABLE_MAP)) {
+        const val = hourly[apiKey]?.[idx];
+        if (typeof val === 'number' && Number.isFinite(val)) {
+          output[shortKey] = { value: Math.round(val * 100) / 100, unit: UNITS[shortKey] };
+        }
+      }
+      if (Object.keys(output).length === 0) throw new Error('no usable variables');
+      return {
+        parameters: output,
+        fetched_at: `${hourly.time[idx]}:00Z`,
+        model: body?.metadata?.model_name || 'CAMS global reanalysis',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async fetchSentinelData(lat, lng, date) {
     logger.info(`[Satellite] Fetching data for ${lat},${lng}`);
+    if (process.env.ENABLE_REAL_DATA !== 'false') {
+      try {
+        const real = await this._fetchReal(lat, lng);
+        this.lastSource = 'sentinel_5p_cams';
+        return {
+          latitude: lat, longitude: lng,
+          timestamp: date || new Date(real.fetched_at).toISOString(),
+          source: this.lastSource,
+          parameters: real.parameters,
+        };
+      } catch (err) {
+        logger.warn(`[Satellite] Real fetch failed, using simulation: ${err.message}`);
+      }
+    }
+    this.lastSource = 'sentinel_5p_simulated';
     return {
       latitude: lat, longitude: lng, timestamp: date || new Date().toISOString(),
-      source: 'sentinel_5p_simulated',
+      source: this.lastSource,
       parameters: this._simulateData(lat, lng),
     };
   }
@@ -83,8 +156,9 @@ class SatelliteEngine {
   getCoverage() {
     return {
       total_sensors: this.virtualSensors.size,
-      resolution: '0.01 deg x 0.01 deg (simulated)',
-      parameters: ['NO2', 'O3', 'SO2', 'CO', 'CH4', 'HCHO', 'Aerosol Index'],
+      resolution: '0.25 deg x 0.25 deg (CAMS reanalysis)',
+      parameters: ['NO2', 'O3', 'SO2', 'CO', 'CH4', 'PM2.5', 'Aerosol Index'],
+      last_source: this.lastSource,
       last_scan: new Date().toISOString(),
     };
   }

@@ -61,12 +61,12 @@ Visit **http://localhost** — all 5 services start together:
 cd pern-backend
 cp .env.example .env    # configure your environment
 npm install
-npm start               # runs on port 3000
+npm run dev             # runs on port 3000
 
 # Frontend
 cd pern-frontend
 npm install
-npm run dev             # runs on port 5173
+npm run dev             # runs on port 5174
 ```
 
 ### Device Simulator
@@ -75,6 +75,38 @@ npm run dev             # runs on port 5173
 cd pern-backend
 node simulator.js       # publishes fake sensor data to MQTT
 ```
+
+### Remote Access — ESP32 & website from different locations
+
+Everything runs on one PC; the ESP32 and people viewing the website can be anywhere.
+
+**1. Infrastructure** (Docker Postgres for persistence):
+
+```bash
+docker compose up -d postgres
+cd pern-backend && npm run dev   # API on :3000
+cd pern-frontend && npm run dev  # UI on :5174
+```
+
+**2. MQTT data path** — the ESP32 and the backend both use the free public broker
+`broker.emqx.io`, so physical location doesn't matter:
+- Backend: `pern-backend/.env` → `MQTT_BROKER=mqtt://broker.emqx.io:1883`
+- Browser live feed: `pern-frontend/.env` → `VITE_MQTT_BROKER_WS=wss://broker.emqx.io:8084/mqtt`
+- ESP32 setup page: Broker `broker.emqx.io`, port `1883`, any Device ID
+
+**3. Website from anywhere** (ngrok, free HTTP tunnel):
+
+```bash
+ngrok http 5174
+# or run launch.bat — it starts everything and prints the public URL
+```
+
+`launch.bat` picks the live URL up automatically via `get-tunnel-url.ps1`. On the
+ngrok free plan the URL changes each restart unless you reserve a static domain.
+
+> **Note:** the public test broker is open — anyone could subscribe to your topics.
+> That's fine for a demo; for sensitive data use a private broker (e.g. EMQX Cloud
+> free tier) and fill its username/password into the ESP32 setup form.
 
 ---
 
@@ -272,5 +304,9 @@ cd pern-frontend && npm test
 ---
 
 ## License
+
+Copyright © 2026 Yassen Taha Hussainy Elnasher. All rights reserved.
+
+This project is created and owned by **Yassen Taha Hussainy Elnasher**. Copying, modifying or redistributing any part of it is not permitted without written permission.
 
 STEM Gharbiya · Grade 11 · 2026

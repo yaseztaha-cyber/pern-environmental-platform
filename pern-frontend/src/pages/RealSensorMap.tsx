@@ -5,6 +5,7 @@ import L from 'leaflet';
 import { apiClient } from '../lib/api-client';
 import { fetchOpenAQData } from '../lib/openaq-service';
 import { PageHeader, Card, Pill, SectionTitle, Btn, LoadingState } from '../components/ui';
+import { useI18n } from '../lib/i18n';
 import { RefreshCw, Radio, Globe } from 'lucide-react';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -37,6 +38,7 @@ const cityCoords: Record<string, { lat: number; lng: number }> = {
 };
 
 export default function RealSensorMap() {
+  const { t } = useI18n();
   const [sensors, setSensors] = useState<SensorMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -124,19 +126,19 @@ export default function RealSensorMap() {
   return (
     <div>
       <PageHeader
-        title="Real Sensor Map"
-        subtitle={`${deviceCount} devices · ${openaqCount} OpenAQ stations`}
+        title={t('realSensorMap.title', 'Real Sensor Map')}
+        subtitle={`${t('realSensorMap.devicesCount', '{count} devices', { count: deviceCount })} · ${t('realSensorMap.openaqStations', '{count} OpenAQ stations', { count: openaqCount })}`}
         right={
           <div className="flex gap-2">
             <Btn variant="ghost" size="sm" onClick={() => loadData(true)} disabled={refreshing}>
-              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Refresh
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> {t('common.refresh', 'Refresh')}
             </Btn>
           </div>
         }
       />
 
       {loading ? (
-        <LoadingState label="Loading sensor locations…" />
+        <LoadingState label={t('realSensorMap.loading', 'Loading sensor locations…')} />
       ) : (
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
@@ -154,9 +156,9 @@ export default function RealSensorMap() {
                         <div style={{ fontFamily: 'system-ui' }}>
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{sensor.name}</div>
                           {sensor.pm25 > 0 && <div style={{ fontSize: 12 }}>PM2.5: <strong>{sensor.pm25.toFixed(1)}</strong> µg/m³</div>}
-                          {sensor.status && <div style={{ fontSize: 11, color: sensor.status === 'online' ? '#10b981' : '#ef4444' }}>Status: {sensor.status}</div>}
-                          {sensor.firmware && <div style={{ fontSize: 10, color: '#888' }}>FW: {sensor.firmware}</div>}
-                          <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>Source: {sensor.source}</div>
+                          {sensor.status && <div style={{ fontSize: 11, color: sensor.status === 'online' ? '#10b981' : '#ef4444' }}>{t('realSensorMap.status', 'Status:')} {sensor.status}</div>}
+                          {sensor.firmware && <div style={{ fontSize: 10, color: '#888' }}>{t('realSensorMap.fw', 'FW:')} {sensor.firmware}</div>}
+                          <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>{t('realSensorMap.source', 'Source:')} {sensor.source}</div>
                           {sensor.sensors && Object.keys(sensor.sensors).length > 0 && (
                             <div style={{ fontSize: 10, borderTop: '1px solid #eee', paddingTop: 4, marginTop: 4 }}>
                               {Object.entries(sensor.sensors).slice(0, 5).map(([k, v]) => (
@@ -186,7 +188,7 @@ export default function RealSensorMap() {
 
           <Card hover={false}>
             <div className="flex items-center justify-between mb-3">
-              <SectionTitle>Sensors ({filtered.length})</SectionTitle>
+              <SectionTitle>{t('realSensorMap.sensorsTitle', 'Sensors ({count})', { count: filtered.length })}</SectionTitle>
             </div>
 
             {/* Filter tabs */}
@@ -200,15 +202,15 @@ export default function RealSensorMap() {
                   }`}
                 >
                   {f === 'device' ? <Radio size={10} /> : f === 'openaq' ? <Globe size={10} /> : null}
-                  {f === 'all' ? 'All' : f === 'device' ? 'Devices' : 'OpenAQ'}
+                  {f === 'all' ? t('realSensorMap.filter.all', 'All') : f === 'device' ? t('realSensorMap.filter.devices', 'Devices') : 'OpenAQ'}
                 </button>
               ))}
             </div>
 
-            <div className="space-y-2 max-h-[440px] overflow-auto pr-2">
+            <div className="space-y-2 max-h-[440px] overflow-auto pr-2 rtl:pr-0 rtl:pl-2">
               {filtered.length === 0 && (
                 <div className="text-center py-8 text-[var(--text-tertiary)] text-sm">
-                  No sensors found. {filter === 'device' ? 'Set device coordinates on the Map page first.' : ''}
+                  {t('realSensorMap.noSensors', 'No sensors found.')} {filter === 'device' ? t('realSensorMap.deviceHint', 'Set device coordinates on the Map page first.') : ''}
                 </div>
               )}
               {filtered.map(sensor => (
@@ -225,12 +227,12 @@ export default function RealSensorMap() {
                     {sensor.sensors && (
                       <div className="text-[10px] text-[var(--text-disabled)] mt-0.5">
                         {Object.entries(sensor.sensors).slice(0, 3).map(([k, v]) => (
-                          <span key={k} className="mr-2">{k}: {typeof v === 'number' ? v.toFixed(1) : v}</span>
+                          <span key={k} className="mr-2 rtl:mr-0 rtl:ml-2">{k}: {typeof v === 'number' ? v.toFixed(1) : v}</span>
                         ))}
                       </div>
                     )}
                   </div>
-                  <div className="text-right">
+                  <div className="text-right rtl:text-left">
                     {sensor.pm25 > 0 && (
                       <div className="font-mono text-lg font-semibold" style={{ color: getMarkerColor(sensor.pm25, sensor.source) }}>
                         {sensor.pm25.toFixed(1)}
@@ -252,17 +254,17 @@ export default function RealSensorMap() {
 
       {selectedSensor && (
         <Card className="mt-6">
-          <div className="font-semibold text-lg">{selectedSensor.name} — Detail</div>
+          <div className="font-semibold text-lg">{t('realSensorMap.detailTitle', '{name} — Detail', { name: selectedSensor.name })}</div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4 text-sm">
             <div>PM2.5: <span className="font-mono text-2xl">{selectedSensor.pm25 > 0 ? selectedSensor.pm25.toFixed(1) : 'N/A'}</span> µg/m³</div>
-            <div>Lat: <span className="font-mono">{selectedSensor.lat}</span></div>
-            <div>Lng: <span className="font-mono">{selectedSensor.lng}</span></div>
-            <div>Source: <span className="text-[var(--emerald)]">{selectedSensor.source}</span></div>
-            {selectedSensor.status && <div>Status: <Pill tone={selectedSensor.status === 'online' ? 'emerald' : 'rose'}>{selectedSensor.status}</Pill></div>}
+            <div>{t('realSensorMap.lat', 'Lat:')} <span className="font-mono">{selectedSensor.lat}</span></div>
+            <div>{t('realSensorMap.lng', 'Lng:')} <span className="font-mono">{selectedSensor.lng}</span></div>
+            <div>{t('realSensorMap.source', 'Source:')} <span className="text-[var(--emerald)]">{selectedSensor.source}</span></div>
+            {selectedSensor.status && <div>{t('realSensorMap.status', 'Status:')} <Pill tone={selectedSensor.status === 'online' ? 'emerald' : 'rose'}>{selectedSensor.status}</Pill></div>}
           </div>
           {selectedSensor.sensors && Object.keys(selectedSensor.sensors).length > 0 && (
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
-              <div className="section-label mb-2">All Sensor Readings</div>
+              <div className="section-label mb-2">{t('realSensorMap.allReadings', 'All Sensor Readings')}</div>
               <div className="grid grid-cols-4 md:grid-cols-6 gap-3 text-xs">
                 {Object.entries(selectedSensor.sensors).map(([k, v]) => (
                   <div key={k} className="p-2 rounded bg-white/[0.03]">

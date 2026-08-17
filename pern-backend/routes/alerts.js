@@ -7,6 +7,7 @@ const router = express.Router();
 const db = require('../db');
 const rateLimiter = require('../middleware/rate-limiter');
 const { requireRole } = require('../middleware/rbac');
+const { sendError } = require('../middleware/error-handler');
 const limiter = rateLimiter(60000, 40);
 
 router.get('/rules', async (req, res) => {
@@ -31,14 +32,14 @@ router.post('/rules', limiter, async (req, res) => {
   try {
     await db.saveAlertRule(rule);
     res.json({ success: true, rule });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.delete('/rules/:id', limiter, requireRole('admin', 'manager'), async (req, res) => {
   try {
     await db.deleteAlertRule(req.params.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.get('/history', async (req, res) => {
@@ -53,7 +54,7 @@ router.post('/history/:id/acknowledge', limiter, async (req, res) => {
   try {
     await db.acknowledgeAlertHistory(req.params.id, req.userId || 'unknown');
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.get('/stats', async (req, res) => {

@@ -124,12 +124,19 @@ export function calculateScientificEHI(readings: Record<string, number>): Scient
   const coverageScore = Math.round(coverageRatio * 60 + (indexCount / maxIndices) * 40);
   const confidence = Math.min(98, Math.max(30, coverageScore));
 
+  const airIndex = subIndices.find(s => s.name === 'Air Quality');
+  const waterIndex = subIndices.find(s => s.name === 'Water Quality');
+  const aqi = airIndex ? Math.round(500 - airIndex.value * 5) : undefined;
+  const wqi = waterIndex?.value;
+
   return {
     score: finalScore,
     category,
     subIndices,
     confidence,
-    method: 'WHO + EPA Aligned Composite Index (real inputs only)'
+    method: 'WHO + EPA Aligned Composite Index (real inputs only)',
+    aqi,
+    wqi,
   };
 }
 
@@ -139,4 +146,6 @@ export interface ScientificEHIResult {
   subIndices: SubIndex[];
   confidence: number;
   method: string;
+  aqi?: number;
+  wqi?: number;
 }

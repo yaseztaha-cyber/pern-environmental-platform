@@ -83,9 +83,56 @@ export interface Scenario {
 }
 
 export interface EnrichedDeviceAlert {
-  type: 'rssi_low' | 'heap_low' | 'offline' | 'firmware_old' | 'compliance';
+  type: 'rssi_low' | 'heap_low' | 'offline' | 'firmware_old' | 'compliance' | 'uptime_long' | 'heap_leak' | 'cpu_low' | 'wifi_chan' | 'sensor';
   severity: 'warning' | 'critical';
   message: string;
+}
+
+export interface HealthComponentScore {
+  key: 'rssi' | 'heap' | 'uptime' | 'cpu';
+  label: string;
+  score: number;
+  weight: number;
+  detail: string;
+}
+
+export interface HealthTrendInfo {
+  direction: 'improving' | 'degrading' | 'stable';
+  slope: number;
+  delta: number;
+  samples: number;
+  r2?: number | null;
+}
+
+export interface MemoryTrendInfo {
+  slope: number;
+  leaking: boolean;
+  rateKBh: number;
+}
+
+export interface DeviceSensorReport {
+  key: string;
+  status: 'healthy' | 'degraded' | 'failed' | 'unknown';
+  reason: string;
+  severity: number;
+  crossCheckSensor?: string;
+}
+
+export interface MaintenanceAction {
+  id: string;
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  icon: 'signal' | 'cpu' | 'clock' | 'download' | 'power' | 'wifi';
+}
+
+export interface FleetStats {
+  count: number;
+  online: number;
+  avgScore: number;
+  avgRssi: number | null;
+  atRisk: number;
+  distribution: { excellent: number; good: number; fair: number; poor: number; critical: number };
 }
 
 export interface EnrichedDevice {
@@ -96,6 +143,12 @@ export interface EnrichedDevice {
   cpuFreq: number | null;
   healthScore: number; rssiQuality: number;
   heapHealth: number; uptimeQuality: number;
+  cpuHealth: number;
+  breakdown: HealthComponentScore[];
+  healthTrend: HealthTrendInfo | null;
+  memTrend: MemoryTrendInfo | null;
+  rulDays: number | null;
+  sensorReports: DeviceSensorReport[];
   lastSeen: string; recordedAt: string | null;
   history: RealDeviceHealth[]; alerts: EnrichedDeviceAlert[];
 }
@@ -123,6 +176,6 @@ export interface Recommendation {
   title: string; description: string;
 }
 
-export type ViewMode = 'overview' | 'comparison' | 'alerts';
+export type ViewMode = 'overview' | 'comparison' | 'alerts' | 'sensors' | 'method';
 export type Locale = 'en' | 'ar';
 export type SensorType = keyof PhysicalReading;

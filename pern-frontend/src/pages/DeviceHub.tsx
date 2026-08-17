@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Cable, BookOpen, Clock, Heart, Binary } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 import DeviceConnection from './DeviceConnection';
 import DeviceSetupGuide from './DeviceSetupGuide';
 import DeviceLifecyclePage from './DeviceLifecycle';
@@ -8,16 +9,18 @@ import DeviceHealthDashboard from './DeviceHealthDashboard';
 import FirmwarePage from './Firmware';
 
 type Tab = 'connect' | 'guide' | 'lifecycle' | 'health' | 'firmware';
-const tabs = [
-  { id: 'connect' as const, label: 'Connect', icon: <Cable size={14} /> },
-  { id: 'guide' as const, label: 'Setup Guide', icon: <BookOpen size={14} /> },
-  { id: 'lifecycle' as const, label: 'Lifecycle', icon: <Clock size={14} /> },
-  { id: 'health' as const, label: 'Health', icon: <Heart size={14} /> },
-  { id: 'firmware' as const, label: 'Firmware', icon: <Binary size={14} /> },
-];
 
 export default function DeviceHub() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('connect');
+
+  const tabs = [
+    { id: 'connect' as const, label: t('deviceHub.tab.connect', 'Connect'), icon: <Cable size={14} /> },
+    { id: 'guide' as const, label: t('deviceHub.tab.guide', 'Setup Guide'), icon: <BookOpen size={14} /> },
+    { id: 'lifecycle' as const, label: t('deviceHub.tab.lifecycle', 'Lifecycle'), icon: <Clock size={14} /> },
+    { id: 'health' as const, label: t('deviceHub.tab.health', 'Health'), icon: <Heart size={14} /> },
+    { id: 'firmware' as const, label: t('deviceHub.tab.firmware', 'Firmware'), icon: <Binary size={14} /> },
+  ];
 
   return (
     <div className="max-w-[1100px] mx-auto">

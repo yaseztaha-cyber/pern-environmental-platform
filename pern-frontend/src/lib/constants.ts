@@ -37,7 +37,7 @@ export const EHI_CATEGORIES = {
 };
 
 export const NTFY_DEFAULT_TOPIC = 'pern-platform-alerts-2026';
-export const MQTT_BROKER_WS = 'ws://localhost:9001';
+export const MQTT_BROKER_WS = import.meta.env.VITE_MQTT_BROKER_WS || 'wss://broker.emqx.io:8084/mqtt';
 // Use VITE_API_URL when provided (e.g. a remote backend), otherwise fall back
 // to a same-origin relative path so the app works from any host/IP behind a proxy.
 export const API_BASE = import.meta.env.VITE_API_URL || '/api';

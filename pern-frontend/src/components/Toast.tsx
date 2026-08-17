@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { X, AlertTriangle, CheckCircle2, Info, AlertCircle } from 'lucide-react';
 
@@ -38,10 +39,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    const timers = timersRef.current;
+    const recent = recentMessages.current;
     return () => {
-      timersRef.current.forEach(t => clearTimeout(t));
-      timersRef.current.clear();
-      recentMessages.current.clear();
+      timers.forEach(t => clearTimeout(t));
+      timers.clear();
+      recent.clear();
     };
   }, []);
 

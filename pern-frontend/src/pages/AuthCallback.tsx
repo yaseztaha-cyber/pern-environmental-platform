@@ -1,26 +1,28 @@
 import { useEffect, useState } from 'react';
 import { handleLogtoCallback } from '../lib/auth';
 import { useNavigate } from 'react-router';
+import { useI18n } from '../lib/i18n';
 
 export default function AuthCallback() {
-  const [status, setStatus] = useState('Processing login...');
+  const { t } = useI18n();
+  const [status, setStatus] = useState(t('auth.processing', 'Processing login...'));
   const navigate = useNavigate();
 
   useEffect(() => {
     const processCallback = async () => {
       try {
         await handleLogtoCallback();
-        setStatus('Login successful! Redirecting...');
+        setStatus(t('auth.loginSuccess', 'Login successful! Redirecting...'));
         setTimeout(() => navigate('/'), 1200);
       } catch (error) {
         console.error('Callback error:', error);
-        setStatus('Login failed. Please try again.');
+        setStatus(t('auth.loginFailed', 'Login failed. Please try again.'));
         setTimeout(() => navigate('/login'), 2000);
       }
     };
 
     processCallback();
-  }, [navigate]);
+  }, [navigate, t]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg-1)]">

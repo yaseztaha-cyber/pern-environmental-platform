@@ -1,7 +1,9 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Card, SectionTitle, Btn, Pill, StatCard } from '../components/ui';
+import { PageHeader, Card, SectionTitle, Btn, Pill, StatCard } from '../components/ui';
 import { Code2, Send, Copy, Check, BookOpen, Clock } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { ChartTooltip } from '../components/charts';
+import { useI18n } from '../lib/i18n';
 
 interface ApiEndpoint {
   method: string; path: string; description: string; params?: string;
@@ -37,6 +39,7 @@ const ENDPOINTS: ApiEndpoint[] = [
   { method: 'GET', path: '/api/v3/wind/forecast', description: 'Wind forecast', params: '?lat=&lng=' },
   { method: 'GET', path: '/api/v3/wind/trajectory', description: 'Plume trajectory', params: '?lat=&lng=&pollutant=&hours=' },
   { method: 'GET', path: '/api/v3/wind/plume-events', description: 'Active plume events' },
+  { method: 'POST', path: '/api/ai-tools/forecast', description: 'Calibrated 1/7/30-day temperature forecast (PERN engine)', params: '{ latitude, longitude, horizon, target_date, obs_temperature, nwp_temperature }' },
 ];
 
 const METHOD_COLORS: Record<string, 'emerald' | 'blue' | 'amber' | 'rose'> = {
@@ -48,6 +51,7 @@ const CHART_COLORS: Record<string, string> = {
 };
 
 export default function ApiConsole() {
+  const { t } = useI18n();
   const [selectedEndpoint, setSelectedEndpoint] = useState<ApiEndpoint | null>(null);
   const [requestBody, setRequestBody] = useState('');
   const [response, setResponse] = useState<any>(null);
@@ -74,11 +78,11 @@ export default function ApiConsole() {
       setHistory(prev => [{ method: selectedEndpoint.method, path: selectedEndpoint.path, status: res.status, timing }, ...prev].slice(0, 10));
     } catch (e: any) {
       const timing = Math.round(performance.now() - start);
-      setError(e.message || 'Request failed');
+      setError(e.message || t('apiConsole.requestFailed', 'Request failed'));
       setHistory(prev => [{ method: selectedEndpoint.method, path: selectedEndpoint.path, status: 0, timing }, ...prev].slice(0, 10));
     }
     setLoading(false);
-  }, [selectedEndpoint, requestBody]);
+  }, [selectedEndpoint, requestBody, t]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
@@ -106,17 +110,11 @@ export default function ApiConsole() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Code2 size={18} className="text-[var(--emerald)]" />
-          API Console
-        </h2>
-        <p className="text-xs text-slate-500">Interactive explorer for PERN v3 Global Intelligence API</p>
-      </div>
+      <PageHeader title={t('nav.apiConsole', 'API Console')} subtitle={t('apiConsole.subtitle', 'Interactive explorer for PERN v3 Global Intelligence API')} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="p-4 lg:col-span-1 max-h-[500px] overflow-y-auto">
-          <SectionTitle>Endpoints</SectionTitle>
+          <SectionTitle>{t('apiConsole.endpoints', 'Endpoints')}</SectionTitle>
           <div className="mt-3 space-y-1">
             {ENDPOINTS.map(ep => (
               <button key={`${ep.method}-${ep.path}`} onClick={() => { setSelectedEndpoint(ep); setResponse(null); setError(null); }}
@@ -144,16 +142,16 @@ export default function ApiConsole() {
                     {copied ? <Check size={14} /> : <Copy size={14} />}
                   </Btn>
                   <Btn variant="primary" size="sm" loading={loading} onClick={handleSend}>
-                    <Send size={14} /> Send
+                    <Send size={14} /> {t('apiConsole.send', 'Send')}
                   </Btn>
                 </div>
               </div>
 
-              <p className="text-xs text-slate-400 mb-4">{selectedEndpoint.description}</p>
+              <p className="text-xs text-slate-400 mb-4">{t(`apiConsole.api.desc.${ENDPOINTS.indexOf(selectedEndpoint)}`, selectedEndpoint.description)}</p>
 
               {selectedEndpoint.params && (
                 <div className="mb-4">
-                  <label className="text-xs text-slate-400 block mb-1">Parameters</label>
+                  <label className="text-xs text-slate-400 block mb-1">{t('apiConsole.parameters', 'Parameters')}</label>
                   <div className="p-2 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-slate-400">
                     {selectedEndpoint.params}
                   </div>
@@ -162,7 +160,7 @@ export default function ApiConsole() {
 
               {selectedEndpoint.method === 'POST' && (
                 <div className="mb-4">
-                  <label className="text-xs text-slate-400 block mb-1">Request Body (JSON)</label>
+                  <label className="text-xs text-slate-400 block mb-1">{t('apiConsole.requestBody', 'Request Body (JSON)')}</label>
                   <textarea value={requestBody} onChange={e => setRequestBody(e.target.value)}
                     className="w-full h-24 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-slate-300 resize-none"
                     placeholder='{"key": "value"}' />
@@ -170,7 +168,7 @@ export default function ApiConsole() {
               )}
 
               <div className="mb-4">
-                <label className="text-xs text-slate-400 block mb-1">cURL</label>
+                <label className="text-xs text-slate-400 block mb-1">{t('apiConsole.curl', 'cURL')}</label>
                 <div className="relative">
                   <pre className="p-3 rounded-lg bg-black/40 border border-white/10 text-xs text-slate-400 overflow-x-auto">
                     {generateCurl(selectedEndpoint)}
@@ -191,7 +189,7 @@ export default function ApiConsole() {
               {response && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-slate-400">Response</span>
+                    <span className="text-xs text-slate-400">{t('apiConsole.response', 'Response')}</span>
                     <Pill tone={response.status < 400 ? 'emerald' : 'rose'}>{response.status}</Pill>
                   </div>
                   <pre className="p-3 rounded-lg bg-black/40 border border-white/10 text-xs text-slate-300 overflow-x-auto max-h-64 overflow-y-auto">
@@ -203,22 +201,22 @@ export default function ApiConsole() {
           ) : (
             <div className="flex flex-col items-center justify-center h-64 text-slate-500">
               <BookOpen size={32} className="mb-2 opacity-50" />
-              <p className="text-sm">Select an endpoint from the list</p>
-              <p className="text-xs mt-1">22 endpoints available</p>
+              <p className="text-sm">{t('apiConsole.selectEndpoint', 'Select an endpoint from the list')}</p>
+              <p className="text-xs mt-1">{t('apiConsole.endpointsAvailable', '22 endpoints available')}</p>
             </div>
           )}
         </Card>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Total Requests" value={totalRequests} accent="blue" icon={<Send size={18} />} />
-        <StatCard label="Unique Endpoints" value={uniqueEndpoints} accent="violet" icon={<Code2 size={18} />} />
-        <StatCard label="Success Rate" value={totalRequests > 0 ? `${successRate}%` : '—'} accent={successRate >= 80 ? 'emerald' : successRate >= 50 ? 'amber' : 'rose'} icon={<Check size={18} />} />
+        <StatCard label={t('apiConsole.stat.totalRequests', 'Total Requests')} value={totalRequests} accent="blue" icon={<Send size={18} />} />
+        <StatCard label={t('apiConsole.stat.uniqueEndpoints', 'Unique Endpoints')} value={uniqueEndpoints} accent="violet" icon={<Code2 size={18} />} />
+        <StatCard label={t('apiConsole.stat.successRate', 'Success Rate')} value={totalRequests > 0 ? `${successRate}%` : '—'} accent={successRate >= 80 ? 'emerald' : successRate >= 50 ? 'amber' : 'rose'} icon={<Check size={18} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="p-4">
-          <SectionTitle>Method Distribution</SectionTitle>
+          <SectionTitle>{t('apiConsole.methodDistribution', 'Method Distribution')}</SectionTitle>
           {methodData.length > 0 ? (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width={140} height={150}>
@@ -226,7 +224,7 @@ export default function ApiConsole() {
                   <Pie data={methodData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} dataKey="value" paddingAngle={2}>
                     {methodData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
+                  <Tooltip content={<ChartTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 text-xs">
@@ -240,25 +238,25 @@ export default function ApiConsole() {
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-500 text-center py-8">No requests sent yet</p>
+            <p className="text-xs text-slate-500 text-center py-8">{t('apiConsole.noRequests', 'No requests sent yet')}</p>
           )}
         </Card>
 
         <Card className="p-4">
-          <SectionTitle>Request History</SectionTitle>
+          <SectionTitle>{t('apiConsole.requestHistory', 'Request History')}</SectionTitle>
           {history.length > 0 ? (
             <div className="space-y-1 max-h-52 overflow-y-auto">
               {history.map((h, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-white/[0.03]">
                   <Pill tone={METHOD_COLORS[h.method] || 'slate'}>{h.method}</Pill>
                   <span className="font-mono text-[10px] truncate flex-1">{h.path}</span>
-                  <Pill tone={h.status && h.status < 400 ? 'emerald' : 'rose'}>{h.status || 'ERR'}</Pill>
+                  <Pill tone={h.status && h.status < 400 ? 'emerald' : 'rose'}>{h.status || t('apiConsole.statusErr', 'ERR')}</Pill>
                   <span className="text-slate-500 flex items-center gap-0.5"><Clock size={10} />{h.timing}ms</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-slate-500 text-center py-8">No requests sent yet</p>
+            <p className="text-xs text-slate-500 text-center py-8">{t('apiConsole.noRequests', 'No requests sent yet')}</p>
           )}
         </Card>
       </div>

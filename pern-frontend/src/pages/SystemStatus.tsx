@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { PageHeader, Card, Pill, LiveBadge, ProgressRing } from '../components/ui';
 import { apiClient } from '../lib/api-client';
+import { useI18n } from '../lib/i18n';
 import { CheckCircle2, AlertTriangle, XCircle, Server } from 'lucide-react';
 
 interface ServiceStatus {
@@ -11,10 +12,17 @@ interface ServiceStatus {
 }
 
 export default function SystemStatus() {
+  const { t } = useI18n();
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const checkServices = async () => {
+  const statusKeys: Record<string, string> = {
+    healthy: 'settings.status.healthy',
+    degraded: 'settings.status.degraded',
+    down: 'settings.status.down',
+  };
+
+  const checkServices = useCallback(async () => {
     const results: ServiceStatus[] = [];
 
     const probe = async <T,>(fn: () => Promise<T>) => {
@@ -26,26 +34,26 @@ export default function SystemStatus() {
     // Backend + MQTT (single health endpoint carries mqtt state)
     try {
       const { latency, data } = await probe(() => apiClient.get<{ status: string; mqtt: boolean }>('/health'));
-      results.push({ name: 'Backend API', status: data.status === 'ok' ? 'healthy' : 'degraded', latency, details: data.mqtt ? 'MQTT connected' : 'MQTT disconnected' });
-      results.push({ name: 'MQTT Broker', status: data.mqtt ? 'healthy' : 'degraded', latency, details: data.mqtt ? 'Mosquitto connected' : 'Broker unreachable' });
+      results.push({ name: t('systemStatus.service.backendApi', 'Backend API'), status: data.status === 'ok' ? 'healthy' : 'degraded', latency, details: data.mqtt ? t('systemStatus.detail.mqttConnected', 'MQTT connected') : t('systemStatus.detail.mqttDisconnected', 'MQTT disconnected') });
+      results.push({ name: t('systemStatus.service.mqttBroker', 'MQTT Broker'), status: data.mqtt ? 'healthy' : 'degraded', latency, details: data.mqtt ? t('systemStatus.detail.mosquittoConnected', 'Mosquitto connected') : t('systemStatus.detail.brokerUnreachable', 'Broker unreachable') });
     } catch {
-      results.push({ name: 'Backend API', status: 'down', latency: null, details: 'Connection refused' });
-      results.push({ name: 'MQTT Broker', status: 'down', latency: null, details: 'Connection refused' });
+      results.push({ name: t('systemStatus.service.backendApi', 'Backend API'), status: 'down', latency: null, details: t('systemStatus.detail.connectionRefused', 'Connection refused') });
+      results.push({ name: t('systemStatus.service.mqttBroker', 'MQTT Broker'), status: 'down', latency: null, details: t('systemStatus.detail.connectionRefused', 'Connection refused') });
     }
 
     // Live system stats
     try {
       const { latency, data } = await probe(() => apiClient.get<{ websocketClients: number; devices: number; recentReadings: number; uptime: number; memoryUsage: number }>('/live/status'));
-      results.push({ name: 'WebSocket', status: data.websocketClients >= 0 ? 'healthy' : 'degraded', latency, details: `${data.websocketClients} active clients` });
-      results.push({ name: 'Device Registry', status: data.devices > 0 ? 'healthy' : 'degraded', latency: null, details: `${data.devices} registered devices` });
-      results.push({ name: 'Data Pipeline', status: data.recentReadings >= 0 ? 'healthy' : 'degraded', latency: null, details: `${data.recentReadings} readings buffered, ${Math.round(data.uptime)}s uptime, ${data.memoryUsage}MB heap` });
+      results.push({ name: 'WebSocket', status: data.websocketClients >= 0 ? 'healthy' : 'degraded', latency, details: t('systemStatus.detail.activeClients', '{count} active clients', { count: data.websocketClients }) });
+      results.push({ name: t('systemStatus.service.deviceRegistry', 'Device Registry'), status: data.devices > 0 ? 'healthy' : 'degraded', latency: null, details: t('systemStatus.detail.registeredDevices', '{count} registered devices', { count: data.devices }) });
+      results.push({ name: t('systemStatus.service.dataPipeline', 'Data Pipeline'), status: data.recentReadings >= 0 ? 'healthy' : 'degraded', latency: null, details: t('systemStatus.detail.pipeline', '{count} readings buffered, {uptime}s uptime, {memory}MB heap', { count: data.recentReadings, uptime: Math.round(data.uptime), memory: data.memoryUsage }) });
     } catch { /* live status unavailable */ }
 
     // PostgreSQL (via sensors endpoint reachability)
     try {
       const { latency } = await probe(() => apiClient.get<unknown[]>('/sensors'));
-      results.push({ name: 'PostgreSQL', status: 'healthy', latency, details: 'Read/write OK' });
-    } catch { results.push({ name: 'PostgreSQL', status: 'down', latency: null, details: 'Connection refused' }); }
+      results.push({ name: 'PostgreSQL', status: 'healthy', latency, details: t('systemStatus.detail.readWriteOk', 'Read/write OK') });
+    } catch { results.push({ name: 'PostgreSQL', status: 'down', latency: null, details: t('systemStatus.detail.connectionRefused', 'Connection refused') }); }
 
     // Protocol Adapters
     try {
@@ -53,22 +61,22 @@ export default function SystemStatus() {
       const protocols = data.protocols || {};
       const connected = Object.values(protocols).filter(Boolean).length;
       const total = Object.keys(protocols).length;
-      results.push({ name: 'Protocol Adapters', status: total > 0 && connected === total ? 'healthy' : 'degraded', latency, details: `${connected}/${total} protocols connected` });
-    } catch { results.push({ name: 'Protocol Adapters', status: 'down', latency: null, details: 'Connection refused' }); }
+      results.push({ name: t('systemStatus.service.protocolAdapters', 'Protocol Adapters'), status: total > 0 && connected === total ? 'healthy' : 'degraded', latency, details: t('systemStatus.detail.protocolsConnected', '{connected}/{total} protocols connected', { connected, total }) });
+    } catch { results.push({ name: t('systemStatus.service.protocolAdapters', 'Protocol Adapters'), status: 'down', latency: null, details: t('systemStatus.detail.connectionRefused', 'Connection refused') }); }
 
     // ntfy is pushed FROM the backend, not polled from the browser (CORS).
     // Report it as "configured" rather than probing it client-side.
-    results.push({ name: 'ntfy.sh Push', status: 'healthy', latency: null, details: 'Configured (backend push)' });
+    results.push({ name: t('systemStatus.service.ntfyPush', 'ntfy.sh Push'), status: 'healthy', latency: null, details: t('systemStatus.detail.ntfyConfigured', 'Configured (backend push)') });
 
     setServices(results);
     setLoading(false);
-  };
+  }, [t]);
 
   useEffect(() => {
     checkServices();
     const interval = setInterval(checkServices, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkServices]);
 
   const healthy = services.filter(s => s.status === 'healthy').length;
   const allHealthy = services.length > 0 && healthy === services.length;
@@ -79,13 +87,13 @@ export default function SystemStatus() {
   return (
     <div className="max-w-[1000px] mx-auto">
       <PageHeader
-        title="System Status"
-        subtitle="Live health checks across all services"
-        right={<LiveBadge on={allHealthy} label={allHealthy ? 'HEALTHY' : services.length ? 'MONITORING' : 'IDLE'} />}
+        title={t('systemStatus.title', 'System Status')}
+        subtitle={t('systemStatus.subtitle', 'Live health checks across all services')}
+        right={<LiveBadge on={allHealthy} label={allHealthy ? t('systemStatus.badge.healthy', 'HEALTHY') : services.length ? t('systemStatus.badge.monitoring', 'MONITORING') : t('systemStatus.badge.idle', 'IDLE')} />}
       />
 
       {loading ? (
-        <Card hover={false} className="text-center py-12 text-[var(--text-tertiary)]">Checking services…</Card>
+        <Card hover={false} className="text-center py-12 text-[var(--text-tertiary)]">{t('systemStatus.checking', 'Checking services…')}</Card>
       ) : (
         <>
           <Card hover={false} className="mb-5 flex items-center gap-4">
@@ -93,12 +101,12 @@ export default function SystemStatus() {
             <div className="flex items-center gap-3">
               <Server size={20} className="text-[var(--emerald)]" />
               <div>
-                <div className="font-semibold">{healthy}/{services.length} services healthy</div>
-                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">Overall system health</div>
+                <div className="font-semibold">{t('systemStatus.servicesHealthy', '{healthy}/{total} services healthy', { healthy, total: services.length })}</div>
+                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{t('systemStatus.overallHealth', 'Overall system health')}</div>
               </div>
             </div>
             <div className="ml-auto">
-              <Pill tone={allHealthy ? 'emerald' : 'amber'}>{allHealthy ? 'All operational' : 'Partial degradation'}</Pill>
+              <Pill tone={allHealthy ? 'emerald' : 'amber'}>{allHealthy ? t('systemStatus.allOperational', 'All operational') : t('systemStatus.partialDegradation', 'Partial degradation')}</Pill>
             </div>
           </Card>
           <div className="grid md:grid-cols-2 gap-3 grid-entrance">
@@ -113,7 +121,7 @@ export default function SystemStatus() {
                 </div>
                 <div className="flex items-center gap-3">
                   {svc.latency !== null && <span className="text-xs font-mono text-[var(--text-tertiary)]">{svc.latency}ms</span>}
-                  <Pill tone={tone(svc.status)}>{svc.status}</Pill>
+                  <Pill tone={tone(svc.status)}>{t(statusKeys[svc.status] ?? svc.status, svc.status)}</Pill>
                 </div>
               </Card>
             ))}

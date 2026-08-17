@@ -1,10 +1,12 @@
-import { HashRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router';
+import { HashRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PageErrorBoundary } from './components/PageErrorBoundary';
 import { OrganizationProvider } from './lib/organization-context';
 import OrganizationSwitcher from './components/OrganizationSwitcher';
 import DeviceSelector from './components/DeviceSelector';
+import AnimatedBackground from './components/AnimatedBackground';
 import { DeviceProvider } from './lib/device-context';
 import { DataProvider, useData } from './lib/data-provider';
 import { AuthProvider, useAuth } from './lib/auth-context';
@@ -15,16 +17,16 @@ import LanguageSwitcher from './components/LanguageSwitcher';
 import { CommandPalette } from './components/CommandPalette';
 import OnboardingModal from './components/OnboardingModal';
 import { Toggle, LoadingState } from './components/ui';
+import { PernLogo } from './components/PernLogo';
 import MobileBottomNav from './components/MobileBottomNav';
-const GlobalSensorMap = lazy(() => import('./components/GlobalSensorMap'));
 const SignalFlow = lazy(() => import('./components/SignalFlow'));
 import {
-  LayoutDashboard, Gauge, Cpu, Cable, History, BrainCircuit, LineChart,
+  LayoutDashboard, Gauge, Cpu, Cable, BrainCircuit, LineChart,
   BarChart3, MessageSquareCode, BellRing, Workflow, Wand2, Sliders, Activity, Wifi,
-  RadioTower, Clock, Stethoscope, Navigation, FileSpreadsheet, CloudRain, ShieldCheck,
-  UserCheck, Layers, CheckCheck, GitCompare, Wrench, FlaskConical, BookOpenCheck,
-  FolderKanban, Binary, LifeBuoy, KeyRound, Building2, Users, Presentation, PanelLeftClose, PanelLeftOpen,
-  ChevronDown, ChevronRight, Beaker, Globe, Share2
+  Navigation, FileSpreadsheet, ShieldCheck,
+  UserCheck, Layers, CheckCheck, GitCompare, Wrench, BookOpenCheck,
+  KeyRound, Presentation, PanelLeftClose, PanelLeftOpen,
+  ChevronDown, ChevronRight, Beaker, Share2, Database, Satellite, Terminal, Map, ArrowUp
 } from 'lucide-react';
 
 // Lazy-loaded pages
@@ -33,42 +35,52 @@ const SensorsPage = lazy(() => import('./pages/Sensors'));
 const DevicesPage = lazy(() => import('./pages/Devices'));
 const DeviceDetail = lazy(() => import('./pages/DeviceDetail'));
 const AlertsPage = lazy(() => import('./pages/Alerts'));
+const NotificationsCenter = lazy(() => import('./pages/NotificationsCenter'));
 const AutomationPage = lazy(() => import('./pages/Automation'));
 const AIPage = lazy(() => import('./pages/AI'));
 const PredictionsPage = lazy(() => import('./pages/Predictions'));
 const ReportsPage = lazy(() => import('./pages/Reports'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
-const DeviceConnectionPage = lazy(() => import('./pages/DeviceConnection'));
 const Login = lazy(() => import('./pages/Login'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const VulnerablePage = lazy(() => import('./pages/Vulnerable'));
 const DigitalTwinPage = lazy(() => import('./pages/DigitalTwin'));
-const ConnectionTestPage = lazy(() => import('./pages/ConnectionTest'));
 const CompliancePage = lazy(() => import('./pages/Compliance'));
 const ChatbotPage = lazy(() => import('./pages/Chatbot'));
-const SystemStatusPage = lazy(() => import('./pages/SystemStatus'));
-const WeatherPage = lazy(() => import('./pages/Weather'));
 const AnalyticsPage = lazy(() => import('./pages/Analytics'));
 const RealDataValidation = lazy(() => import('./pages/RealDataValidation'));
 const CompareVirtualSensors = lazy(() => import('./pages/CompareVirtualSensors'));
 const RealSensorMap = lazy(() => import('./pages/RealSensorMap'));
-const DeviceHealthDashboard = lazy(() => import('./pages/DeviceHealthDashboard'));
-const SupportPage = lazy(() => import('./pages/Support'));
-const DeviceLifecyclePage = lazy(() => import('./pages/DeviceLifecycle'));
-const HistoryPage = lazy(() => import('./pages/History'));
 const SensorCalibrationPage = lazy(() => import('./pages/SensorCalibration'));
-const OrganizationSettings = lazy(() => import('./pages/OrganizationSettings'));
-const TeamMembers = lazy(() => import('./pages/TeamMembers'));
 const SecurityAudit = lazy(() => import('./pages/SecurityAudit'));
+const ShowcasePage = lazy(() => import('./pages/Showcase'));
+const ProtocolStatusDashboard = lazy(() => import('./pages/ProtocolStatus'));
+const RuleGeneratorPage = lazy(() => import('./pages/RuleGenerator'));
+const VirtualSensorsPage = lazy(() => import('./pages/VirtualSensors'));
+const GlobalSensorsV3 = lazy(() => import('./pages/GlobalSensorsV3'));
+const DataSources = lazy(() => import('./pages/DataSources'));
+const TrustDashboard = lazy(() => import('./pages/TrustDashboard'));
+const KnowledgeHub = lazy(() => import('./pages/KnowledgeHub'));
+const DeviceHub = lazy(() => import('./pages/DeviceHub'));
+const ApiConsole = lazy(() => import('./pages/ApiConsole'));
+const MapsWeatherHub = lazy(() => import('./pages/MapsWeatherHub'));
+const MonitorHub = lazy(() => import('./pages/MonitorHub'));
+const DeviceConnectionPage = lazy(() => import('./pages/DeviceConnection'));
+const DeviceSetupGuidePage = lazy(() => import('./pages/DeviceSetupGuide'));
+const ConnectionTestPage = lazy(() => import('./pages/ConnectionTest'));
+const SystemStatusPage = lazy(() => import('./pages/SystemStatus'));
+const WeatherPage = lazy(() => import('./pages/Weather'));
+const DeviceLifecyclePage = lazy(() => import('./pages/DeviceLifecycle'));
+const DeviceHealthDashboard = lazy(() => import('./pages/DeviceHealthDashboard'));
+const HistoryPage = lazy(() => import('./pages/History'));
 const FirmwarePage = lazy(() => import('./pages/Firmware'));
 const ResearchPage = lazy(() => import('./pages/Research'));
 const KnowledgePage = lazy(() => import('./pages/Knowledge'));
 const ResourcesPage = lazy(() => import('./pages/Resources'));
-const ShowcasePage = lazy(() => import('./pages/Showcase'));
-const ProtocolStatusDashboard = lazy(() => import('./pages/ProtocolStatus'));
-const RuleGeneratorPage = lazy(() => import('./pages/RuleGenerator'));
-const DeviceSetupGuidePage = lazy(() => import('./pages/DeviceSetupGuide'));
-const VirtualSensorsPage = lazy(() => import('./pages/VirtualSensors'));
+const ReferencesPage = lazy(() => import('./pages/References'));
+const PlumeMap = lazy(() => import('./pages/PlumeMap'));
+const GlobalSensorMap = lazy(() => import('./components/GlobalSensorMap'));
+const SupportPage = lazy(() => import('./pages/Support'));
 
 /* ===================== NAVIGATION ===================== */
 
@@ -95,10 +107,9 @@ const navSections: NavSection[] = [
     items: [
       { path: '/sensors', label: 'Live Sensors', icon: Gauge },
       { path: '/devices', label: 'Devices', icon: Cpu },
-      { path: '/device-connection', label: 'Connect Device', icon: Cable },
-      { path: '/device-setup-guide', label: 'Setup Guide', icon: BookOpenCheck },
-      { path: '/history', label: 'History', icon: History },
-      { path: '/map', label: 'Map', icon: Globe },
+      { path: '/device-hub', label: 'Device Hub', icon: Cable },
+      { path: '/monitor-hub', label: 'Monitor Hub', icon: Activity },
+      { path: '/maps-weather', label: 'Maps & Weather', icon: Map },
       { path: '/virtual-sensors', label: 'Virtual Sensors', icon: Beaker },
     ],
   },
@@ -115,6 +126,7 @@ const navSections: NavSection[] = [
     title: 'Automation',
     items: [
       { path: '/alerts', label: 'Alerts', icon: BellRing },
+      { path: '/notifications', label: 'Notification Center', icon: BellRing },
       { path: '/automation', label: 'Rules', icon: Workflow },
       { path: '/rule-generator', label: 'AI Rule Gen', icon: Wand2 },
     ],
@@ -123,7 +135,6 @@ const navSections: NavSection[] = [
     title: 'System',
     items: [
       { path: '/settings', label: 'Settings', icon: Sliders },
-      { path: '/system-status', label: 'Status', icon: Activity },
       { path: '/protocol-status', label: 'Protocols', icon: Wifi },
       { path: '/signal-flow', label: 'Signal Flow', icon: Share2 },
     ],
@@ -135,26 +146,21 @@ const secondarySections: NavSection[] = [
   {
     title: 'More',
     items: [
-      { path: '/connection-test', label: 'Connection Test', icon: RadioTower },
-      { path: '/device-lifecycle', label: 'Device Lifecycle', icon: Clock },
-      { path: '/device-health', label: 'Device Health', icon: Stethoscope },
       { path: '/real-sensor-map', label: 'Real Sensor Map', icon: Navigation },
       { path: '/reports', label: 'Reports', icon: FileSpreadsheet },
-      { path: '/weather', label: 'Weather', icon: CloudRain },
       { path: '/compliance', label: 'Compliance', icon: ShieldCheck },
       { path: '/vulnerable', label: 'Vulnerable Groups', icon: UserCheck },
       { path: '/digital-twin', label: 'Digital Twin', icon: Layers },
       { path: '/real-data-validation', label: 'Data Validation', icon: CheckCheck },
       { path: '/compare-virtual-sensors', label: 'Virtual Compare', icon: GitCompare },
       { path: '/calibration', label: 'Calibration', icon: Wrench },
-      { path: '/research', label: 'Research', icon: FlaskConical },
-      { path: '/knowledge', label: 'Knowledge', icon: BookOpenCheck },
-      { path: '/resources', label: 'Resources', icon: FolderKanban },
-      { path: '/firmware', label: 'Firmware', icon: Binary },
-      { path: '/support', label: 'Support', icon: LifeBuoy },
+      { path: '/global-sensors-v3', label: 'Global v3', icon: Satellite },
+      { path: '/data-sources', label: 'Data Sources', icon: Database },
+      { path: '/knowledge-hub', label: 'Knowledge Hub', icon: BookOpenCheck },
+      { path: '/api-console', label: 'API Console', icon: Terminal },
+      { path: '/trust', label: 'Trust', icon: ShieldCheck },
       { path: '/security-audit', label: 'Security', icon: KeyRound },
-      { path: '/organization-settings', label: 'Organization', icon: Building2 },
-      { path: '/team', label: 'Team', icon: Users },
+      { path: '/support', label: 'Support', icon: MessageSquareCode },
       { path: '/showcase', label: 'Showcase', icon: Presentation },
     ],
   },
@@ -165,26 +171,22 @@ const NAV_I18N: Record<string, string> = {
   '/': 'nav.dashboard',
   '/sensors': 'nav.liveSensors',
   '/devices': 'nav.devices',
-  '/device-connection': 'nav.connectDevice',
-  '/device-setup-guide': 'nav.setupGuide',
-  '/history': 'nav.history',
-  '/map': 'nav.globalSensorMap',
+  '/device-hub': 'nav.deviceHub',
+  '/monitor-hub': 'nav.monitorHub',
+  '/maps-weather': 'nav.mapsWeather',
   '/ai': 'nav.aiEngine',
   '/predictions': 'nav.predictions',
   '/analytics': 'nav.analytics',
   '/chatbot': 'nav.aiAssistant',
   '/alerts': 'nav.alerts',
+  '/notifications': 'nav.notifications',
   '/automation': 'nav.rules',
   '/rule-generator': 'nav.aiRuleGen',
   '/settings': 'nav.settings',
   '/system-status': 'nav.status',
   '/protocol-status': 'nav.protocols',
-  '/connection-test': 'nav.connectionTest',
-  '/device-lifecycle': 'nav.deviceLifecycle',
-  '/device-health': 'nav.deviceHealth',
   '/real-sensor-map': 'nav.realSensorMap',
   '/reports': 'nav.reports',
-  '/weather': 'nav.weather',
   '/compliance': 'nav.compliance',
   '/vulnerable': 'nav.vulnerableGroups',
   '/digital-twin': 'nav.digitalTwin',
@@ -193,14 +195,15 @@ const NAV_I18N: Record<string, string> = {
   '/virtual-sensors': 'nav.virtualSensors',
   '/signal-flow': 'nav.signalFlow',
   '/calibration': 'nav.calibration',
-  '/research': 'nav.research',
-  '/knowledge': 'nav.knowledge',
-  '/resources': 'nav.resources',
-  '/firmware': 'nav.firmware',
+  '/global-sensors-v3': 'nav.globalSensorsV3',
+  '/data-sources': 'nav.dataSources',
+  '/knowledge-hub': 'nav.knowledgeHub',
+  '/api-console': 'nav.apiConsole',
+  '/trust': 'nav.trust',
+  '/device-health': 'nav.deviceHealth',
+  '/history': 'nav.history',
   '/support': 'nav.support',
   '/security-audit': 'nav.security',
-  '/organization-settings': 'nav.organization',
-  '/team': 'nav.team',
   '/showcase': 'nav.showcase',
 };
 
@@ -268,7 +271,7 @@ function Sidebar({ collapsed, setCollapsed }: { collapsed: boolean; setCollapsed
       {/* Mobile hamburger */}
       <button
         onClick={toggleMobile}
-        className="lg:hidden fixed top-3 left-3 z-50 p-2.5 rounded-[var(--radius-sm)] glass"
+        className="lg:hidden fixed top-3 left-3 rtl:left-auto rtl:right-3 z-50 p-2.5 rounded-[var(--radius-sm)] glass"
         aria-label="Toggle navigation"
       >
         <div className="space-y-1">
@@ -281,18 +284,16 @@ function Sidebar({ collapsed, setCollapsed }: { collapsed: boolean; setCollapsed
       {/* Desktop sidebar */}
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''} hidden lg:flex`} role="navigation" aria-label="Main navigation">
         {/* Brand */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-[var(--border)]">
-          <div className="flex items-center gap-2.5 sidebar-brand">
-            <div className="w-8 h-8 rounded-[var(--radius-sm)] bg-gradient-to-br from-[var(--emerald)] to-emerald-600 flex items-center justify-center shrink-0 shadow-glow-sm">
-              <span className="text-white font-bold text-sm">P</span>
+          <div className="flex items-center justify-between px-4 py-4 border-b border-[var(--border)]">
+            <div className="flex items-center gap-2.5 sidebar-brand">
+              <PernLogo size={34} />
+              {!collapsed && (
+                <div className="sidebar-brand-text">
+                  <div className="font-bold text-[15px] tracking-tight leading-none">PERN</div>
+                  <div className="text-[9px] text-[var(--emerald)] tracking-[0.15em] font-semibold mt-0.5">EIQ PLATFORM</div>
+                </div>
+              )}
             </div>
-            {!collapsed && (
-              <div className="sidebar-brand-text">
-                <div className="font-bold text-[15px] tracking-tight leading-none">PERN</div>
-                <div className="text-[9px] text-[var(--emerald)] tracking-[0.15em] font-semibold mt-0.5">EIQ PLATFORM</div>
-              </div>
-            )}
-          </div>
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="p-1.5 rounded-[var(--radius-xs)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors hidden lg:flex"
@@ -353,12 +354,10 @@ function Sidebar({ collapsed, setCollapsed }: { collapsed: boolean; setCollapsed
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 h-full w-72 bg-[var(--bg-1)] border-r border-[var(--border)] flex flex-col animate-slide-in-left shadow-glass-lg">
+          <aside className="absolute left-0 rtl:left-auto rtl:right-0 top-0 h-full w-72 sidebar-mobile border-r rtl:border-r-0 rtl:border-l border-[var(--border)] flex flex-col animate-slide-in-left">
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-[var(--radius-sm)] bg-gradient-to-br from-[var(--emerald)] to-emerald-600 flex items-center justify-center shadow-glow-sm">
-                  <span className="text-white font-bold text-sm">P</span>
-                </div>
+                <PernLogo size={34} />
                 <div>
                   <div className="font-bold text-[15px] tracking-tight">PERN</div>
                   <div className="text-[9px] text-[var(--emerald)] tracking-[0.15em] font-semibold">EIQ PLATFORM</div>
@@ -430,13 +429,13 @@ function AuthMenu() {
 }
 
 function LiveStatusBar() {
-  const { isLive, mqttConnected, reconnecting, lastUpdate } = useData();
+  const { isLive, mqttConnected, reconnecting, lastUpdate, liveDevice } = useData();
   if (!isLive) return null;
 
   let label: string;
   let bgClass: string;
   if (mqttConnected) {
-    label = `LIVE — Streaming via MQTT${lastUpdate ? ` · ${new Date(lastUpdate).toLocaleTimeString()}` : ''}`;
+    label = `LIVE — ${liveDevice ? `${liveDevice} · ` : ''}Streaming via MQTT${lastUpdate ? ` · ${new Date(lastUpdate).toLocaleTimeString()}` : ''}`;
     bgClass = 'bg-[var(--emerald)]/10 text-[var(--emerald)] border-b border-[var(--emerald)]/20';
   } else if (reconnecting) {
     label = 'Reconnecting to MQTT broker…';
@@ -476,22 +475,33 @@ function NotFoundPage() {
   );
 }
 
-/* ===================== PAGE WRAPPER ===================== */
+/* ===================== APP CONTENT ===================== */
 
-function PageWrapper({ children }: { children: React.ReactNode }) {
+function BackToTop() {
+  const [visible, setVisible] = useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    mainRef.current = document.getElementById('main-content');
+    const el = mainRef.current;
+    if (!el) return;
+    const onScroll = () => setVisible(el.scrollTop > 400);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  if (!visible) return null;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+    <button
+      onClick={() => { mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+      className="fixed bottom-20 lg:bottom-6 right-5 rtl:right-auto rtl:left-5 z-40 p-3 rounded-full glass shadow-glass-lg text-[var(--text-secondary)] hover:text-[var(--emerald)] border border-[var(--border)] hover:border-[var(--emerald-glow)] transition-all duration-200 animate-fade-in-up"
+      aria-label="Back to top"
+      title="Back to top"
     >
-      {children}
-    </motion.div>
+      <ArrowUp size={18} />
+    </button>
   );
 }
-
-/* ===================== APP CONTENT ===================== */
 
 function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -499,55 +509,75 @@ function AppContent() {
   const location = useLocation();
   const { isAuthenticated } = useAuth();
 
+  // Scroll to top of the main scroll container on route change
+  useEffect(() => {
+    const el = document.getElementById('main-content');
+    if (el) el.scrollTo({ top: 0, behavior: 'auto' });
+  }, [location.pathname]);
+
   return (
     <div className="flex h-screen bg-[var(--bg-0)] text-[var(--text-primary)] relative overflow-hidden">
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      {/* Background orbs — ocean depths */}
+      {/* Ambient layered background — nebula, aurora, spiral galaxy, blueprint grid */}
+      <div className="aurora-backdrop" aria-hidden="true">
+        <div className="aurora-galaxy" />
+        <div className="aurora-beam a1" />
+        <div className="aurora-beam a2" />
+        <div className="aurora-beam a3" />
+        <div className="aurora-grid" />
+        <div className="aurora-vignette" />
+      </div>
+      <AnimatedBackground />
+      {/* Floating glow orbs — ocean depths */}
       <div className="floating-orbs" aria-hidden="true">
-        <div className="orb orb-emerald w-[350px] h-[350px] top-[15%] left-[10%]" style={{ animationDelay: '0s', opacity: 0.07 }} />
-        <div className="orb orb-cyan w-[300px] h-[300px] top-[55%] left-[60%]" style={{ animationDelay: '-10s', opacity: 0.05 }} />
-        <div className="orb orb-violet w-[250px] h-[250px] top-[25%] right-[10%]" style={{ animationDelay: '-20s', opacity: 0.04 }} />
+        <div className="orb orb-emerald w-[380px] h-[380px] top-[12%] left-[8%]" style={{ animationDelay: '0s', opacity: 0.1 }} />
+        <div className="orb orb-cyan w-[320px] h-[320px] top-[55%] left-[58%]" style={{ animationDelay: '-9s', opacity: 0.08 }} />
+        <div className="orb orb-violet w-[280px] h-[280px] top-[20%] right-[8%]" style={{ animationDelay: '-17s', opacity: 0.07 }} />
+        <div className="orb orb-indigo w-[240px] h-[240px] bottom-[8%] left-[30%]" style={{ animationDelay: '-25s', opacity: 0.06 }} />
+        <div className="orb orb-blue w-[220px] h-[220px] bottom-[20%] right-[25%]" style={{ animationDelay: '-4s', opacity: 0.06 }} />
       </div>
 
-      <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+      {isAuthenticated && <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />}
 
       {/* Main content */}
-      <div className={`flex-1 flex flex-col overflow-hidden ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-[260px]'} transition-[margin] duration-200`}>
+      <div className={`flex-1 flex flex-col overflow-hidden ${!isAuthenticated ? '' : sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-[260px]'} transition-[margin] duration-200`}>
         {isAuthenticated && <OnboardingModal />}
 
         {/* Header */}
-        <header className="h-12 border-b border-[var(--border)] bg-[var(--bg-1)]/80 backdrop-blur-xl flex items-center justify-between px-4 lg:px-6 shrink-0 relative z-30">
-          <div className="hidden md:block lg:ml-0 text-[11px] text-[var(--emerald)] font-semibold tracking-[0.12em] uppercase">
-            {t('header.platform')}
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto">
-            <LiveModeToggle />
-            <div className="w-px h-4 bg-[var(--border)] hidden sm:block" />
-            <OrganizationSwitcher />
-            <DeviceSelector />
-            <LanguageSwitcher />
-            <AuthMenu />
-            <div className="px-2 py-0.5 bg-[var(--emerald-dim)] text-[var(--emerald)] rounded-full text-[10px] font-semibold hidden sm:block">
-              v2.7
+        {isAuthenticated && (
+          <header className="h-12 border-b border-[var(--border)] bg-[var(--bg-1)]/80 backdrop-blur-xl flex items-center justify-between px-4 lg:px-6 shrink-0 relative z-30">
+            <div className="hidden md:block lg:ml-0 text-[11px] text-[var(--emerald)] font-semibold tracking-[0.12em] uppercase">
+              {t('header.platform')}
             </div>
-          </div>
-        </header>
 
-        <LiveStatusBar />
+            <div className="flex items-center gap-2 ml-auto">
+              <LiveModeToggle />
+              <div className="w-px h-4 bg-[var(--border)] hidden sm:block" />
+              <OrganizationSwitcher />
+              <DeviceSelector />
+              <LanguageSwitcher />
+              <AuthMenu />
+              <div className="px-2 py-0.5 bg-[var(--emerald-dim)] text-[var(--emerald)] rounded-full text-[10px] font-semibold hidden sm:block">
+                v2.7
+              </div>
+            </div>
+          </header>
+        )}
+
+        {isAuthenticated && <LiveStatusBar />}
 
         {/* Scrollable content — pb-16 on mobile for bottom nav clearance */}
         <main id="main-content" className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 pb-20 lg:pb-8 relative z-10" role="main" aria-label="Main content">
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             <motion.div
               key={location.pathname}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             >
-              <Suspense fallback={<PageLoader />}>
-                <Routes>
+              <PageErrorBoundary resetKey={location.pathname}>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/*" element={
@@ -558,53 +588,64 @@ function AppContent() {
                       <Route path="/devices" element={<DevicesPage />} />
                       <Route path="/devices/:deviceId" element={<DeviceDetail />} />
                       <Route path="/alerts" element={<AlertsPage />} />
+                      <Route path="/notifications" element={<NotificationsCenter />} />
                       <Route path="/automation" element={<AutomationPage />} />
                       <Route path="/ai" element={<AIPage />} />
                       <Route path="/predictions" element={<PredictionsPage />} />
-                      <Route path="/map" element={<div className="p-4"><GlobalSensorMap /></div>} />
                       <Route path="/real-sensor-map" element={<RealSensorMap />} />
                       <Route path="/reports" element={<ReportsPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/device-connection" element={<DeviceConnectionPage />} />
-                      <Route path="/device-setup-guide" element={<DeviceSetupGuidePage />} />
-                      <Route path="/connection-test" element={<ConnectionTestPage />} />
-                      <Route path="/system-status" element={<SystemStatusPage />} />
-                      <Route path="/weather" element={<WeatherPage />} />
                       <Route path="/compliance" element={<CompliancePage />} />
                       <Route path="/vulnerable" element={<VulnerablePage />} />
                       <Route path="/digital-twin" element={<DigitalTwinPage />} />
                       <Route path="/chatbot" element={<ChatbotPage />} />
                       <Route path="/analytics" element={<AnalyticsPage />} />
-                      <Route path="/device-lifecycle" element={<DeviceLifecyclePage />} />
-                      <Route path="/device-health" element={<DeviceHealthDashboard />} />
-                      <Route path="/support" element={<SupportPage />} />
-                      <Route path="/history" element={<HistoryPage />} />
                       <Route path="/calibration" element={<SensorCalibrationPage />} />
-                      <Route path="/firmware" element={<FirmwarePage />} />
-                      <Route path="/research" element={<ResearchPage />} />
-                      <Route path="/knowledge" element={<KnowledgePage />} />
-                      <Route path="/resources" element={<ResourcesPage />} />
                       <Route path="/showcase" element={<ShowcasePage />} />
-                      <Route path="/organization-settings" element={<OrganizationSettings />} />
-                      <Route path="/team" element={<TeamMembers />} />
                       <Route path="/security-audit" element={<SecurityAudit />} />
                       <Route path="/protocol-status" element={<ProtocolStatusDashboard />} />
-                      <Route path="/signal-flow" element={<div className="p-4"><SignalFlow /></div>} />
+                      <Route path="/signal-flow" element={<SignalFlow />} />
                       <Route path="/rule-generator" element={<RuleGeneratorPage />} />
                       <Route path="/real-data-validation" element={<RealDataValidation />} />
                       <Route path="/compare-virtual-sensors" element={<CompareVirtualSensors />} />
                       <Route path="/virtual-sensors" element={<VirtualSensorsPage />} />
+                      <Route path="/global-sensors-v3" element={<GlobalSensorsV3 />} />
+                      <Route path="/data-sources" element={<DataSources />} />
+                      <Route path="/trust" element={<TrustDashboard />} />
+                      <Route path="/knowledge-hub" element={<KnowledgeHub />} />
+                      <Route path="/device-hub" element={<DeviceHub />} />
+                      <Route path="/api-console" element={<ApiConsole />} />
+                      <Route path="/maps-weather" element={<MapsWeatherHub />} />
+                      <Route path="/monitor-hub" element={<MonitorHub />} />
+                      <Route path="/device-connection" element={<DeviceConnectionPage />} />
+                      <Route path="/device-setup-guide" element={<DeviceSetupGuidePage />} />
+                      <Route path="/connection-test" element={<ConnectionTestPage />} />
+                      <Route path="/system-status" element={<SystemStatusPage />} />
+                      <Route path="/weather" element={<WeatherPage />} />
+                      <Route path="/device-lifecycle" element={<DeviceLifecyclePage />} />
+                      <Route path="/device-health" element={<DeviceHealthDashboard />} />
+                      <Route path="/history" element={<HistoryPage />} />
+                      <Route path="/firmware" element={<FirmwarePage />} />
+                      <Route path="/research" element={<ResearchPage />} />
+                      <Route path="/knowledge" element={<KnowledgePage />} />
+                      <Route path="/resources" element={<ResourcesPage />} />
+                      <Route path="/references" element={<ReferencesPage />} />
+                      <Route path="/plume-map" element={<PlumeMap />} />
+                      <Route path="/map" element={<div className="p-4"><GlobalSensorMap /></div>} />
+                      <Route path="/support" element={<SupportPage />} />
                       <Route path="*" element={<NotFoundPage />} />
                     </Routes>
                   </RequireAuth>
                 } />
               </Routes>
             </Suspense>
+              </PageErrorBoundary>
             </motion.div>
           </AnimatePresence>
         </main>
 
         {isAuthenticated && <MobileBottomNav />}
+        {isAuthenticated && <BackToTop />}
       </div>
     </div>
   );

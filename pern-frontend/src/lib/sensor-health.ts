@@ -69,6 +69,46 @@ const EXPECTED_RANGES: Record<string, [number, number]> = {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+/** Raw reading shapes accepted by buildSensorHistory (API row or WS event). */
+export interface RawSensorReading {
+  sensors?: Record<string, number> | string;
+}
+
+/**
+ * Build a per-sensor value history map from raw reading rows.
+ * Accepts either parsed `{ key: value }` objects or JSON-encoded strings.
+ */
+export function buildSensorHistory(readings: RawSensorReading[]): Record<string, number[]> {
+  const map: Record<string, number[]> = {};
+  for (const r of readings) {
+    let sensors = r.sensors;
+    if (typeof sensors === 'string') {
+      try {
+        sensors = JSON.parse(sensors);
+      } catch {
+        continue;
+      }
+    }
+    if (!sensors || typeof sensors !== 'object') continue;
+    for (const [k, v] of Object.entries(sensors)) {
+      const n = Number(v);
+      if (v !== null && v !== undefined && !isNaN(n)) {
+        const arr = map[k] ?? (map[k] = []);
+        arr.push(n);
+        if (arr.length > 60) arr.shift();
+      }
+    }
+  }
+  return map;
+}
+
+export const SENSOR_STATUS_META: Record<HealthStatus, { label: string; tone: 'emerald' | 'amber' | 'rose' | 'slate'; color: string }> = {
+  healthy: { label: 'Healthy', tone: 'emerald', color: 'var(--emerald)' },
+  degraded: { label: 'Degraded', tone: 'amber', color: 'var(--amber)' },
+  failed: { label: 'Failed', tone: 'rose', color: 'var(--rose)' },
+  unknown: { label: 'Unknown', tone: 'slate', color: 'var(--text-disabled)' },
+};
+
 /**
  * Analyze sensor health given a map of recent readings.
  *

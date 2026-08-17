@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../middleware/rbac');
+const { sendError } = require('../middleware/error-handler');
 
 router.get('/', async (req, res) => {
   try {
@@ -28,14 +29,14 @@ router.post('/', requireRole('admin'), async (req, res) => {
   try {
     await db.upsertUser({ id, email, name, role, organization_id });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
     await db.deleteUser(req.params.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 module.exports = router;

@@ -24,6 +24,7 @@
 const char* DEVICE_ID = "Arduino-UNO-001";
 const int   BAUD_RATE = 115200;
 const unsigned long SEND_INTERVAL = 5000;
+const int SENSOR_SAMPLES = 5;
 // ========================================
 
 unsigned long lastSend = 0;
@@ -37,13 +38,30 @@ void setup() {
   delay(2000);
 }
 
+int readAvg(int pin, int samples) {
+  long sum = 0;
+  for (int i = 0; i < samples; i++) {
+    sum += analogRead(pin);
+    delay(2);
+  }
+  return sum / samples;
+}
+
 void publishData() {
-  // Replace with actual sensor reads
-  float tmp  = analogRead(A0) * 0.488;    // LM35
-  int   hum  = map(analogRead(A1), 0, 1023, 0, 100);
-  int   pm25 = map(analogRead(A2), 0, 1023, 0, 500);
-  int   mq   = map(analogRead(A3), 0, 1023, 0, 100);
-  int   co2  = 400 + map(analogRead(A4), 0, 1023, 0, 1600);
+  // Sensor conversions (10-bit ADC, 5V ref)
+  int a0  = readAvg(A0, SENSOR_SAMPLES);       // LM35 (temp)
+  int a1  = readAvg(A1, SENSOR_SAMPLES);       // analog humidity
+  int a2  = readAvg(A2, SENSOR_SAMPLES);        // MQ-135 (air quality)
+  int a3  = readAvg(A3, SENSOR_SAMPLES);        // gas sensor
+  int a4  = readAvg(A4, SENSOR_SAMPLES);        // CO2 sensor
+
+  float voltage = a0 * (5.0 / 1024.0);
+  float tmp     = voltage * 100.0;             // LM35: 10mV/°C
+
+  int   hum  = map(a1, 0, 1023, 0, 100);       // generic humidity (0-100%)
+  int   pm25 = map(a2, 0, 1023, 0, 500);        // MQ-135 -> PM2.5 index (0-500)
+  int   mq   = map(a3, 0, 1023, 0, 100);        // gas sensor (0-100)
+  int   co2  = 400 + map(a4, 0, 1023, 0, 1600); // CO2 (400-2000 ppm)
 
   // Build JSON
   StaticJsonDocument<256> doc;
@@ -66,7 +84,11 @@ void publishData() {
   Serial.print(" hum=");
   Serial.print(hum);
   Serial.print(" pm25=");
-  Serial.println(pm25);
+  Serial.print(pm25);
+  Serial.print(" mq=");
+  Serial.print(mq);
+  Serial.print(" co2=");
+  Serial.println(co2);
 }
 
 void loop() {

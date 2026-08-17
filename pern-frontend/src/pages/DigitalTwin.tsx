@@ -3,7 +3,9 @@ import { PageHeader, Card, Pill, Btn, SectionTitle, fmt } from '../components/ui
 import { calculateScientificEHI } from '../lib/scientific-ehi';
 import { calculateAQI, calculateWQI } from '../lib/virtual-sensors';
 import { ThermometerSun, Droplet, Wind, Cloud, Beaker, Waves, Eye, Volume2, Gauge, RotateCcw, Save, Download, Upload, BarChart3 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { ChartGrid, ChartTooltip, CHART_TICK, CHART_CURSOR } from '../components/charts';
+import { useI18n } from '../lib/i18n';
 import { useData } from '../lib/data-provider';
 import { showToast } from '../components/Toast';
 import type { Scenario } from '../lib/types';
@@ -30,7 +32,14 @@ const PRESETS = [
   { name: 'Industrial', values: { pm25: 95, ph: 6.8, tmp: 30, hum: 45, co2: 800, pm10: 180, no2: 120, so2: 65, o3: 90, noise: 95, dO: 5.5, tds: 450, mq: 1.2 } },
 ];
 
+const PRESET_KEYS: Record<string, string> = {
+  'Urban Cairo': 'digitalTwin.preset.urbanCairo',
+  'Clean Delta': 'digitalTwin.preset.cleanDelta',
+  'Industrial': 'digitalTwin.preset.industrial',
+};
+
 export default function DigitalTwinPage() {
+  const { t } = useI18n();
   const { data, isLive, hasRealData } = useData();
   const [sensors, setSensors] = useState<Record<string, number>>({ pm25: 25, ph: 7.1, tmp: 28, hum: 55, co2: 450, pm10: 40, no2: 20, so2: 10, o3: 50, noise: 60, dO: 8.0, tds: 200, mq: 0.35 });
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -82,7 +91,7 @@ export default function DigitalTwinPage() {
   const wqi = useMemo(() => calculateWQI(sensors), [sensors]);
 
   const saveScenario = () => {
-    const name = `Scenario ${scenarios.length + 1}`;
+    const name = t('digitalTwin.scenarioName', 'Scenario {count}', { count: String(scenarios.length + 1) });
     const entry: Scenario = { name, values: { ...sensors }, ehi: +ehi.toFixed(1), aqi: aqi?.value ?? 0, wqi: wqi?.value ?? 0, timestamp: Date.now() };
     setScenarios(prev => [...prev, entry]);
     setSimHistory(prev => [...prev.slice(-49), { time: Date.now(), ehi: +ehi.toFixed(1) }]);
@@ -96,7 +105,7 @@ export default function DigitalTwinPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `twin-scenarios-${Date.now()}.json`; a.click();
     URL.revokeObjectURL(url);
-    showToast('Scenarios exported', 'success');
+    showToast(t('digitalTwin.toast.exported', 'Scenarios exported'), 'success');
   };
 
   const importScenarios = () => {
@@ -107,8 +116,8 @@ export default function DigitalTwinPage() {
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        if (Array.isArray(data)) { setScenarios(prev => [...prev, ...data]); showToast(`${data.length} scenarios imported`, 'success'); }
-      } catch { showToast('Invalid scenario file', 'error'); }
+        if (Array.isArray(data)) { setScenarios(prev => [...prev, ...data]); showToast(t('digitalTwin.toast.imported', '{count} scenarios imported', { count: String(data.length) }), 'success'); }
+      } catch { showToast(t('digitalTwin.toast.invalidFile', 'Invalid scenario file'), 'error'); }
     };
     input.click();
   };
@@ -126,46 +135,46 @@ export default function DigitalTwinPage() {
 
   const ehiColor = ehi >= 70 ? 'var(--emerald)' : ehi >= 40 ? 'var(--amber)' : 'var(--rose)';
   const ehiColorHex = ehi >= 70 ? '#10b981' : ehi >= 40 ? '#f59e0b' : '#ef4444';
-  const ehiLabel = ehi >= 70 ? 'Good' : ehi >= 40 ? 'Moderate' : 'Poor';
+  const ehiLabel = ehi >= 70 ? t('common.status.good', 'Good') : ehi >= 40 ? t('common.status.moderate', 'Moderate') : t('digitalTwin.ehi.poor', 'Poor');
   const ehiPillTone = ehi >= 70 ? 'emerald' as const : ehi >= 40 ? 'amber' as const : 'rose' as const;
 
   return (
     <div className="max-w-[1200px] mx-auto">
-      <PageHeader title="Digital Twin Simulator" subtitle="Adjust sensor values to see real-time impact on EHI"
+      <PageHeader title={t('digitalTwin.title', 'Digital Twin Simulator')} subtitle={t('digitalTwin.subtitle', 'Adjust sensor values to see real-time impact on EHI')}
         right={
           <div className="flex items-center gap-2">
             <Pill tone={ehiPillTone}>{ehiLabel} — EHI {fmt(ehi)}</Pill>
-            <Btn onClick={resetAll} size="sm" aria-label="Reset"><RotateCcw size={14} /></Btn>
-            <Btn onClick={saveScenario} variant="primary" size="sm"><Save size={12} /> Save</Btn>
-            <Btn onClick={exportScenarios} size="sm" aria-label="Export scenarios"><Download size={14} /></Btn>
-            <Btn onClick={importScenarios} size="sm" aria-label="Import scenarios"><Upload size={14} /></Btn>
+            <Btn onClick={resetAll} size="sm" aria-label={t('digitalTwin.reset', 'Reset')}><RotateCcw size={14} /></Btn>
+            <Btn onClick={saveScenario} variant="primary" size="sm"><Save size={12} /> {t('common.save', 'Save')}</Btn>
+            <Btn onClick={exportScenarios} size="sm" aria-label={t('digitalTwin.exportScenarios', 'Export scenarios')}><Download size={14} /></Btn>
+            <Btn onClick={importScenarios} size="sm" aria-label={t('digitalTwin.importScenarios', 'Import scenarios')}><Upload size={14} /></Btn>
           </div>
         } />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 grid-entrance">
         <Card className="text-center" hover={false}>
           <div className="text-2xl font-bold" style={{ color: ehiColor }}>{fmt(ehi)}</div>
-          <div className="text-[10px] text-[var(--text-disabled)] uppercase">EHI Score</div>
+          <div className="text-[10px] text-[var(--text-disabled)] uppercase">{t('digitalTwin.ehiScore', 'EHI Score')}</div>
         </Card>
         <Card className="text-center" hover={false}>
           <div className="text-2xl font-bold text-[var(--cyan)]">{fmt(aqi?.value)}</div>
-          <div className="text-[10px] text-[var(--text-disabled)] uppercase">AQI</div>
+          <div className="text-[10px] text-[var(--text-disabled)] uppercase">{t('digitalTwin.aqi', 'AQI')}</div>
         </Card>
         <Card className="text-center" hover={false}>
           <div className="text-2xl font-bold text-[var(--cyan)]">{fmt(wqi?.value)}</div>
-          <div className="text-[10px] text-[var(--text-disabled)] uppercase">WQI</div>
+          <div className="text-[10px] text-[var(--text-disabled)] uppercase">{t('digitalTwin.wqi', 'WQI')}</div>
         </Card>
         <Card className="text-center" hover={false}>
           <div className="text-2xl font-bold">{scenarios.length}</div>
-          <div className="text-[10px] text-[var(--text-disabled)] uppercase">Scenarios Saved</div>
+          <div className="text-[10px] text-[var(--text-disabled)] uppercase">{t('digitalTwin.scenariosSaved', 'Scenarios Saved')}</div>
         </Card>
       </div>
 
-      <SectionTitle>Quick Presets</SectionTitle>
-      <div className="flex gap-2 mb-6 flex-wrap grid-entrance" role="group" aria-label="Quick presets">
+      <SectionTitle>{t('digitalTwin.quickPresets', 'Quick Presets')}</SectionTitle>
+      <div className="flex gap-2 mb-6 flex-wrap grid-entrance" role="group" aria-label={t('digitalTwin.quickPresets', 'Quick presets')}>
         {PRESETS.map(p => (
           <Btn key={p.name} onClick={() => loadPreset(p)} variant="ghost" size="sm">
-            {p.name}
+            {t(PRESET_KEYS[p.name] ?? p.name, p.name)}
           </Btn>
         ))}
       </div>
@@ -177,14 +186,14 @@ export default function DigitalTwinPage() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <s.icon size={14} className="text-[var(--emerald)]" />
-                  {s.label}
+                  {t(`digitalTwin.sensor.${s.key}`, s.label)}
                 </div>
                 <span className="font-mono text-xs text-[var(--text-secondary)]">{fmt(sensors[s.key])} {s.unit}</span>
               </div>
               <input type="range" min={s.range[0]} max={s.range[1]} step={s.step} value={sensors[s.key] || 0}
                 onChange={e => updateSensor(s.key, parseFloat(e.target.value))}
                 className="w-full h-1.5 bg-[var(--surface)] rounded-full appearance-none cursor-pointer accent-[var(--emerald)]"
-                aria-label={`${s.label} slider`} />
+                aria-label={t('digitalTwin.sensorSlider', '{name} slider', { name: t(`digitalTwin.sensor.${s.key}`, s.label) })} />
               <div className="flex justify-between text-[9px] text-[var(--text-disabled)] mt-1">
                 <span>{fmt(s.range[0])}</span><span>{fmt(s.range[1])} {s.unit}</span>
               </div>
@@ -195,14 +204,14 @@ export default function DigitalTwinPage() {
         <div className="space-y-4">
           {simHistory.length > 1 && (
             <Card hover={false}>
-              <SectionTitle>EHI Over Time</SectionTitle>
+              <SectionTitle>{t('digitalTwin.ehiOverTime', 'EHI Over Time')}</SectionTitle>
               <ResponsiveContainer width="100%" height={150}>
                 <AreaChart data={simHistory.map(h => ({ t: new Date(h.time).toLocaleTimeString(), ehi: h.ehi }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="t" tick={{ fontSize: 9 }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="ehi" stroke={ehiColorHex} fill={ehiColorHex} fillOpacity={0.2} />
+                  <ChartGrid />
+                  <XAxis dataKey="t" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip />} cursor={CHART_CURSOR} />
+                  <Area type="monotone" dataKey="ehi" name="EHI" stroke={ehiColorHex} fill={ehiColorHex} fillOpacity={0.2} activeDot={{ r: 4, strokeWidth: 0 }} />
                 </AreaChart>
               </ResponsiveContainer>
             </Card>
@@ -210,12 +219,12 @@ export default function DigitalTwinPage() {
 
           {/* Compliance Checks */}
           <Card hover={false}>
-            <SectionTitle><span className="flex items-center gap-2"><BarChart3 size={14} className="text-[var(--violet)]" />Compliance</span></SectionTitle>
+            <SectionTitle><span className="flex items-center gap-2"><BarChart3 size={14} className="text-[var(--violet)]" />{t('digitalTwin.compliance', 'Compliance')}</span></SectionTitle>
             <div className="space-y-1.5">
               {complianceData.map((c, i) => (
                 <div key={i} className="flex items-center justify-between text-xs py-1">
                   <span className="text-[var(--text-secondary)]">{c.body} {c.param}</span>
-                  <Pill tone={c.pass ? 'emerald' : 'rose'}>{c.pass ? 'PASS' : 'FAIL'}</Pill>
+                  <Pill tone={c.pass ? 'emerald' : 'rose'}>{c.pass ? t('digitalTwin.compliance.pass', 'PASS') : t('digitalTwin.compliance.fail', 'FAIL')}</Pill>
                 </div>
               ))}
             </div>
@@ -223,7 +232,7 @@ export default function DigitalTwinPage() {
 
           {scenarios.length > 0 && (
             <Card hover={false}>
-              <SectionTitle>Saved Scenarios ({scenarios.length})</SectionTitle>
+              <SectionTitle>{t('digitalTwin.savedScenarios', 'Saved Scenarios ({count})', { count: String(scenarios.length) })}</SectionTitle>
               <div className="space-y-1 max-h-[300px] overflow-y-auto">
                 {[...scenarios].reverse().map((s, i) => (
                   <div key={i} className="flex items-center justify-between py-2 px-2 rounded text-xs hover:bg-[var(--surface)]">

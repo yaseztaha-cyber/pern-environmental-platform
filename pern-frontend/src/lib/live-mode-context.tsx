@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components */
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 
 interface LiveModeContextType {

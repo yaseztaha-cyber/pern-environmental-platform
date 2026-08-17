@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Search, Monitor, Activity, Bell, Shield, FileText, Settings, Sparkles, Map, Database, X } from 'lucide-react';
 
@@ -17,7 +17,7 @@ interface CommandItem {
 }
 
 const COMMAND_ITEMS: CommandItem[] = [
-  { id: 'dash', title: 'Live System Dashboard', category: 'Navigation', icon: Activity, path: '/dashboard' },
+  { id: 'dash', title: 'Live System Dashboard', category: 'Navigation', icon: Activity, path: '/' },
   { id: 'map', title: 'Map', category: 'Navigation', icon: Map, path: '/map' },
   { id: 'devices', title: 'Device Fleet & Management', category: 'Devices', icon: Monitor, path: '/devices' },
   { id: 'virtual', title: 'Virtual Sensor Analytics', category: 'Analytics', icon: Sparkles, path: '/virtual-sensors' },
@@ -37,15 +37,20 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenPr
   const isOpen = isOpenProp !== undefined ? isOpenProp : internalOpen;
   const handleNavigate = onNavigateProp || ((path: string) => navigate(path));
 
+  const handleNavigateRef = useRef(handleNavigate);
+  useEffect(() => {
+    handleNavigateRef.current = handleNavigate;
+  });
+
   const handleClose = useCallback(() => {
     if (onCloseProp) onCloseProp();
     else setInternalOpen(false);
   }, [onCloseProp]);
 
-  const filtered = isOpen ? COMMAND_ITEMS.filter(item =>
+  const filtered = useMemo(() => (isOpen ? COMMAND_ITEMS.filter(item =>
     item.title.toLowerCase().includes(query.toLowerCase()) ||
     item.category.toLowerCase().includes(query.toLowerCase())
-  ) : [];
+  ) : []), [isOpen, query]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -72,7 +77,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenPr
           e.preventDefault();
           const item = filtered[selectedIndex];
           if (item) {
-            handleNavigate(item.path);
+            handleNavigateRef.current(item.path);
             handleClose();
           }
         }
@@ -80,7 +85,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen: isOpenPr
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, handleClose, filtered, selectedIndex, handleNavigate]);
+  }, [isOpen, handleClose, filtered, selectedIndex]);
 
   if (!isOpen) return null;
 

@@ -15,6 +15,8 @@ export interface AuditLog {
   severity: 'info' | 'warning' | 'critical';
 }
 
+import { apiClient } from './api-client';
+
 const AUDIT_KEY = 'pern_audit_logs';
 
 export function logAuditEvent(
@@ -34,7 +36,10 @@ export function logAuditEvent(
     severity
   };
 
-  // Store in localStorage (in production, send to backend)
+  // Mirror to the backend audit trail (fire-and-forget; never block the UI).
+  apiClient.postAuditEvent(action, resource, details).catch(() => {});
+
+  // Keep a local copy as an offline fallback
   const existing = JSON.parse(localStorage.getItem(AUDIT_KEY) || '[]');
   existing.unshift(log);
   

@@ -9,6 +9,7 @@ const { validateSensorData } = require('../middleware/validator');
 const logger = require('../utils/logger');
 const rateLimiter = require('../middleware/rate-limiter');
 const { sanitizeInput } = require('../middleware/sanitize');
+const { sendError } = require('../middleware/error-handler');
 
 // Apply rate limiting to all persistence routes (40 requests per minute)
 router.use(rateLimiter(60000, 40));
@@ -50,7 +51,7 @@ router.post('/rules', async (req, res) => {
     res.json({ success: true, count: rules.length });
   } catch (error) {
     logger.error('Error saving rules', { error: error.message });
-    res.status(500).json({ success: false, error: error.message });
+    sendError(res, error);
   }
 });
 
@@ -73,9 +74,22 @@ router.get('/rules', async (req, res) => {
 });
 
 // POST /api/persistence/readings - Save sensor reading
+// Routes through the canonical ingestion pipeline (DB + MQTT re-publish +
+// automation + anomaly alerts) so no ingest path bypasses the shared logic.
 router.post('/readings', validateSensorData, async (req, res) => {
   try {
-    await db.saveSensorReading(req.body);
+    const ingestReading = req.app.get('ingestReading');
+    if (ingestReading) {
+      await ingestReading({
+        device: req.body.device || 'http-device',
+        timestamp: req.body.timestamp || Date.now(),
+        sensors: req.body.sensors,
+        _source: 'http',
+      });
+    } else {
+      // Fallback when not running inside the main server (e.g. tests)
+      await db.saveSensorReading(req.body);
+    }
     logger.info('Sensor reading saved', { device: req.body.device });
     // Audit log (best-effort, non-blocking)
     db.logAuditEvent({

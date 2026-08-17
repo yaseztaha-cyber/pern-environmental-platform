@@ -10,7 +10,7 @@ describe('Rate Limiter', () => {
   it('allows requests within limit', () => {
     const limiter = createRateLimiter(60000, 5);
     const req = { ip: '127.0.0.1', headers: {} };
-    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn(), setHeader: vi.fn() };
     let nextCount = 0;
 
     for (let i = 0; i < 5; i++) {
@@ -24,7 +24,7 @@ describe('Rate Limiter', () => {
   it('blocks requests over limit', () => {
     const limiter = createRateLimiter(60000, 3);
     const req = { ip: 'test-block', headers: {} };
-    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn(), setHeader: vi.fn() };
 
     for (let i = 0; i < 4; i++) {
       limiter(req, res, () => {});
@@ -38,7 +38,7 @@ describe('Rate Limiter', () => {
 
   it('differentiates by IP', () => {
     const limiter = createRateLimiter(60000, 2);
-    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn(), setHeader: vi.fn() };
 
     limiter({ ip: '1.1.1.1' }, res, () => {});
     limiter({ ip: '1.1.1.1' }, res, () => {});

@@ -3,6 +3,7 @@ import { apiClient } from '../lib/api-client';
 import { showToast } from '../components/Toast';
 import { PageHeader, Card, Pill, Btn, SectionTitle, EmptyState, LoadingState } from '../components/ui';
 import { Cpu, Upload, RefreshCw, CheckCircle2, ArrowDown, Plus, Trash2 } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 
 interface DeviceFirmware {
   deviceId: string;
@@ -26,6 +27,7 @@ interface FirmwareRelease {
 }
 
 export default function FirmwarePage() {
+  const { t } = useI18n();
   const [devices, setDevices] = useState<DeviceFirmware[]>([]);
   const [releases, setReleases] = useState<FirmwareRelease[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,36 +99,36 @@ export default function FirmwarePage() {
 
       if (interval) clearInterval(interval);
       setUpdateProgress(100);
-      showToast(`Firmware updated to ${targetVersion}`, 'success');
+      showToast(t('firmware.updatedTo', 'Firmware updated to {version}', { version: targetVersion }), 'success');
       await loadData();
     } catch {
       if (interval) clearInterval(interval);
-      showToast('Firmware update failed', 'error');
+      showToast(t('firmware.updateFailed', 'Firmware update failed'), 'error');
     } finally {
       setTimeout(() => { setUpdating(null); setUpdateProgress(0); }, 800);
     }
   };
 
   const createRelease = async () => {
-    if (!newRelease.version) { showToast('Version is required', 'error'); return; }
+    if (!newRelease.version) { showToast(t('firmware.versionRequired', 'Version is required'), 'error'); return; }
     try {
       await apiClient.createFirmwareVersion(newRelease);
-      showToast('Firmware release created', 'success');
+      showToast(t('firmware.releaseCreated', 'Firmware release created'), 'success');
       setNewRelease({ device_type: 'ESP32', version: '', changelog: '', download_url: '' });
       setShowReleaseForm(false);
       await loadData();
     } catch {
-      showToast('Failed to create release', 'error');
+      showToast(t('firmware.createFailed', 'Failed to create release'), 'error');
     }
   };
 
   const deleteRelease = async (id: number) => {
     try {
       await apiClient.deleteFirmwareVersion(id);
-      showToast('Release deleted', 'success');
+      showToast(t('firmware.releaseDeleted', 'Release deleted'), 'success');
       await loadData();
     } catch {
-      showToast('Failed to delete release', 'error');
+      showToast(t('firmware.deleteFailed', 'Failed to delete release'), 'error');
     }
   };
 
@@ -136,23 +138,23 @@ export default function FirmwarePage() {
   return (
     <div className="max-w-[1200px] mx-auto">
       <PageHeader
-        title="Firmware Management"
-        subtitle="OTA updates • Version tracking • Release management"
+        title={t('firmware.title', 'Firmware Management')}
+        subtitle={t('firmware.subtitle', 'OTA updates • Version tracking • Release management')}
         right={
           <>
             <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-              <CheckCircle2 size={14} className="text-[var(--emerald)]" /> {upToDate} up-to-date
+              <CheckCircle2 size={14} className="text-[var(--emerald)]" /> {t('firmware.upToDateCount', '{count} up-to-date', { count: upToDate })}
               {updatesAvailable > 0 && (
                 <span className="text-[var(--amber)] ml-2">
-                  <ArrowDown size={14} className="inline" /> {updatesAvailable} updates
+                  <ArrowDown size={14} className="inline" /> {t('firmware.updatesCount', '{count} updates', { count: updatesAvailable })}
                 </span>
               )}
             </div>
-            <Btn variant="ghost" onClick={loadData} title="Refresh">
+            <Btn variant="ghost" onClick={loadData} title={t('firmware.refresh', 'Refresh')}>
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             </Btn>
             <Btn variant="primary" onClick={() => setShowReleaseForm(!showReleaseForm)}>
-              <Plus size={14} /> New Release
+              <Plus size={14} /> {t('firmware.newRelease', 'New Release')}
             </Btn>
           </>
         }
@@ -160,7 +162,7 @@ export default function FirmwarePage() {
 
       {showReleaseForm && (
         <Card hover={false} className="mb-6">
-          <SectionTitle>Create Firmware Release</SectionTitle>
+          <SectionTitle>{t('firmware.createRelease', 'Create Firmware Release')}</SectionTitle>
           <div className="grid md:grid-cols-4 gap-3 mt-4">
             <select
               value={newRelease.device_type}
@@ -175,30 +177,30 @@ export default function FirmwarePage() {
             </select>
             <input
               type="text"
-              placeholder="Version (v2.6.0)"
+              placeholder={t('firmware.versionPlaceholder', 'Version (v2.6.0)')}
               value={newRelease.version}
               onChange={e => setNewRelease({ ...newRelease, version: e.target.value })}
               className="bg-white/5 px-4 py-2.5 rounded-2xl text-sm text-[var(--text-primary)] border border-[var(--border)]"
             />
             <input
               type="text"
-              placeholder="Changelog"
+              placeholder={t('firmware.changelogPlaceholder', 'Changelog')}
               value={newRelease.changelog}
               onChange={e => setNewRelease({ ...newRelease, changelog: e.target.value })}
               className="bg-white/5 px-4 py-2.5 rounded-2xl text-sm text-[var(--text-primary)] border border-[var(--border)]"
             />
-            <Btn variant="primary" onClick={createRelease}>Publish</Btn>
+            <Btn variant="primary" onClick={createRelease}>{t('firmware.publish', 'Publish')}</Btn>
           </div>
         </Card>
       )}
 
       {loading ? (
-        <LoadingState label="Loading firmware data…" />
+        <LoadingState label={t('firmware.loading', 'Loading firmware data…')} />
       ) : devices.length === 0 ? (
         <EmptyState
           icon={<Cpu size={22} />}
-          title="No devices found"
-          message="Connect devices from Device Connection first."
+          title={t('firmware.noDevicesTitle', 'No devices found')}
+          message={t('firmware.noDevicesMessage', 'Connect devices from Device Connection first.')}
         />
       ) : (
         <>
@@ -214,34 +216,34 @@ export default function FirmwarePage() {
                       </div>
                       <div>
                         <div className="font-semibold text-sm text-[var(--text-primary)]">{d.deviceId}</div>
-                        <div className="text-[10px] text-[var(--text-tertiary)]">{d.deviceType} • {d.status}</div>
+                        <div className="text-[10px] text-[var(--text-tertiary)]">{d.deviceType} • {t('firmware.status.' + (d.status || 'unknown'), d.status || 'unknown')}</div>
                       </div>
                     </div>
                     <Pill tone={d.updateAvailable ? 'amber' : 'emerald'}>
-                      {d.updateAvailable ? 'UPDATE AVAILABLE' : 'UP TO DATE'}
+                      {d.updateAvailable ? t('firmware.badgeUpdateAvailable', 'UPDATE AVAILABLE') : t('firmware.badgeUpToDate', 'UP TO DATE')}
                     </Pill>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="bg-white/5 rounded-xl p-3">
-                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Current</div>
+                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">{t('firmware.current', 'Current')}</div>
                       <div className="font-mono text-lg font-bold mt-0.5 text-[var(--text-primary)]">{d.currentVersion}</div>
                     </div>
                     <div className="bg-white/5 rounded-xl p-3">
-                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Latest</div>
-                      <div className="font-mono text-lg font-bold mt-0.5 text-[var(--emerald)]">{d.latestVersion || 'N/A'}</div>
+                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">{t('firmware.latest', 'Latest')}</div>
+                      <div className="font-mono text-lg font-bold mt-0.5 text-[var(--emerald)]">{d.latestVersion || t('firmware.notAvailable', 'N/A')}</div>
                     </div>
                   </div>
 
                   {d.changelog && (
                     <div className="text-xs text-[var(--text-tertiary)] mb-4 leading-relaxed">
-                      <span className="text-[var(--text-secondary)] font-medium">Changelog:</span> {d.changelog}
+                      <span className="text-[var(--text-secondary)] font-medium">{t('firmware.changelogLabel', 'Changelog:')}</span> {d.changelog}
                     </div>
                   )}
 
                   <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
                     <span className="text-[10px] text-[var(--text-tertiary)] font-mono">
-                      Last seen: {d.lastSeen ? new Date(d.lastSeen).toLocaleDateString() : 'Never'}
+                      {t('firmware.lastSeen', 'Last seen: {time}', { time: d.lastSeen ? new Date(d.lastSeen).toLocaleDateString() : t('firmware.timeNever', 'Never') })}
                     </span>
                     {isUpdating ? (
                       <div className="flex-1 ml-3">
@@ -256,11 +258,11 @@ export default function FirmwarePage() {
                         </div>
                       </div>
                     ) : d.updateAvailable && d.latestVersion ? (
-                      <Btn variant="primary" size="sm" onClick={() => performUpdate(d.deviceId, d.latestVersion)}>
-                        <Upload size={12} /> Update to {d.latestVersion}
+                      <Btn variant="primary" size="sm" onClick={() => performUpdate(d.deviceId, d.latestVersion!)}>
+                        <Upload size={12} /> {t('firmware.updateTo', 'Update to {version}', { version: d.latestVersion })}
                       </Btn>
                     ) : (
-                      <span className="text-[10px] text-[var(--text-tertiary)]">Up to date</span>
+                      <span className="text-[10px] text-[var(--text-tertiary)]">{t('firmware.upToDate', 'Up to date')}</span>
                     )}
                   </div>
                 </Card>
@@ -270,12 +272,12 @@ export default function FirmwarePage() {
 
           <Card hover={false}>
             <div className="flex justify-between items-center mb-4">
-              <SectionTitle>Firmware Release History</SectionTitle>
-              <span className="text-xs text-[var(--text-tertiary)]">{releases.length} releases</span>
+              <SectionTitle>{t('firmware.releaseHistory', 'Firmware Release History')}</SectionTitle>
+              <span className="text-xs text-[var(--text-tertiary)]">{t('firmware.releasesCount', '{count} releases', { count: releases.length })}</span>
             </div>
             {releases.length === 0 ? (
               <div className="text-center py-8 text-[var(--text-tertiary)] text-sm">
-                No firmware releases yet. Create one above.
+                {t('firmware.noReleases', 'No firmware releases yet. Create one above.')}
               </div>
             ) : (
               <div className="space-y-0">
@@ -294,13 +296,13 @@ export default function FirmwarePage() {
                         <span className="text-[10px] text-[var(--text-tertiary)]">
                           {new Date(release.released_at).toLocaleDateString()}
                         </span>
-                        {i === 0 && <Pill tone="emerald">Latest</Pill>}
+                        {i === 0 && <Pill tone="emerald">{t('firmware.latestBadge', 'Latest')}</Pill>}
                       </div>
                       {release.changelog && (
                         <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{release.changelog}</div>
                       )}
                     </div>
-                    <Btn variant="ghost" size="sm" onClick={() => deleteRelease(release.id)} title="Delete release">
+                    <Btn variant="ghost" size="sm" onClick={() => deleteRelease(release.id)} title={t('firmware.deleteRelease', 'Delete release')}>
                       <Trash2 size={14} className="text-[var(--text-tertiary)] hover:text-[var(--rose)]" />
                     </Btn>
                   </div>

@@ -19,6 +19,16 @@ services:
     depends_on:
       - postgres
       - mqtt-broker
+      - pern-ai
+    networks:
+      - pern-network
+
+  pern-ai:
+    build: ./pern-ai
+    ports:
+      - "8000:8000"
+    environment:
+      - PERN_AI_VERSION=0.1.0
     networks:
       - pern-network
 

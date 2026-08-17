@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../middleware/rbac');
+const { sendError } = require('../middleware/error-handler');
 
 router.get('/', async (req, res) => {
   try {
@@ -25,14 +26,14 @@ router.post('/', requireRole('admin', 'manager'), async (req, res) => {
   try {
     await db.saveFirmwareVersion(req.body);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
     await db.deleteFirmwareVersion(req.params.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.post('/:deviceId/update', async (req, res) => {
@@ -42,7 +43,7 @@ router.post('/:deviceId/update', async (req, res) => {
     await db.upsertDeviceMetadata({ device_id: req.params.deviceId, firmware_version: fw.version });
     await db.updateDeviceConfigPush(req.params.deviceId);
     res.json({ success: true, version: fw.version });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 module.exports = router;

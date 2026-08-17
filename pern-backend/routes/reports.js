@@ -8,6 +8,7 @@ const db = require('../db');
 const rateLimiter = require('../middleware/rate-limiter');
 const { requireRole } = require('../middleware/rbac');
 const limiter = rateLimiter(60000, 10);
+const { sendError } = require('../middleware/error-handler');
 
 router.get('/available', (req, res) => {
   res.json([
@@ -45,7 +46,7 @@ router.post('/generate', limiter, async (req, res) => {
 
     res.json(report);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 

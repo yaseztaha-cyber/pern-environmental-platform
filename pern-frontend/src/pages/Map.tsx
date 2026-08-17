@@ -6,8 +6,8 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { PageHeader, Card, Pill, SectionTitle, Btn, Toggle } from '../components/ui';
 import { showToast } from '../components/Toast';
-import { MapPin, Crosshair, AlertTriangle, Layers, ThermometerSun } from 'lucide-react';
-import type { DeviceLocation as DL, ComplianceTrend } from '../lib/types';
+import { MapPin, Crosshair, AlertTriangle, Layers } from 'lucide-react';
+import type { ComplianceTrend } from '../lib/types';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -112,7 +112,7 @@ export default function MapPage() {
       await loadLocations();
     } catch (err) {
       console.error('Failed to save location:', err);
-      showToast('Failed to save device location.', 'error');
+      showToast(t('map.saveLocationFailed', 'Failed to save device location.'), 'error');
     }
   };
 
@@ -125,16 +125,16 @@ export default function MapPage() {
   return (
     <div>
       <PageHeader
-        title={t('map.title')}
-        subtitle={`${locatedCount} located · ${locations.length} total devices`}
+        title={t('map.title', 'Environmental Map')}
+        subtitle={t('map.subtitleStats', '{located} located · {total} total devices', { located: locatedCount, total: locations.length })}
         right={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 mr-2 text-xs text-[var(--text-tertiary)]">
               <Layers size={12} />
-              <Toggle checked={showCompliance} onChange={setShowCompliance} label="Compliance" />
-              <Toggle checked={showHeat} onChange={setShowHeat} label="Heat" />
+              <Toggle checked={showCompliance} onChange={setShowCompliance} label={t('map.complianceToggle', 'Compliance')} />
+              <Toggle checked={showHeat} onChange={setShowHeat} label={t('map.heatToggle', 'Heat')} />
             </div>
-            {loading ? <Pill tone="slate">Loading...</Pill> : <Pill tone="emerald">{onlineCount} online</Pill>}
+            {loading ? <Pill tone="slate">{t('common.loading', 'Loading...')}</Pill> : <Pill tone="emerald">{t('map.onlineCount', '{count} online', { count: onlineCount })}</Pill>}
           </div>
         }
       />
@@ -165,7 +165,7 @@ export default function MapPage() {
                       <Popup>
                         <div style={{ fontFamily: 'system-ui' }}>
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{loc.name}</div>
-                          <div style={{ fontSize: 11, color: '#888' }}>{loc.type} • {loc.firmware || 'N/A'}</div>
+                          <div style={{ fontSize: 11, color: '#888' }}>{loc.type} • {loc.firmware || t('map.na', 'N/A')}</div>
                           <div style={{ fontSize: 11, marginTop: 4, color: loc.status === 'online' ? '#10b981' : '#ef4444' }}>
                             {loc.status}
                           </div>
@@ -231,8 +231,8 @@ export default function MapPage() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-[var(--text-tertiary)] gap-3">
                 <MapPin size={32} className="opacity-40" />
-                <div className="text-sm font-medium">No devices with coordinates yet</div>
-                <div className="text-xs">Set a device location from the sidebar to place it on the map</div>
+                <div className="text-sm font-medium">{t('map.noCoordinates', 'No devices with coordinates yet')}</div>
+                <div className="text-xs">{t('map.noCoordinatesHint', 'Set a device location from the sidebar to place it on the map')}</div>
               </div>
             )}
           </Card>
@@ -241,7 +241,7 @@ export default function MapPage() {
         <div className="space-y-4">
         {complianceTrends.length > 0 && (
           <Card hover={false}>
-            <SectionTitle>Compliance Overview</SectionTitle>
+            <SectionTitle>{t('map.complianceOverview', 'Compliance Overview')}</SectionTitle>
             <div className="space-y-2">
               {complianceTrends.slice(0, 5).map(ct => (
                 <div key={ct.country} className="flex items-center justify-between text-xs">
@@ -253,11 +253,11 @@ export default function MapPage() {
           </Card>
         )}
         <Card hover={false}>
-          <SectionTitle>Devices ({locations.length})</SectionTitle>
+          <SectionTitle>{t('map.devicesCount', 'Devices ({count})', { count: locations.length })}</SectionTitle>
           {unlocated.length > 0 && (
             <div className="mb-3 p-2 rounded-[var(--radius-sm)] bg-[var(--amber-dim)] border border-[rgba(251,191,36,0.25)] text-xs text-[var(--amber)] flex items-center gap-2">
               <AlertTriangle size={12} />
-              {unlocated.length} device(s) need coordinates
+              {t('map.needCoordinates', '{count} device(s) need coordinates', { count: unlocated.length })}
             </div>
           )}
           <div className="space-y-2 max-h-[480px] overflow-auto pr-2">
@@ -285,7 +285,7 @@ export default function MapPage() {
                         onClick={(e) => { e.stopPropagation(); setSettingLocation(loc.id); setPickedCoords(null); }}
                         className="text-[10px] text-[var(--emerald)] hover:underline flex items-center gap-1"
                       >
-                        <Crosshair size={10} /> Set location
+                        <Crosshair size={10} /> {t('map.setLocation', 'Set location')}
                       </button>
                     )}
                   </div>
@@ -294,15 +294,15 @@ export default function MapPage() {
                   <div className="mt-2 p-2 rounded bg-black/20 text-xs space-y-2">
                     <div className="text-[var(--text-tertiary)]">
                       {pickedCoords
-                        ? `Picked: ${pickedCoords.lat.toFixed(4)}, ${pickedCoords.lng.toFixed(4)}`
-                        : 'Click on the map to pick a location'}
+                        ? t('map.picked', 'Picked: {lat}, {lng}', { lat: pickedCoords.lat.toFixed(4), lng: pickedCoords.lng.toFixed(4) })
+                        : t('map.clickToPick', 'Click on the map to pick a location')}
                     </div>
                     <div className="flex gap-2">
                       <Btn variant="primary" size="sm" disabled={!pickedCoords} onClick={() => handleSetLocation(loc.id)}>
-                        Save
+                        {t('common.save', 'Save')}
                       </Btn>
                       <Btn variant="ghost" size="sm" onClick={() => { setSettingLocation(null); setPickedCoords(null); }}>
-                        Cancel
+                        {t('common.cancel', 'Cancel')}
                       </Btn>
                     </div>
                   </div>
@@ -326,18 +326,18 @@ export default function MapPage() {
 
       {selected && selected.hasCoordinates && selected.lat && selected.lng && (
         <Card className="mt-6">
-          <div className="font-semibold text-lg">{selected.name}{t('map.detailViewSuffix')}</div>
+          <div className="font-semibold text-lg">{selected.name}{t('map.detailViewSuffix', ' — Detailed View')}</div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
-            <div>Type: <span className="font-semibold">{selected.type}</span></div>
-            <div>{t('map.label.status')}: <Pill tone={getStatusPill(selected.status)}>{selected.status}</Pill></div>
-            <div>Lat: <span className="font-mono">{selected.lat}</span></div>
-            <div>Lng: <span className="font-mono">{selected.lng}</span></div>
-            {selected.firmware && <div>Firmware: <span className="font-mono">{selected.firmware}</span></div>}
-            {selected.tags.length > 0 && <div>Tags: <span>{selected.tags.join(', ')}</span></div>}
+            <div>{t('map.typeLabel', 'Type: ')}<span className="font-semibold">{selected.type}</span></div>
+            <div>{t('map.label.status', 'Status: ')}: <Pill tone={getStatusPill(selected.status)}>{selected.status}</Pill></div>
+            <div>{t('map.latLabel', 'Lat: ')}<span className="font-mono">{selected.lat}</span></div>
+            <div>{t('map.lngLabel', 'Lng: ')}<span className="font-mono">{selected.lng}</span></div>
+            {selected.firmware && <div>{t('map.firmwareLabel', 'Firmware: ')}<span className="font-mono">{selected.firmware}</span></div>}
+            {selected.tags.length > 0 && <div>{t('map.tagsLabel', 'Tags: ')}<span>{selected.tags.join(', ')}</span></div>}
           </div>
           {selected.latestReading && (
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
-              <div className="section-label mb-2">Latest Sensor Reading</div>
+              <div className="section-label mb-2">{t('map.latestReading', 'Latest Sensor Reading')}</div>
               <div className="grid grid-cols-4 md:grid-cols-6 gap-3 text-xs">
                 {Object.entries(selected.latestReading).map(([k, v]) => (
                   <div key={k} className="p-2 rounded bg-white/[0.03]">

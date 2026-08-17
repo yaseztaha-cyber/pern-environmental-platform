@@ -6,12 +6,23 @@
 const express = require('express');
 const router = express.Router();
 const aiRouter = require('../services/ai-router');
+const aiCopilot = require('../services/ai-copilot');
 const conversationMemory = require('../services/conversation-memory');
 const rateLimiter = require('../middleware/rate-limiter');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 
 router.use('/chat', rateLimiter(60000, 30));
+
+// Ground the chatbot with live platform data (best-effort, never blocks).
+async function withLiveContext(context) {
+  try {
+    const live = await aiCopilot.buildLiveContext(context || {});
+    return { ...(context || {}), ...live };
+  } catch {
+    return context || {};
+  }
+}
 
 // Regular (non-streaming) chat
 router.post('/chat', async (req, res) => {
@@ -35,9 +46,10 @@ router.post('/chat', async (req, res) => {
       await conversationMemory.create(title, 'anonymous', 'default', undefined, sessionId);
     }
 
+    const enrichedContext = await withLiveContext(context || {});
     const result = await aiRouter.chat({
       message: trimmed,
-      context: context || {},
+      context: enrichedContext,
       sessionId: sid
     });
 
@@ -45,7 +57,8 @@ router.post('/chat', async (req, res) => {
 
   } catch (error) {
     logger.error('[Chatbot Route]', { error: error.message });
-    const fallbackReply = generateFallbackReply(trimmed || '', context || {});
+    const fallbackContext = await withLiveContext(context || {});
+    const fallbackReply = generateFallbackReply(trimmed || '', fallbackContext);
     res.json({
       response: fallbackReply,
       model: 'fallback',
@@ -57,7 +70,7 @@ router.post('/chat', async (req, res) => {
 
 // SSE Streaming chat
 router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
-  const { message, context, sessionId } = req.body || {};
+  const { message, context, sessionId, conversationId } = req.body || {};
   const trimmed = (message || '').trim();
   try {
 
@@ -69,13 +82,16 @@ router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
       return res.status(400).json({ error: 'Message too long' });
     }
 
-    const sid = sessionId || crypto.randomUUID();
+    const sid = sessionId || conversationId || crypto.randomUUID();
 
     // Auto-create conversation if new
     if ((await conversationMemory.getHistory(sid, 1)).length === 0) {
       const title = conversationMemory.generateTitle(trimmed);
       await conversationMemory.create(title, 'anonymous', 'default', undefined, sid);
     }
+
+    // Save user message early so a crash still records intent
+    await conversationMemory.saveMessage(sid, 'user', trimmed, undefined, 0);
 
     // Set SSE headers
     res.writeHead(200, {
@@ -85,21 +101,18 @@ router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
       'X-Accel-Buffering': 'no'
     });
 
-    res.write(`data: ${JSON.stringify({ type: 'start', sessionId: sid })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'start', sessionId: sid, conversationId: sid })}\n\n`);
 
     try {
       const stream = await aiRouter.chatStream({
         message: trimmed,
-        context: context || {},
+        context: await withLiveContext(context || {}),
         sessionId: sid
       });
 
       let fullResponse = '';
       const reader = stream.body;
       
-      // Save user message
-      await conversationMemory.saveMessage(sid, 'user', trimmed, undefined, 0);
-
       for await (const chunk of reader) {
         const text = chunk.toString();
         const lines = text.split('\n');
@@ -123,7 +136,7 @@ router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
       // Save assistant message
       await conversationMemory.saveMessage(sid, 'assistant', fullResponse, aiRouter.model);
 
-      res.write(`data: ${JSON.stringify({ type: 'done', model: aiRouter.model })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done', model: aiRouter.model, conversationId: sid, sessionId: sid })}\n\n`);
       res.end();
 
     } catch (streamError) {
@@ -139,7 +152,7 @@ router.post('/stream', rateLimiter(60000, 15), async (req, res) => {
     }
     const fallbackReply = generateFallbackReply(message || '', context || {});
     res.write(`data: ${JSON.stringify({ type: 'chunk', content: fallbackReply })}\n\n`);
-    res.write(`data: ${JSON.stringify({ type: 'done', model: 'fallback' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'done', model: 'fallback', conversationId: sid, sessionId: sid })}\n\n`);
     res.end();
   }
 });
@@ -208,12 +221,36 @@ router.get('/health', (req, res) => {
 
 function generateFallbackReply(message, context) {
   const msg = (message || '').toLowerCase();
-  const pm25 = context?.pm25 || context?.physical?.pm25;
-  const ph = context?.ph || context?.physical?.ph;
-  const ehi = context?.ehi;
+  const pm25 = context?.pm25 ?? context?.physical?.pm25 ?? context?.live?.current?.pm25;
+  const ph = context?.ph ?? context?.physical?.ph ?? context?.live?.current?.ph;
+  const ehi = context?.ehi ?? context?.live?.healthScore;
+  const risk = context?.live?.riskLevel || (ehi >= 80 ? 'low' : ehi >= 60 ? 'moderate' : 'high');
+  const affected = (context?.live?.statuses || []).filter(s => s.level !== 'normal');
+
+  if (msg.includes('trend') || msg.includes('rising') || msg.includes('direction')) {
+    const stats = context?.live?.stats || [];
+    const moving = stats.filter(s => s.direction !== 'stable');
+    return moving.length > 0
+      ? `Trending sensors: ${moving.map(s => `**${s.sensor}** ${s.direction} (avg ${s.avg})`).slice(0, 5).join(', ')}.`
+      : 'No sensor shows a strong directional trend over the recent window.';
+  }
+
+  if (msg.includes('anomal') || msg.includes('outlier') || msg.includes('unusual')) {
+    const anomalies = context?.live?.anomalies || [];
+    return anomalies.length > 0
+      ? `Anomalies detected: ${anomalies.map(a => `**${a.sensor}** deviates ${a.zScore.toFixed(1)}σ (value ${a.value})`).slice(0, 5).join(', ')}.`
+      : 'No anomalies detected in the current monitoring window.';
+  }
+
+  if (msg.includes('compli') || msg.includes('regulat') || msg.includes('limit') || msg.includes('legal') || msg.includes('standard')) {
+    const c = context?.live?.compliance || {};
+    return c.exceedances?.length > 0
+      ? `Regulatory exceedances under ${c.framework} (${c.authority}): ${c.exceedances.map(e => `**${e.parameter}** at ${e.exceeded_by}% over limit`).join(', ')}.`
+      : `Compliant under the ${c.framework} framework (${c.authority}).`;
+  }
 
   if (msg.includes('ehi') || msg.includes('health index') || msg.includes('score')) {
-    return `The current Environmental Health Index (EHI) is **${ehi || 'N/A'}**. ${ehi >= 80 ? 'Conditions are **excellent**.' : ehi >= 60 ? 'Conditions are **good**.' : ehi >= 40 ? 'Conditions are **moderate**. Consider improving ventilation.' : 'Conditions are **poor**. Take action to reduce pollution sources.'}`;
+    return `The current Environmental Health Index (EHI) is **${ehi ?? 'N/A'}**. ${ehi >= 80 ? 'Conditions are **excellent**.' : ehi >= 60 ? 'Conditions are **good**.' : ehi >= 40 ? 'Conditions are **moderate**. Consider improving ventilation.' : 'Conditions are **poor**. Take action to reduce pollution sources.'}`;
   }
 
   if (msg.includes('pm2.5') || msg.includes('pm25') || msg.includes('air quality') || msg.includes('air')) {
@@ -224,20 +261,21 @@ function generateFallbackReply(message, context) {
     return `Current pH reading: **${ph || 'N/A'}**. ${ph >= 6.5 && ph <= 8.5 ? 'Water pH is within normal range.' : 'Water pH is outside normal range. Check water treatment systems.'}`;
   }
 
-  if (msg.includes('recommend') || msg.includes('suggestion') || msg.includes('help')) {
+  if (msg.includes('recommend') || msg.includes('suggestion') || msg.includes('help') || msg.includes('action')) {
     const tips = [];
     if (pm25 > 25) tips.push('- Consider running the air purifier to reduce PM2.5 levels.');
     if (ph < 6.5) tips.push('- Water pH is low. Check for acid contamination sources.');
     if (ph > 8.5) tips.push('- Water pH is high. Check alkalinity treatment.');
+    for (const a of affected.slice(0, 3)) tips.push(`- **${a.label}** is ${a.level} (${a.value}${a.unit}). Check the affected area.`);
     if (tips.length === 0) tips.push('- All readings look good! No immediate action needed.');
-    return `Based on current readings:\n${tips.join('\n')}`;
+    return `Based on current readings (risk: ${risk}):\n${tips.join('\n')}`;
   }
 
   if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
-    return 'Hello! I can help you understand your environmental data. Ask about air quality (PM2.5), water conditions (pH), the EHI score, or request recommendations.';
+    return 'Hello! I can help you understand your environmental data. Ask about air quality (PM2.5), water conditions (pH), the EHI score, trends, anomalies, compliance, or recommendations.';
   }
 
-  return `I can help with environmental monitoring. Try asking about:\n- Air quality / PM2.5 levels\n- Water pH conditions\n- EHI score\n- Recommendations\n\n*Note: The AI service is temporarily offline. This is a local fallback response.*`;
+  return `I can help with environmental monitoring. Try asking about:\n- Air quality / PM2.5 levels\n- Water pH conditions\n- EHI score\n- Trends and anomalies\n- Compliance limits\n- Recommendations\n\n*Note: The AI service is temporarily offline. This is a local fallback response based on live data.*`;
 }
 
 module.exports = router;

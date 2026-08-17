@@ -4,17 +4,49 @@
  */
 
 import { getCurrentContext } from './app-context';
+import { getAccessToken } from './auth';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const TOKEN_KEY = 'pern_auth_token';
 
 interface RequestOptions extends RequestInit {
   requiresAuth?: boolean;
 }
 
+// Single-flight token refresh: concurrent 401s share one refresh round.
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        sessionStorage.setItem(TOKEN_KEY, token);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+function handleUnauthorized(endpoint: string) {
+  sessionStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new CustomEvent('pern-auth-expired'));
+  if (window.location.hash !== '#/login' && !endpoint.includes('/health')) {
+    window.location.hash = '#/login';
+  }
+}
+
 class APIClient {
   private getAuthHeaders(): HeadersInit {
     const context = getCurrentContext();
-    const token = sessionStorage.getItem('pern_auth_token');
+    const token = sessionStorage.getItem(TOKEN_KEY);
     
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -35,13 +67,13 @@ class APIClient {
 
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const url = `${API_BASE}${endpoint}`;
-    const headers = this.getAuthHeaders();
     const maxRetries = 2;
     const timeoutMs = 30000;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const headers = this.getAuthHeaders();
 
       try {
         const response = await fetch(url, {
@@ -56,10 +88,10 @@ class APIClient {
         clearTimeout(timer);
 
         if (response.status === 401) {
-          sessionStorage.removeItem('pern_auth_token');
-          if (window.location.hash !== '#/login' && !endpoint.includes('/health')) {
-            window.location.hash = '#/login';
-          }
+          // Try once to refresh the session token, then retry the request.
+          const refreshed = await refreshAccessToken();
+          if (refreshed && attempt < maxRetries) continue;
+          handleUnauthorized(endpoint);
           throw new Error(`API Error: 401 Unauthorized`);
         }
 
@@ -120,11 +152,17 @@ class APIClient {
     return this.put<any>(`/devices/${id}/location`, { lat, lng });
   }
   getDeviceReadings(id: string, limit = 50) { return this.get<any[]>(`/devices/${id}/readings?limit=${limit}`); }
-  getDeviceLatestReading(id: string) { return this.get<any>(`/devices/${id}/readings?limit=1`); }
   getDeviceHealth(id: string) { return this.get<any>(`/devices/${id}/health`); }
   getDeviceHealthHistory(id: string, limit = 50) { return this.get<any[]>(`/devices/${id}/health/history?limit=${limit}`); }
-  sendActuatorCommand(id: string, actuator: string, action: string) {
-    return this.post<any>(`/devices/${id}/actuator`, { actuator, action });
+  sendActuatorCommand(id: string, actuator: string, action: string, params?: Record<string, unknown>) {
+    return this.post<any>(`/devices/${id}/actuator`, { actuator, command: action, params: params || {} });
+  }
+  getDeviceConfig(id: string) { return this.get<any>(`/devices/${id}/config`); }
+  sendDeviceConfig(id: string, config: Record<string, unknown>) {
+    return this.post<any>(`/devices/${id}/config`, config);
+  }
+  pushOta(id: string, firmware: string, version?: string) {
+    return this.post<any>(`/devices/${id}/ota`, { firmware, version: version || '' });
   }
 
   // ===================== Sensors =====================
@@ -183,6 +221,26 @@ class APIClient {
     return `${API_BASE}/export/alerts/csv?limit=${limit}`;
   }
 
+  /**
+   * Downloads a CSV endpoint as a file. Fetches with auth headers and streams
+   * to a blob so cross-origin exports work and the SPA is never navigated away.
+   */
+  async downloadCSV(url: string, filename: string): Promise<void> {
+    const response = await fetch(url, { headers: this.getAuthHeaders() });
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  }
+
   // ===================== EHI History =====================
   postEHIHistory(data: { deviceId?: string; ehi: number; category?: string }) {
     return this.post<any>('/ehi-history', data);
@@ -202,6 +260,14 @@ class APIClient {
     if (params?.userId) q.set('userId', params.userId);
     if (params?.resourceType) q.set('resourceType', params.resourceType);
     return this.get<any[]>(`/audit-logs?${q.toString()}`);
+  }
+
+  // ===================== Security =====================
+  getSecurityStatus() {
+    return this.get<any>('/security/status');
+  }
+  postAuditEvent(action: string, resource?: string, details?: any) {
+    return this.post<any>('/security/log', { action, resource, details });
   }
 
   // ===================== Calibration =====================
@@ -233,7 +299,18 @@ class APIClient {
   analyzeTrend(data: any) { return this.post<any>('/ai-tools/analyze-trend', data); }
   predictMaintenance(data: any) { return this.post<any>('/ai-tools/predict-maintenance', data); }
   diagnoseSensors(data: any) { return this.post<any>('/ai-tools/diagnose-sensors', data); }
+  getHealthBriefing(data: any) { return this.post<any>('/ai-tools/health-briefing', data); }
   getAIStats() { return this.get<any>('/ai-tools/stats'); }
+  askCopilot(data: any) { return this.post<any>('/ai-tools/copilot', data); }
+  pernForecast(data: any) { return this.post<any>('/ai-tools/forecast', data); }
+
+  // ===================== Device API Keys =====================
+  issueDeviceApiKey(deviceId: string) { return this.post<any>(`/devices/${deviceId}/api-key`, {}); }
+  revokeDeviceApiKey(deviceId: string) { return this.post<any>(`/devices/${deviceId}/api-key/revoke`, {}); }
+  getDeviceApiKeyStatus(deviceId: string) { return this.get<any>(`/devices/${deviceId}/api-key-status`); }
+
+  // ===================== Readings =====================
+  ingestReading(payload: any) { return this.post<any>('/readings', payload); }
 
   // ===================== Chatbot (Enhanced) =====================
   getConversations() { return this.get<any[]>('/chatbot/conversations'); }
@@ -247,6 +324,14 @@ class APIClient {
   // ===================== Health =====================
   getHealth() { return this.get<any>('/health'); }
   getLiveStatus() { return this.get<any>('/live/status'); }
+
+  // ===================== Notifications =====================
+  getNotificationStatus() { return this.get<any>('/notifications/status'); }
+  getNotificationLog(limit = 50) { return this.get<any>(`/notifications/log?limit=${limit}`); }
+  getNotificationPreferences(userId: string) { return this.get<any>(`/notifications/preferences/${userId}`); }
+  saveNotificationPreferences(userId: string, prefs: any) { return this.post<any>('/notifications/preferences', { userId, ...prefs }); }
+  deleteNotificationPreference(userId: string, channel: string) { return this.delete<any>(`/notifications/preferences/${userId}/${channel}`); }
+  sendTestNotification(payload: any) { return this.post<any>('/notifications/send', payload); }
 }
 
 export const apiClient = new APIClient();

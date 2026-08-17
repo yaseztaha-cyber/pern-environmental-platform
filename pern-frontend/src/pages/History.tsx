@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
-import { useData } from '../lib/data-provider';
 import { apiClient } from '../lib/api-client';
 import { useDevice } from '../lib/device-context';
+import { useI18n } from '../lib/i18n';
 import { PageHeader, Card, Pill, Btn, SectionTitle } from '../components/ui';
 import { Download } from 'lucide-react';
 import { exportTimeSeriesCSV, exportTimeSeriesExcel, type TimeSeriesRow } from '../lib/export-utils';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { ChartGrid, ChartTooltip, CHART_CURSOR, CHART_TICK } from '../components/charts';
 
 type RangeKey = '24h' | '7d' | '30d';
 const RANGE_MS: Record<RangeKey, number> = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 };
 
 export default function HistoryPage() {
-  const { data, isLive } = useData();
+  const { t } = useI18n();
   const { selectedDevice } = useDevice();
   const [timeRange, setTimeRange] = useState<RangeKey>('24h');
   const [rows, setRows] = useState<Array<{ ehi: number; category?: string; recordedAt: string }>>([]);
@@ -42,18 +43,11 @@ export default function HistoryPage() {
     device: selectedDevice?.id || 'global',
   }));
 
-  const tooltipStyle = {
-    background: 'var(--bg-3)',
-    border: '1px solid var(--border)',
-    borderRadius: 12,
-    color: 'var(--text-primary)',
-  };
-
   return (
     <div className="max-w-[1300px] mx-auto">
       <PageHeader
-        title="Historical Data"
-        subtitle="Real EHI time-series from connected devices"
+        title={t('history.title', 'Historical Data')}
+        subtitle={t('history.subtitle', 'Real EHI time-series from connected devices')}
         right={
           <div className="flex items-center gap-2">
             {rows.length >= 2 && (
@@ -82,35 +76,35 @@ export default function HistoryPage() {
             </button>
           ))}
         </div>
-        <Pill tone="slate">{rows.length} readings</Pill>
+        <Pill tone="slate">{t('history.readings', '{count} readings', { count: rows.length })}</Pill>
       </div>
 
       <Card hover={false}>
-        <SectionTitle>EHI Trend ({timeRange})</SectionTitle>
+        <SectionTitle>{t('history.ehiTrend', 'EHI Trend ({range})', { range: timeRange })}</SectionTitle>
         {loading ? (
-          <div className="h-80 flex items-center justify-center text-[var(--text-disabled)] text-sm">Loading...</div>
+          <div className="h-80 flex items-center justify-center text-[var(--text-disabled)] text-sm">{t('history.loading', 'Loading...')}</div>
         ) : chartData.length >= 2 ? (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid stroke="var(--border)" />
-                <XAxis dataKey="t" tick={false} />
-                <YAxis domain={[0, 100]} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Line type="natural" dataKey="ehi" stroke="var(--emerald)" strokeWidth={2} dot={false} />
+                <ChartGrid />
+                <XAxis dataKey="t" tick={false} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                <Tooltip content={<ChartTooltip />} cursor={CHART_CURSOR} />
+                <Line type="natural" dataKey="ehi" name="EHI" stroke="var(--emerald)" strokeWidth={2.5} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         ) : (
           <div className="h-80 flex items-center justify-center text-center text-[var(--text-disabled)] text-sm px-6">
-            No EHI history for this range. Start Live Mode to accumulate readings.
+            {t('history.emptyState', 'No EHI history for this range. Start Live Mode to accumulate readings.')}
           </div>
         )}
       </Card>
 
       <Card hover={false} className="mt-6">
         <p className="text-sm text-[var(--text-tertiary)]">
-          This view shows real Environmental Health Index readings queried from PostgreSQL with server-side date filtering.
+          {t('history.description', 'This view shows real Environmental Health Index readings queried from PostgreSQL with server-side date filtering.')}
         </p>
       </Card>
     </div>

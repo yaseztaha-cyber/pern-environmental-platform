@@ -4,6 +4,8 @@
  * appropriate regulatory framework for threshold comparisons.
  */
 const logger = require('../utils/logger');
+const db = require('../db');
+const PDFDocument = require('pdfkit');
 
 const complianceHistory = [];
 
@@ -54,6 +56,62 @@ const COUNTRY_BBOX = {
 };
 
 class ComplianceEngine {
+  /**
+   * Seed the compliance_frameworks table from the in-code registry.
+   * Safe to call repeatedly (idempotent upsert); no-ops without a DB.
+   */
+  async seedFrameworks() {
+    let seeded = 0;
+    for (const [code, fw] of Object.entries(FRAMEWORKS)) {
+      for (const [pollutant, std] of Object.entries(fw.standards || {})) {
+        const ok = await db.upsertComplianceFramework({
+          country: code,
+          region: null,
+          authority: fw.authority,
+          frameworkName: fw.framework,
+          pollutant,
+          standardValue: std.threshold,
+          averagingPeriod: std.averaging,
+          effectiveDate: null,
+        });
+        if (ok) seeded++;
+      }
+    }
+    logger.info(`[Compliance] Seeded ${seeded} framework rows (${Object.keys(FRAMEWORKS).length} countries)`);
+    return seeded;
+  }
+
+  /**
+   * Network reverse-geocode via Nominatim (OpenStreetMap), with bbox fallback.
+   */
+  async reverseGeocode(lat, lng) {
+    const bbox = this.detectCountry(lat, lng);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=4`,
+        { headers: { 'User-Agent': 'PERN-Monitoring/v3', Accept: 'application/json' }, signal: AbortSignal.timeout(5000) }
+      );
+      if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
+      const body = await res.json();
+      if (body?.address?.country_code) {
+        return {
+          country_code: body.address.country_code.toUpperCase(),
+          country: body.address.country || 'Unknown',
+          city: body.address.city || body.address.town || body.address.state || null,
+          from_network: true,
+        };
+      }
+    } catch (err) {
+      logger.debug('[Compliance] Reverse geocode fallback to bbox', { error: err.message });
+    }
+    return {
+      country_code: bbox,
+      country: FRAMEWORKS[bbox]?.country || 'Unknown',
+      city: null,
+      from_network: false,
+    };
+  }
+
   listFrameworks() {
     return Object.entries(FRAMEWORKS).map(([code, fw]) => ({ country_code: code, ...fw }));
   }
@@ -106,6 +164,57 @@ class ComplianceEngine {
     let results = complianceHistory;
     if (countryCode) results = results.filter(r => r.location?.country_code === countryCode.toUpperCase());
     return results.slice(0, limit);
+  }
+
+  /**
+   * Generate a server-side PDF compliance report via pdfkit.
+   * Resolves with a Buffer (or rejects if a required font fails).
+   */
+  generatePdfReport(orgId, lat, lng, readings) {
+    const report = this.generateReport(orgId, lat, lng, readings);
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      const doc = new PDFDocument({ margin: 48, bufferPages: true });
+      doc.on('data', (c) => chunks.push(c));
+      doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), report }));
+      doc.on('error', reject);
+
+      doc.fillColor('#0f172a').fontSize(20).text('PERN Compliance Report', { continued: false });
+      doc.moveDown(0.4);
+      doc.fillColor('#64748b').fontSize(11).text(`Organization: ${orgId}  •  Generated: ${new Date(report.generated_at).toLocaleString()}`);
+      doc.moveDown(1.2);
+
+      const loc = report.location;
+      doc.fillColor('#0f172a').fontSize(13).text('Location');
+      doc.fillColor('#334155').fontSize(10)
+        .text(`Coordinates: ${loc.latitude}, ${loc.longitude}`)
+        .text(`Country: ${loc.country} (${loc.country_code})`);
+      doc.moveDown(0.8);
+
+      doc.fillColor('#0f172a').fontSize(13).text('Regulatory Framework');
+      doc.fillColor('#334155').fontSize(10)
+        .text(`Framework: ${report.framework?.name || 'N/A'}`)
+        .text(`Authority: ${report.framework?.authority || 'N/A'}`);
+      doc.moveDown(0.8);
+
+      doc.fillColor('#0f172a').fontSize(13).text(`Compliance: ${report.compliance.compliant ? 'COMPLIANT' : 'EXCEEDANCES FOUND'}`);
+      doc.moveDown(0.4);
+      doc.fillColor('#334155').fontSize(10).text(report.summary);
+      doc.moveDown(0.8);
+
+      if (report.compliance.exceedances.length > 0) {
+        doc.fillColor('#0f172a').fontSize(13).text('Exceedances');
+        doc.moveDown(0.3);
+        for (const ex of report.compliance.exceedances) {
+          doc.fillColor('#b91c1c').fontSize(10)
+            .text(`${ex.parameter.toUpperCase()}: ${ex.value} ${ex.unit} vs limit ${ex.limit} ${ex.unit} (${ex.averaging}) — ${ex.exceeded_by}% over`);
+        }
+      } else {
+        doc.fillColor('#15803d').fontSize(10).text('No parameters exceeded regulatory limits.');
+      }
+
+      doc.end();
+    });
   }
 
   getTrends(countryCode, days = 7) {

@@ -2,7 +2,8 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { apiClient } from '../lib/api-client';
 import { PageHeader, Pill, Card, Btn, ProgressRing } from '../components/ui';
-import { Cpu, Search, Wifi, Clock, CircleSlash, Plus, Trash2, Server } from 'lucide-react';
+import { Cpu, Search, Wifi, Clock, CircleSlash, Plus, Trash2 } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 
 const statusMeta: Record<string, { tone: 'emerald' | 'amber' | 'rose'; icon: ReactNode; label: string }> = {
   online: { tone: 'emerald', icon: <Wifi size={13} />, label: 'online' },
@@ -15,11 +16,12 @@ interface Device {
   name: string;
   type: string;
   status: string;
-  last_seen: string;
+  last_seen: string | null;
   metadata?: any;
 }
 
 export default function DevicesPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,7 @@ export default function DevicesPage() {
         name: r.name || r.id,
         type: r.type || 'Generic',
         status: r.status || 'online',
-        last_seen: r.last_seen || r.lastSeen || new Date().toISOString(),
+        last_seen: r.last_seen || r.lastSeen || null,
         metadata: r.metadata,
       }));
       setDevices(mapped);
@@ -67,7 +69,7 @@ export default function DevicesPage() {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!confirm(`Delete device ${id}?`)) return;
+    if (!confirm(t('devices.deleteConfirm', 'Delete device {id}?', { id }))) return;
     try {
       await apiClient.deleteDevice(id);
       loadDevices();
@@ -76,25 +78,27 @@ export default function DevicesPage() {
     }
   };
 
-  const timeSince = (dateStr: string) => {
+  const timeSince = (dateStr: string | null) => {
+    if (!dateStr) return t('devices.timeNever', 'Never');
     const ms = Date.now() - new Date(dateStr).getTime();
-    if (ms < 60000) return 'just now';
-    if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
-    if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`;
-    return `${Math.floor(ms / 86400000)}d ago`;
+    if (!isFinite(ms)) return t('devices.timeNever', 'Never');
+    if (ms < 60000) return t('devices.timeJustNow', 'just now');
+    if (ms < 3600000) return t('devices.timeMinutesAgo', '{n}m ago', { n: Math.floor(ms / 60000) });
+    if (ms < 86400000) return t('devices.timeHoursAgo', '{n}h ago', { n: Math.floor(ms / 3600000) });
+    return t('devices.timeDaysAgo', '{n}d ago', { n: Math.floor(ms / 86400000) });
   };
 
   return (
     <div className="max-w-[1200px] mx-auto">
       <PageHeader
-        title="Device Management"
-        subtitle="Real connected device fleet"
+        title={t('devices.title', 'Device Management')}
+        subtitle={t('devices.subtitle', 'Real connected device fleet')}
         right={
           <div className="flex items-center gap-2">
-            <Pill tone="emerald"><Wifi size={12} /> {online} online</Pill>
-            <Pill tone={offline > 0 ? 'rose' : 'slate'}>{offline} offline</Pill>
+            <Pill tone="emerald"><Wifi size={12} /> {t('devices.onlineCount', '{count} online', { count: online })}</Pill>
+            <Pill tone={offline > 0 ? 'rose' : 'slate'}>{t('devices.offlineCount', '{count} offline', { count: offline })}</Pill>
             <Btn variant="primary" size="sm" onClick={() => setShowCreate(!showCreate)}>
-              <Plus size={14} /> Add Device
+              <Plus size={14} /> {t('devices.addDevice', 'Add Device')}
             </Btn>
           </div>
         }
@@ -103,18 +107,18 @@ export default function DevicesPage() {
       {/* Fleet Summary */}
       <div className="grid grid-cols-3 gap-3 mb-8 grid-entrance">
         <div className="rounded-[var(--radius-md)] p-4 bg-[var(--emerald-dim)] border-l-[3px] border-l-[var(--emerald)]">
-          <div className="section-label">Fleet Uptime</div>
+          <div className="section-label">{t('devices.fleetUptime', 'Fleet Uptime')}</div>
           <div className="flex items-center gap-3 mt-2">
             <ProgressRing value={uptimePct} size={44} strokeWidth={4} accent="emerald" />
             <div className="text-2xl font-bold stat-number text-[var(--emerald)]">{uptimePct}%</div>
           </div>
         </div>
         <div className="rounded-[var(--radius-md)] p-4 bg-[var(--cyan-dim)] border-l-[3px] border-l-[var(--cyan)]">
-          <div className="section-label">Total Devices</div>
+          <div className="section-label">{t('devices.totalDevices', 'Total Devices')}</div>
           <div className="text-2xl font-bold stat-number text-[var(--cyan)] mt-2">{devices.length}</div>
         </div>
         <div className="rounded-[var(--radius-md)] p-4 bg-[rgba(167,139,250,0.08)] border-l-[3px] border-l-[var(--violet)]">
-          <div className="section-label">Device Types</div>
+          <div className="section-label">{t('devices.deviceTypes', 'Device Types')}</div>
           <div className="text-2xl font-bold stat-number text-[var(--violet)] mt-2">
             {new Set(devices.map(d => d.type)).size}
           </div>
@@ -123,26 +127,26 @@ export default function DevicesPage() {
 
       {showCreate && (
         <Card className="mb-6">
-          <div className="font-semibold mb-3">Register New Device</div>
+          <div className="font-semibold mb-3">{t('devices.registerNewDevice', 'Register New Device')}</div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">Device ID *</label>
+              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">{t('devices.deviceIdLabel', 'Device ID *')}</label>
               <input value={newDevice.id} onChange={e => setNewDevice({ ...newDevice, id: e.target.value })}
                 placeholder="esp32-room-001" className="w-full px-3 py-2 rounded-[var(--radius-sm)] text-sm" />
             </div>
             <div className="flex-1">
-              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">Name</label>
+              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">{t('devices.nameLabel', 'Name')}</label>
               <input value={newDevice.name} onChange={e => setNewDevice({ ...newDevice, name: e.target.value })}
-                placeholder="Living Room Sensor" className="w-full px-3 py-2 rounded-[var(--radius-sm)] text-sm" />
+                placeholder={t('devices.namePlaceholder', 'Living Room Sensor')} className="w-full px-3 py-2 rounded-[var(--radius-sm)] text-sm" />
             </div>
             <div className="flex-1">
-              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">Type</label>
+              <label className="block text-[10px] text-[var(--text-disabled)] uppercase mb-1">{t('devices.typeLabel', 'Type')}</label>
               <select value={newDevice.type} onChange={e => setNewDevice({ ...newDevice, type: e.target.value })}
                 className="w-full px-3 py-2 rounded-[var(--radius-sm)] text-sm">
                 <option>Generic</option><option>ESP32</option><option>NodeMCU</option><option>RPi</option><option>Arduino</option>
               </select>
             </div>
-            <button onClick={handleCreate} className="px-4 py-2 rounded-[var(--radius-sm)] bg-[var(--emerald)] text-white text-sm font-medium">Create</button>
+            <button onClick={handleCreate} className="px-4 py-2 rounded-[var(--radius-sm)] bg-[var(--emerald)] text-white text-sm font-medium">{t('devices.create', 'Create')}</button>
           </div>
         </Card>
       )}
@@ -150,25 +154,25 @@ export default function DevicesPage() {
       <div className="flex gap-3 mb-6">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-disabled)]" />
-          <input type="text" placeholder="Search devices…" value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder={t('devices.searchPlaceholder', 'Search devices…')} value={search} onChange={e => setSearch(e.target.value)}
             className="w-full pl-11 pr-4 py-2.5 rounded-[var(--radius-sm)] text-sm" />
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value as any)}
           className="px-4 py-2.5 rounded-[var(--radius-sm)] text-sm">
-          <option value="all">All Status</option>
-          <option value="online">Online</option>
-          <option value="warning">Warning</option>
-          <option value="offline">Offline</option>
+          <option value="all">{t('devices.filterAll', 'All Status')}</option>
+          <option value="online">{t('devices.status.online', 'Online')}</option>
+          <option value="warning">{t('devices.status.warning', 'Warning')}</option>
+          <option value="offline">{t('devices.status.offline', 'Offline')}</option>
         </select>
       </div>
 
       {loading ? (
-        <Card className="text-center py-16 text-[var(--text-disabled)]">Loading devices...</Card>
+        <Card className="text-center py-16 text-[var(--text-disabled)]">{t('devices.loading', 'Loading devices...')}</Card>
       ) : devices.length === 0 ? (
         <Card className="text-center py-16">
-          <div className="text-[var(--text-secondary)] text-lg font-medium mb-1">No devices registered</div>
+          <div className="text-[var(--text-secondary)] text-lg font-medium mb-1">{t('devices.noDevicesTitle', 'No devices registered')}</div>
           <p className="text-[var(--text-disabled)] text-sm max-w-md mx-auto">
-            Devices auto-register when they send MQTT data, or you can add one manually above.
+            {t('devices.noDevicesMessage', 'Devices auto-register when they send MQTT data, or you can add one manually above.')}
           </p>
         </Card>
       ) : (
@@ -188,7 +192,7 @@ export default function DevicesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Pill tone={statusMeta[d.status]?.tone || 'slate'}>
-                    {statusMeta[d.status]?.icon} {statusMeta[d.status]?.label || d.status}
+                    {statusMeta[d.status]?.icon} {t('devices.status.' + (statusMeta[d.status]?.label || d.status), statusMeta[d.status]?.label || d.status)}
                   </Pill>
                   <button onClick={(e) => handleDelete(e, d.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-400 transition-opacity">
@@ -197,8 +201,8 @@ export default function DevicesPage() {
                 </div>
               </div>
               <div className="mt-5 flex items-center justify-between text-xs text-[var(--text-tertiary)]">
-                <span className="px-2.5 py-1 rounded-lg bg-[var(--surface)]">ID: {d.id}</span>
-                <span>Last seen: {timeSince(d.last_seen)}</span>
+                <span className="px-2.5 py-1 rounded-lg bg-[var(--surface)]">{t('devices.idLabel', 'ID: {id}', { id: d.id })}</span>
+                <span>{t('devices.lastSeen', 'Last seen: {time}', { time: timeSince(d.last_seen) })}</span>
               </div>
             </div>
           ))}

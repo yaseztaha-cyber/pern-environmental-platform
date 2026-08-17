@@ -1,0 +1,7 @@
+{
+  "alpha": 0.1,
+  "calib_frac": 0.6,
+  "tol": 1.667,
+  "nwp": "live Open-Meteo forecast snapshots (256 rows)",
+  "horizons": {}
+}

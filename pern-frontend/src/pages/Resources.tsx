@@ -3,9 +3,11 @@ import {
   Server, Wifi, ExternalLink, Code, Copy, Check,
   Database, Cloud, Lock, Cpu, Radio, Zap, FileCode, Globe
 } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 import { PageHeader, Card, SectionTitle, Pill, Btn } from '../components/ui';
 
 function CodeBlock({ id, language, children }: { id: string; language: string; children: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState<string | null>(null);
 
   function copyText(text: string) {
@@ -21,9 +23,9 @@ function CodeBlock({ id, language, children }: { id: string; language: string; c
         <span className="text-[10px] text-[var(--text-disabled)] font-mono uppercase">{language}</span>
         <button
           onClick={() => copyText(children)}
-          aria-label="Copy code"
+          aria-label={t('resources.copyCode', 'Copy')}
           className="text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors"
-          title="Copy"
+          title={t('resources.copyCode', 'Copy')}
         >
           {copied === id ? <Check size={12} className="text-[var(--emerald)]" /> : <Copy size={12} />}
         </button>
@@ -58,16 +60,16 @@ function LinkCard({ icon, title, description, href, tag }: { icon: React.ReactNo
 }
 
 const API_ENDPOINTS = [
-  { method: 'GET', path: '/api/devices', desc: 'List all registered devices' },
-  { method: 'POST', path: '/api/devices', desc: 'Register a new device' },
-  { method: 'GET', path: '/api/devices/:id/readings', desc: 'Get historical sensor readings for a device' },
-  { method: 'POST', path: '/api/ehi-history', desc: 'Persist an EHI data point' },
-  { method: 'GET', path: '/api/ehi-history', desc: 'Retrieve EHI history (optional ?device= filter)' },
-  { method: 'GET', path: '/api/alerts', desc: 'List active alerts (optional ?device= filter)' },
-  { method: 'POST', path: '/api/alerts', desc: 'Create a new alert rule' },
-  { method: 'POST', path: '/api/alerts/:id/acknowledge', desc: 'Acknowledge an alert' },
-  { method: 'GET', path: '/api/thresholds', desc: 'List configured sensor thresholds' },
-  { method: 'POST', path: '/api/thresholds', desc: 'Save or update a threshold' },
+  { method: 'GET', path: '/api/devices', desc: 'List all registered devices', key: 'resources.api.desc.0' },
+  { method: 'POST', path: '/api/devices', desc: 'Register a new device', key: 'resources.api.desc.1' },
+  { method: 'GET', path: '/api/devices/:id/readings', desc: 'Get historical sensor readings for a device', key: 'resources.api.desc.2' },
+  { method: 'POST', path: '/api/ehi-history', desc: 'Persist an EHI data point', key: 'resources.api.desc.3' },
+  { method: 'GET', path: '/api/ehi-history', desc: 'Retrieve EHI history (optional ?device= filter)', key: 'resources.api.desc.4' },
+  { method: 'GET', path: '/api/alerts', desc: 'List active alerts (optional ?device= filter)', key: 'resources.api.desc.5' },
+  { method: 'POST', path: '/api/alerts', desc: 'Create a new alert rule', key: 'resources.api.desc.6' },
+  { method: 'POST', path: '/api/alerts/:id/acknowledge', desc: 'Acknowledge an alert', key: 'resources.api.desc.7' },
+  { method: 'GET', path: '/api/thresholds', desc: 'List configured sensor thresholds', key: 'resources.api.desc.8' },
+  { method: 'POST', path: '/api/thresholds', desc: 'Save or update a threshold', key: 'resources.api.desc.9' },
 ];
 
 const METHOD_COLORS: Record<string, string> = {
@@ -78,21 +80,22 @@ const METHOD_COLORS: Record<string, string> = {
 };
 
 export default function ResourcesPage() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'overview' | 'api' | 'mqtt' | 'protocols' | 'quickstart'>('overview');
 
   const tabs = [
-    { id: 'overview' as const, label: 'Architecture', icon: <Server size={14} /> },
-    { id: 'api' as const, label: 'API Reference', icon: <Code size={14} /> },
-    { id: 'mqtt' as const, label: 'MQTT Topics', icon: <Radio size={14} /> },
-    { id: 'protocols' as const, label: 'Protocols', icon: <Wifi size={14} /> },
-    { id: 'quickstart' as const, label: 'Quick Start', icon: <Zap size={14} /> },
+    { id: 'overview' as const, label: t('resources.tab.overview', 'Architecture'), icon: <Server size={14} /> },
+    { id: 'api' as const, label: t('resources.tab.api', 'API Reference'), icon: <Code size={14} /> },
+    { id: 'mqtt' as const, label: t('resources.tab.mqtt', 'MQTT Topics'), icon: <Radio size={14} /> },
+    { id: 'protocols' as const, label: t('resources.tab.protocols', 'Protocols'), icon: <Wifi size={14} /> },
+    { id: 'quickstart' as const, label: t('resources.tab.quickstart', 'Quick Start'), icon: <Zap size={14} /> },
   ];
 
   return (
     <div className="max-w-[1100px] mx-auto">
       <PageHeader
-        title="Resources & Documentation"
-        subtitle="Platform architecture · API reference · Device protocols"
+        title={t('resources.title', 'Resources & Documentation')}
+        subtitle={t('resources.subtitle', 'Platform architecture · API reference · Device protocols')}
         right={<Pill tone="emerald">v0.1.0</Pill>}
       />
 
@@ -123,17 +126,16 @@ export default function ResourcesPage() {
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <Card hover={false}>
-              <SectionTitle>Platform Architecture</SectionTitle>
+              <SectionTitle>{t('resources.section.architecture', 'Platform Architecture')}</SectionTitle>
               <p className="text-sm text-[var(--text-tertiary)] leading-relaxed mb-5">
-                The Environmental Health Index platform is a full-stack IoT monitoring system built on the PERN stack
-                with real-time MQTT data ingestion, virtual sensor computation, and an AI-powered recommendation engine.
+                {t('resources.architecture.description', 'The Environmental Health Index platform is a full-stack IoT monitoring system built on the PERN stack with real-time MQTT data ingestion, virtual sensor computation, and an AI-powered recommendation engine.')}
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 grid-entrance">
                 {[
-                  { icon: <Database size={16} />, name: 'PostgreSQL', role: 'Time-series storage, device registry, alerts, users' },
-                  { icon: <Server size={16} />, name: 'Express.js', role: 'REST API, auth middleware, webhook handlers' },
-                  { icon: <Cpu size={16} />, name: 'React + Vite', role: 'Dashboard SPA, Recharts, Leaflet maps' },
-                  { icon: <Radio size={16} />, name: 'Node.js', role: 'MQTT broker bridge, background jobs' },
+                  { icon: <Database size={16} />, name: 'PostgreSQL', role: t('resources.techRole.postgres', 'Time-series storage, device registry, alerts, users') },
+                  { icon: <Server size={16} />, name: 'Express.js', role: t('resources.techRole.express', 'REST API, auth middleware, webhook handlers') },
+                  { icon: <Cpu size={16} />, name: 'React + Vite', role: t('resources.techRole.react', 'Dashboard SPA, Recharts, Leaflet maps') },
+                  { icon: <Radio size={16} />, name: 'Node.js', role: t('resources.techRole.node', 'MQTT broker bridge, background jobs') },
                 ].map(tech => (
                   <Card key={tech.name} hover={false} className="text-center">
                     <div className="text-[var(--emerald)] flex justify-center mb-2">{tech.icon}</div>
@@ -146,35 +148,35 @@ export default function ResourcesPage() {
 
             <div className="grid md:grid-cols-2 gap-6 grid-entrance">
               <Card hover={false}>
-                <SectionTitle>Data Flow</SectionTitle>
+                <SectionTitle>{t('resources.section.dataFlow', 'Data Flow')}</SectionTitle>
                 <div className="space-y-3 text-sm text-[var(--text-secondary)]">
                   <div className="flex items-start gap-3">
                     <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--emerald)]/15 text-[var(--emerald)] flex items-center justify-center text-[10px] font-bold">1</span>
-                    <div><strong className="text-[var(--text-primary)]">Sensors</strong> on ESP32/Arduino read PM2.5, pH, temperature, CO₂, etc.</div>
+                    <div><strong className="text-[var(--text-primary)]">{t('resources.dataflow.sensors', 'Sensors')}</strong> {t('resources.dataflow.step1', 'on ESP32/Arduino read PM2.5, pH, temperature, CO₂, etc.')}</div>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--cyan)]/15 text-[var(--cyan)] flex items-center justify-center text-[10px] font-bold">2</span>
-                    <div><strong className="text-[var(--text-primary)]">MQTT Publish</strong> — device sends JSON to <code className="text-[11px] bg-white/[0.06] px-1 rounded">pern/sensors/{'{device}'}/data</code></div>
+                    <div><strong className="text-[var(--text-primary)]">MQTT {t('resources.dataflow.publish', 'Publish')}</strong> — {t('resources.dataflow.step2', 'device sends JSON to')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">pern/sensors/{'{device}'}/data</code></div>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--amber)]/15 text-[var(--amber)] flex items-center justify-center text-[10px] font-bold">3</span>
-                    <div><strong className="text-[var(--text-primary)]">Backend</strong> validates, stores readings, computes virtual sensors & EHI</div>
+                    <div><strong className="text-[var(--text-primary)]">{t('resources.dataflow.backend', 'Backend')}</strong> {t('resources.dataflow.step3', 'validates, stores readings, computes virtual sensors & EHI')}</div>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--violet)]/15 text-[var(--violet)] flex items-center justify-center text-[10px] font-bold">4</span>
-                    <div><strong className="text-[var(--text-primary)]">Dashboard</strong> receives real-time updates, displays charts, alerts, and AI insights</div>
+                    <div><strong className="text-[var(--text-primary)]">{t('resources.dataflow.dashboard', 'Dashboard')}</strong> {t('resources.dataflow.step4', 'receives real-time updates, displays charts, alerts, and AI insights')}</div>
                   </div>
                 </div>
               </Card>
 
               <Card hover={false}>
-                <SectionTitle>External Dependencies</SectionTitle>
+                <SectionTitle>{t('resources.section.dependencies', 'External Dependencies')}</SectionTitle>
                 <div className="space-y-2.5">
                   {[
-                    { name: 'Open-Meteo API', desc: 'Weather forecast data for correlation analysis', url: 'https://open-meteo.com' },
-                    { name: 'Mosquitto MQTT', desc: 'Lightweight broker for IoT message transport', url: 'https://mosquitto.org' },
-                    { name: 'Logto', desc: 'Open-source identity & access management', url: 'https://logto.io' },
-                    { name: 'ntfy.sh', desc: 'Push notification service for alert delivery', url: 'https://ntfy.sh' },
+                    { name: 'Open-Meteo API', desc: t('resources.depdesc.openmeteo', 'Weather forecast data for correlation analysis'), url: 'https://open-meteo.com' },
+                    { name: 'Mosquitto MQTT', desc: t('resources.depdesc.mosquitto', 'Lightweight broker for IoT message transport'), url: 'https://mosquitto.org' },
+                    { name: 'Logto', desc: t('resources.depdesc.logto', 'Open-source identity & access management'), url: 'https://logto.io' },
+                    { name: 'ntfy.sh', desc: t('resources.depdesc.ntfy', 'Push notification service for alert delivery'), url: 'https://ntfy.sh' },
                   ].map(dep => (
                     <a key={dep.name} href={dep.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-2.5 rounded-[var(--radius-sm)] hover:bg-white/[0.04] transition-colors group">
                       <div>
@@ -194,19 +196,17 @@ export default function ResourcesPage() {
         {activeTab === 'api' && (
           <div className="space-y-6">
             <Card hover={false}>
-              <SectionTitle>REST API Endpoints</SectionTitle>
+              <SectionTitle>{t('resources.section.apiEndpoints', 'REST API Endpoints')}</SectionTitle>
               <p className="text-sm text-[var(--text-tertiary)] mb-4">
-                All endpoints are prefixed with <code className="text-[11px] bg-white/[0.06] px-1 rounded">/api</code>. Requests require
-                a <code className="text-[11px] bg-white/[0.06] px-1 rounded">Bearer</code> token in the <code className="text-[11px] bg-white/[0.06] px-1 rounded">Authorization</code> header
-                and an <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-Organization-Id</code> or <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-User-Id</code> header.
+                {t('resources.api.intro', 'All endpoints are prefixed with')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">/api</code>. {t('resources.api.auth', 'Requests require a')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">Bearer</code> {t('resources.api.tokenHeader', 'token in the')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">Authorization</code> {t('resources.api.orgHeader', 'header and an')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-Organization-Id</code> {t('resources.api.userHeader', 'or')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-User-Id</code> {t('resources.api.headerSuffix', 'header.')}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-[var(--border)]">
-                      <th className="p-2.5 text-left text-[var(--text-disabled)] font-medium w-16">Method</th>
-                      <th className="p-2.5 text-left text-[var(--text-disabled)] font-medium">Endpoint</th>
-                      <th className="p-2.5 text-left text-[var(--text-disabled)] font-medium">Description</th>
+                      <th className="p-2.5 text-left rtl:text-right text-[var(--text-disabled)] font-medium w-16">{t('resources.method', 'Method')}</th>
+                      <th className="p-2.5 text-left rtl:text-right text-[var(--text-disabled)] font-medium">{t('resources.endpoint', 'Endpoint')}</th>
+                      <th className="p-2.5 text-left rtl:text-right text-[var(--text-disabled)] font-medium">{t('resources.description', 'Description')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -216,7 +216,7 @@ export default function ResourcesPage() {
                           <span className={METHOD_COLORS[ep.method] ?? 'text-[var(--text-secondary)]'}>{ep.method}</span>
                         </td>
                         <td className="p-2.5 font-mono text-[var(--text-secondary)]">{ep.path}</td>
-                        <td className="p-2.5 text-[var(--text-tertiary)]">{ep.desc}</td>
+                        <td className="p-2.5 text-[var(--text-tertiary)]">{t(ep.key, ep.desc)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -225,7 +225,7 @@ export default function ResourcesPage() {
             </Card>
 
             <Card hover={false}>
-              <SectionTitle>Request Headers</SectionTitle>
+              <SectionTitle>{t('resources.section.requestHeaders', 'Request Headers')}</SectionTitle>
               <CodeBlock id="headers" language="HTTP">{`Authorization: Bearer <your-token>
 Content-Type: application/json
 X-Organization-Id: org_cairo_01    # for org-scoped requests
@@ -233,8 +233,8 @@ X-User-Id: user_123                # for individual requests`}</CodeBlock>
             </Card>
 
             <Card hover={false}>
-              <SectionTitle>Response Format</SectionTitle>
-              <p className="text-sm text-[var(--text-tertiary)] mb-3">All responses are JSON. Error responses include a <code className="text-[11px] bg-white/[0.06] px-1 rounded">message</code> field.</p>
+              <SectionTitle>{t('resources.section.responseFormat', 'Response Format')}</SectionTitle>
+              <p className="text-sm text-[var(--text-tertiary)] mb-3">{t('resources.responseIntro', 'All responses are JSON. Error responses include a')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">message</code> {t('resources.responseMessage', 'field.')}</p>
               <CodeBlock id="response-success" language="JSON">{`{
   "data": [...],
   "total": 42,
@@ -254,17 +254,16 @@ X-User-Id: user_123                # for individual requests`}</CodeBlock>
         {activeTab === 'mqtt' && (
           <div className="space-y-6">
             <Card hover={false}>
-              <SectionTitle>MQTT Topic Structure</SectionTitle>
+              <SectionTitle>{t('resources.section.mqttStructure', 'MQTT Topic Structure')}</SectionTitle>
               <p className="text-sm text-[var(--text-tertiary)] mb-5">
-                The platform uses a hierarchical topic structure for device communication. The default broker
-                is Mosquitto over WebSocket on port 9001.
+                {t('resources.mqtt.intro', 'The platform uses a hierarchical topic structure for device communication. The default broker is Mosquitto over WebSocket on port 9001.')}
               </p>
               <div className="space-y-4">
                 {[
                   {
                     topic: 'pern/sensors/{device_id}/data',
-                    desc: 'Sensor readings from devices. Published periodically (default 5s).',
-                    direction: 'Device → Broker',
+                    desc: t('resources.mqtt.desc.0', 'Sensor readings from devices. Published periodically (default 5s).'),
+                    direction: t('resources.mqtt.deviceToBroker', 'Device → Broker'),
                     payload: `{
   "sensors": {
     "pm25": 21.4,
@@ -278,8 +277,8 @@ X-User-Id: user_123                # for individual requests`}</CodeBlock>
                   },
                   {
                     topic: 'pern/actuators/{device_id}/{actuator}/status',
-                    desc: 'Actuator state feedback (relays, pumps, fans).',
-                    direction: 'Device → Broker',
+                    desc: t('resources.mqtt.desc.1', 'Actuator state feedback (relays, pumps, fans).'),
+                    direction: t('resources.mqtt.deviceToBroker', 'Device → Broker'),
                     payload: `{
   "actuator": "fan",
   "state": "on",
@@ -290,8 +289,8 @@ X-User-Id: user_123                # for individual requests`}</CodeBlock>
                   },
                   {
                     topic: 'pern/devices/{device_id}/status',
-                    desc: 'Device online/offline discovery announcements.',
-                    direction: 'Device → Broker',
+                    desc: t('resources.mqtt.desc.2', 'Device online/offline discovery announcements.'),
+                    direction: t('resources.mqtt.deviceToBroker', 'Device → Broker'),
                     payload: `{
   "device": "esp32_cairo_01",
   "timestamp": 1719000000000
@@ -299,8 +298,8 @@ X-User-Id: user_123                # for individual requests`}</CodeBlock>
                   },
                   {
                     topic: 'pern/actuators/{device_id}/{actuator}/set',
-                    desc: 'Remote actuator control commands from dashboard.',
-                    direction: 'Broker → Device',
+                    desc: t('resources.mqtt.desc.3', 'Remote actuator control commands from dashboard.'),
+                    direction: t('resources.mqtt.brokerToDevice', 'Broker → Device'),
                     payload: `{
   "actuator": "fan",
   "state": "on",
@@ -325,7 +324,7 @@ X-User-Id: user_123                # for individual requests`}</CodeBlock>
             </Card>
 
             <Card hover={false}>
-              <SectionTitle>Broker Configuration</SectionTitle>
+              <SectionTitle>{t('resources.section.brokerConfig', 'Broker Configuration')}</SectionTitle>
               <CodeBlock id="mqtt-config" language="JavaScript">{`// Default connection settings
 const MQTT_CONFIG = {
   broker: 'ws://localhost:9001',     // WebSocket transport
@@ -351,8 +350,14 @@ client.subscribe('pern/actuators/+/+/status', { qos: 0 });`}</CodeBlock>
                 name: 'MQTT',
                 icon: <Radio size={18} />,
                 color: 'emerald' as const,
-                description: 'Lightweight publish/subscribe protocol designed for IoT. Primary sensor data transport.',
-                features: ['Publish/subscribe model', 'QoS levels 0, 1, 2', 'Last Will and Testament', 'Retained messages', 'Topic wildcards (+, #)'],
+                description: t('resources.protocols.mqtt.desc', 'Lightweight publish/subscribe protocol designed for IoT. Primary sensor data transport.'),
+                features: [
+                  t('resources.protocols.features.pubsub', 'Publish/subscribe model'),
+                  t('resources.protocols.features.qos', 'QoS levels 0, 1, 2'),
+                  t('resources.protocols.features.lwt', 'Last Will and Testament'),
+                  t('resources.protocols.features.retained', 'Retained messages'),
+                  t('resources.protocols.features.wildcards', 'Topic wildcards (+, #)'),
+                ],
                 connection: `# Install a Node.js MQTT client
 npm install mqtt
 
@@ -375,8 +380,14 @@ client.publish('pern/sensors/esp32_01/data', JSON.stringify({
                 name: 'HTTP / REST',
                 icon: <Globe size={18} />,
                 color: 'cyan' as const,
-                description: 'Standard request/response protocol for API calls, device registration, and historical data.',
-                features: ['Stateless requests', 'JSON payloads', 'Bearer token auth', 'Standard HTTP verbs', 'CORS enabled'],
+                description: t('resources.protocols.http.desc', 'Standard request/response protocol for API calls, device registration, and historical data.'),
+                features: [
+                  t('resources.protocols.features.stateless', 'Stateless requests'),
+                  t('resources.protocols.features.json', 'JSON payloads'),
+                  t('resources.protocols.features.bearer', 'Bearer token auth'),
+                  t('resources.protocols.features.verbs', 'Standard HTTP verbs'),
+                  t('resources.protocols.features.cors', 'CORS enabled'),
+                ],
                 connection: `# Register a device
 curl -X POST https://your-server.com/api/devices \\
   -H "Authorization: Bearer <token>" \\
@@ -395,8 +406,14 @@ curl https://your-server.com/api/devices/esp32_01/readings \\
                 name: 'WebSocket',
                 icon: <Zap size={18} />,
                 color: 'amber' as const,
-                description: 'Full-duplex persistent connection for real-time dashboard updates and actuator control.',
-                features: ['Bidirectional data flow', 'Low latency', 'No polling overhead', 'Event-driven', 'Auto-reconnect'],
+                description: t('resources.protocols.ws.desc', 'Full-duplex persistent connection for real-time dashboard updates and actuator control.'),
+                features: [
+                  t('resources.protocols.features.duplex', 'Bidirectional data flow'),
+                  t('resources.protocols.features.lowlatency', 'Low latency'),
+                  t('resources.protocols.features.nopoll', 'No polling overhead'),
+                  t('resources.protocols.features.event', 'Event-driven'),
+                  t('resources.protocols.features.reconnect', 'Auto-reconnect'),
+                ],
                 connection: `// WebSocket connection for actuator control
 const ws = new WebSocket('wss://your-server.com/ws');
 
@@ -444,23 +461,23 @@ ws.onmessage = (event) => {
             <Card hover={false}>
               <SectionTitle>
                 <Zap size={14} className="inline mr-2 text-[var(--emerald)]" />
-                Quick Start — Connect a New Device
+                {t('resources.section.quickstart', 'Quick Start — Connect a New Device')}
               </SectionTitle>
               <p className="text-sm text-[var(--text-tertiary)] mb-5">
-                Follow these steps to register an ESP32/ESP8266 device and start streaming sensor data to the platform.
+                {t('resources.quickstart.intro', 'Follow these steps to register an ESP32/ESP8266 device and start streaming sensor data to the platform.')}
               </p>
               <div className="space-y-4">
                 {[
                   {
                     step: 1,
-                    title: 'Install dependencies on your device',
+                    title: t('resources.quickstart.step1', 'Install dependencies on your device'),
                     code: `# Arduino IDE: Install PubSubClient library
 # PlatformIO: Add to platformio.ini
 lib_deps = knolleary/PubSubClient@^2.8`,
                   },
                   {
                     step: 2,
-                    title: 'Configure WiFi and MQTT broker',
+                    title: t('resources.quickstart.step2', 'Configure WiFi and MQTT broker'),
                     code: `#define WIFI_SSID     "YourSSID"
 #define WIFI_PASS     "YourPassword"
 #define MQTT_BROKER   "your-server.com"
@@ -469,7 +486,7 @@ lib_deps = knolleary/PubSubClient@^2.8`,
                   },
                   {
                     step: 3,
-                    title: 'Read sensors and publish data',
+                    title: t('resources.quickstart.step3', 'Read sensors and publish data'),
                     code: `void publishSensorData() {
   StaticJsonDocument<256> doc;
   JsonObject sensors = doc.createNestedObject("sensors");
@@ -498,7 +515,7 @@ void loop() {
                   },
                   {
                     step: 4,
-                    title: 'Register the device on the platform',
+                    title: t('resources.quickstart.step4', 'Register the device on the platform'),
                     code: `curl -X POST https://your-server.com/api/devices \\
   -H "Authorization: Bearer <token>" \\
   -H "Content-Type: application/json" \\
@@ -506,7 +523,7 @@ void loop() {
                   },
                   {
                     step: 5,
-                    title: 'Verify data is flowing',
+                    title: t('resources.quickstart.step5', 'Verify data is flowing'),
                     code: `# In the dashboard, switch to Live Mode
 # You should see real-time sensor readings
 # appearing in the Physical Sensors grid
@@ -529,31 +546,31 @@ mosquitto_sub -h your-server.com -t "pern/sensors/#"`,
             </Card>
 
             <Card hover={false}>
-              <SectionTitle>External Documentation</SectionTitle>
+              <SectionTitle>{t('resources.section.externalDocs', 'External Documentation')}</SectionTitle>
               <div className="grid md:grid-cols-2 gap-3 grid-entrance">
                 <LinkCard
                   icon={<Cloud size={16} />}
                   title="Open-Meteo API"
-                  description="Free weather forecast API. Used for environmental correlation with sensor data."
+                  description={t('resources.extdocs.openmeteo', 'Free weather forecast API. Used for environmental correlation with sensor data.')}
                   href="https://open-meteo.com/en/docs"
-                  tag="Weather"
+                  tag={t('resources.tag.weather', 'Weather')}
                 />
                 <LinkCard
                   icon={<Radio size={16} />}
                   title="MQTT v5.0 Specification"
-                  description="OASIS standard for lightweight IoT messaging protocol."
+                  description={t('resources.extdocs.mqtt', 'OASIS standard for lightweight IoT messaging protocol.')}
                   href="https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html"
                 />
                 <LinkCard
                   icon={<Lock size={16} />}
                   title="Logto Documentation"
-                  description="Open-source identity platform used for user authentication and RBAC."
+                  description={t('resources.extdocs.logto', 'Open-source identity platform used for user authentication and RBAC.')}
                   href="https://docs.logto.io"
                 />
                 <LinkCard
                   icon={<FileCode size={16} />}
                   title="PubSubClient (Arduino)"
-                  description="MQTT client library for ESP32/ESP8266 Arduino development."
+                  description={t('resources.extdocs.pubsubclient', 'MQTT client library for ESP32/ESP8266 Arduino development.')}
                   href="https://pubsubclient.knolleary.net"
                 />
               </div>

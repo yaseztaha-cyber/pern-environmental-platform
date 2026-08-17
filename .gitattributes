@@ -1,0 +1,19 @@
+# Normalize line endings across the repo (LF stored in git, native on checkout)
+* text=auto
+
+# Windows batch/command files must keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts stay LF even on Windows
+*.sh text eol=lf
+
+# Binary / generated files
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

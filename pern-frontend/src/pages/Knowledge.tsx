@@ -5,7 +5,6 @@ import {
   Search,
   MessageCircle,
   Send,
-  Loader2,
   Lightbulb,
   ExternalLink,
   X,
@@ -228,9 +227,91 @@ EcoSentinel uses multiple prediction methods:
     `,
     tags: ['troubleshooting', 'debugging', 'maintenance', 'calibration'],
   },
+  {
+    id: 'health-score-1',
+    title: 'How the Device Health Score is Calculated',
+    category: 'Metrics',
+    summary: 'The weighted 0–100 composite and the R²-validated trend and RUL models behind fleet health.',
+    content: `
+The **Device Health Score** is a weighted composite of three subsystems:
+
+**Score = 0.40 · Signal + 0.35 · Memory + 0.25 · Uptime**
+
+- **Signal (RSSI):** scaled 0–100 over the −90…−30 dBm usable window (IEEE 802.11).
+- **Memory (free heap):** scored against ESP32-class budgets — ≥200 KB healthy, <10 KB critical (Espressif TRM / ESP-IDF).
+- **Uptime:** sustained operation earns 100; frequent resets score low (ISO 17359 condition monitoring).
+
+**Trends** are fitted with ordinary least squares (Gauss 1809) and validated with **R²** (Moriasi et al. 2007); the **Theil–Sen** median slope (Sen 1968) is robust to outliers and an **EWMA** (Roberts 1959) smooths the raw signal.
+
+**Remaining Useful Life (RUL)** extrapolates the degrading health slope to the critical threshold (score < 40), a linear degradation model consistent with **ISO 13381-1:2015** prognostics.
+    `,
+    tags: ['health', 'score', 'rssi', 'rul', 'formula'],
+  },
+  {
+    id: 'rssi-pathloss-1',
+    title: 'RSSI, Path Loss & Estimating Distance',
+    category: 'Networks',
+    summary: 'How the log-distance path-loss model turns received signal strength into an approximate device distance.',
+    content: `
+Received signal strength (RSSI) is the power a receiver observes from a transmitter. In open air the **Friis transmission equation** (Friis 1946) governs free-space loss, but indoors reflections and obstructions raise the path-loss exponent (ITU-R P.1238-11).
+
+**Log-distance path-loss model:**
+\`\`\`
+d = d₀ · 10^((P₀ − RSSI) / (10·n))
+\`\`\`
+
+- d₀ = reference distance (1 m)
+- P₀ = expected RSSI at d₀ (≈ −45 dBm)
+- n = path-loss exponent (2.0 free space; 2–4 indoors)
+
+Because walls and furniture vary, distance from RSSI is **approximate** — always report it with its uncertainty and treat it as a coarse geolocation aid, not a measurement.
+    `,
+    tags: ['rssi', 'path-loss', 'distance', 'wifi', 'network'],
+  },
+  {
+    id: 'uncertainty-1',
+    title: 'Measurement Uncertainty & Confidence',
+    category: 'Metrics',
+    summary: 'GUM-style type-B uncertainty: turning a sensor accuracy spec into a defensible confidence interval.',
+    content: `
+Every sensor reports a value with limited accuracy. The **Guide to the Expression of Uncertainty in Measurement (GUM, JCGM 100:2008)** standardizes how to propagate that into a defensible statement.
+
+For a declared relative accuracy of p% of reading, assuming a **rectangular** distribution over ±p%:
+\`\`\`
+u = (value · p/100) / √3
+\`\`\`
+
+**Expanded uncertainty** applies a coverage factor k. With **k = 2** the interval covers ≈95% of likely values — the convention recommended for reporting.
+
+**Example:** an RSSI of −60 dBm with ±3% declared accuracy gives u ≈ 1.04 dBm and a 95% interval of roughly −62…−58 dBm. Confidence statements on this platform always state their coverage factor and distributional assumption.
+    `,
+    tags: ['uncertainty', 'gum', 'metrology', 'confidence', 'accuracy'],
+  },
 ];
 
 const CATEGORIES = ['All', ...Array.from(new Set(ARTICLES.map((a) => a.category)))];
+
+const CATEGORY_KEYS: Record<string, string> = {
+  'Air Quality': 'knowledge.category.airQuality',
+  Metrics: 'knowledge.category.metrics',
+  Automation: 'knowledge.category.automation',
+  Hardware: 'knowledge.category.hardware',
+  Analytics: 'knowledge.category.analytics',
+  Troubleshooting: 'knowledge.category.troubleshooting',
+  Networks: 'knowledge.category.networks',
+};
+
+const ARTICLE_KEYS: Record<string, { title: string; summary: string }> = {
+  'air-quality-1': { title: 'knowledge.article.airQuality.title', summary: 'knowledge.article.airQuality.summary' },
+  'ehi-1': { title: 'knowledge.article.ehi.title', summary: 'knowledge.article.ehi.summary' },
+  'automation-1': { title: 'knowledge.article.automation.title', summary: 'knowledge.article.automation.summary' },
+  'sensors-1': { title: 'knowledge.article.sensors.title', summary: 'knowledge.article.sensors.summary' },
+  'predictive-1': { title: 'knowledge.article.predictive.title', summary: 'knowledge.article.predictive.summary' },
+  'troubleshooting-1': { title: 'knowledge.article.troubleshooting.title', summary: 'knowledge.article.troubleshooting.summary' },
+  'health-score-1': { title: 'knowledge.article.healthScore.title', summary: 'knowledge.article.healthScore.summary' },
+  'rssi-pathloss-1': { title: 'knowledge.article.rssi.title', summary: 'knowledge.article.rssi.summary' },
+  'uncertainty-1': { title: 'knowledge.article.uncertainty.title', summary: 'knowledge.article.uncertainty.summary' },
+};
 
 export default function Knowledge() {
   const { t } = useI18n();
@@ -245,10 +326,17 @@ export default function Knowledge() {
   const [aiError, setAiError] = useState<string | null>(null);
 
   const filteredArticles = ARTICLES.filter((article) => {
+    const meta = ARTICLE_KEYS[article.id];
+    const title = meta ? t(meta.title, article.title) : article.title;
+    const summary = meta ? t(meta.summary, article.summary) : article.summary;
+    const category = t(CATEGORY_KEYS[article.category] ?? article.category, article.category);
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      !q ||
+      title.toLowerCase().includes(q) ||
+      summary.toLowerCase().includes(q) ||
+      category.toLowerCase().includes(q) ||
+      article.tags.some((tag) => tag.toLowerCase().includes(q));
     const matchesCategory = selectedCategory === 'All' || article.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -260,9 +348,9 @@ export default function Knowledge() {
     setAiAnswer('');
     try {
       const result = await apiClient.chat(aiQuestion, 'knowledge-base');
-      setAiAnswer(result?.reply || result?.response || 'No answer available. Please try rephrasing your question.');
+      setAiAnswer(result?.reply || result?.response || t('knowledge.ai.noAnswer', 'No answer available. Please try rephrasing your question.'));
     } catch (err: any) {
-      setAiError(err?.message || 'Failed to get AI response. The AI service may be offline.');
+      setAiError(err?.message || t('knowledge.ai.failed', 'Failed to get AI response. The AI service may be offline.'));
     } finally {
       setAiLoading(false);
     }
@@ -279,10 +367,10 @@ export default function Knowledge() {
       <Card hover={false}>
         <div className="flex items-center gap-2 mb-3">
           <MessageCircle size={18} className="text-[var(--violet)]" />
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Ask EcoSentinel AI</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t('knowledge.ai.title', 'Ask EcoSentinel AI')}</h3>
         </div>
         <p className="text-sm text-[var(--text-secondary)] mb-4">
-          Ask any question about environmental monitoring, sensors, automation, or the platform.
+          {t('knowledge.ai.subtitle', 'Ask any question about environmental monitoring, sensors, automation, or the platform.')}
         </p>
         <div className="flex gap-2">
           <input
@@ -290,12 +378,12 @@ export default function Knowledge() {
             value={aiQuestion}
             onChange={(e) => setAiQuestion(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') askAI(); }}
-            placeholder="e.g., What PM2.5 level is considered safe for indoor use?"
+            placeholder={t('knowledge.ai.placeholder', 'e.g., What PM2.5 level is considered safe for indoor use?')}
             className="flex-1 border border-[var(--border)] rounded-[var(--radius-sm)] px-4 py-2.5 text-sm bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--violet)]"
           />
           <Btn variant="primary" size="sm" loading={aiLoading} onClick={askAI} disabled={!aiQuestion.trim()}>
             {!aiLoading && <Send size={14} />}
-            Ask
+            {t('knowledge.ai.ask', 'Ask')}
           </Btn>
         </div>
 
@@ -315,13 +403,13 @@ export default function Knowledge() {
       {/* Search & Filter */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+          <Search size={16} className="absolute left-3 rtl:left-auto rtl:right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('knowledge.search', 'Search articles...')}
-            className="w-full pl-10 pr-4 py-2 border border-[var(--border)] rounded-[var(--radius-sm)] text-sm bg-[var(--bg-primary)] text-[var(--text-primary)]"
+            className="w-full pl-10 rtl:pl-4 pr-4 rtl:pr-10 py-2 border border-[var(--border)] rounded-[var(--radius-sm)] text-sm bg-[var(--bg-primary)] text-[var(--text-primary)]"
           />
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -332,7 +420,7 @@ export default function Knowledge() {
               size="sm"
               onClick={() => setSelectedCategory(cat)}
             >
-              {cat}
+              {cat === 'All' ? t('knowledge.category.all', 'All') : t(CATEGORY_KEYS[cat] ?? cat, cat)}
             </Btn>
           ))}
         </div>
@@ -340,43 +428,49 @@ export default function Knowledge() {
 
       {/* Articles */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredArticles.map((article) => (
-          <Card key={article.id}>
-            <div className="flex items-start justify-between mb-2">
-              <Pill tone="cyan">{article.category}</Pill>
-              <Lightbulb size={14} className="text-[var(--amber)]" />
-            </div>
-            <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-1">{article.title}</h3>
-            <p className="text-xs text-[var(--text-secondary)] mb-3">{article.summary}</p>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {article.tags.map((tag) => (
-                <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-tertiary)]">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-            <Btn
-              variant="ghost"
-              size="sm"
-              onClick={() => setExpandedArticle(expandedArticle === article.id ? null : article.id)}
-            >
-              {expandedArticle === article.id ? 'Collapse' : 'Read more'} <ExternalLink size={10} />
-            </Btn>
-            {expandedArticle === article.id && (
-              <div className="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--text-secondary)] whitespace-pre-line prose prose-sm dark:prose-invert max-w-none">
-                <Markdown remarkPlugins={[remarkGfm]}>{article.content}</Markdown>
+        {filteredArticles.map((article) => {
+          const meta = ARTICLE_KEYS[article.id];
+          const title = meta ? t(meta.title, article.title) : article.title;
+          const summary = meta ? t(meta.summary, article.summary) : article.summary;
+          const category = t(CATEGORY_KEYS[article.category] ?? article.category, article.category);
+          return (
+            <Card key={article.id}>
+              <div className="flex items-start justify-between mb-2">
+                <Pill tone="cyan">{category}</Pill>
+                <Lightbulb size={14} className="text-[var(--amber)]" />
               </div>
-            )}
-          </Card>
-        ))}
+              <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-1">{title}</h3>
+              <p className="text-xs text-[var(--text-secondary)] mb-3">{summary}</p>
+              <div className="flex flex-wrap gap-1 mb-3">
+                {article.tags.map((tag) => (
+                  <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-tertiary)]">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => setExpandedArticle(expandedArticle === article.id ? null : article.id)}
+              >
+                {expandedArticle === article.id ? t('knowledge.collapse', 'Collapse') : t('knowledge.readMore', 'Read more')} <ExternalLink size={10} />
+              </Btn>
+              {expandedArticle === article.id && (
+                <div className="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--text-secondary)] whitespace-pre-line prose prose-sm dark:prose-invert max-w-none">
+                  <Markdown remarkPlugins={[remarkGfm]}>{article.content}</Markdown>
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
 
       {filteredArticles.length === 0 && (
         <Card hover={false}>
           <EmptyState
             icon={<BookOpen size={22} />}
-            title="No articles found"
-            message="No articles match your search. Try different keywords."
+            title={t('knowledge.noResults.title', 'No articles found')}
+            message={t('knowledge.noResults.message', 'No articles match your search. Try different keywords.')}
           />
         </Card>
       )}

@@ -1,17 +1,22 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  BookOpen, BookMarked, FlaskConical, ExternalLink,
-  FileText, Quote, Globe, Check, Copy,
-  Code, Radio, Zap, Cpu,
-  Lightbulb, Beaker, BrainCircuit, ShieldCheck, Wrench,
-  Droplets, Sprout, Waves, Home, Thermometer, Cloud, Sun
+  BookOpen, ExternalLink, Quote, Code, Zap, Lightbulb, Check, Copy,
+  FileDown, FileSpreadsheet, Link2,
 } from 'lucide-react';
 import { PageHeader, Card, SectionTitle, Pill, Btn } from '../components/ui';
+import { useI18n } from '../lib/i18n';
+import {
+  REFERENCES,
+  toBibTeXCollection, toReferenceCSV, getReferenceUsage,
+  type ReferenceKind,
+} from '../lib/ai-references';
+import { ESTIMATOR_REFS, ESTIMATOR_METADATA } from '../lib/virtual-sensor-estimators';
 
 function CodeBlock({ id, language, children }: { id: string; language: string; children: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState<string | null>(null);
   function copyText(text: string) {
     navigator.clipboard.writeText(text).then(() => {
@@ -23,7 +28,7 @@ function CodeBlock({ id, language, children }: { id: string; language: string; c
     <div className="relative group rounded-[var(--radius-sm)] bg-black/30 border border-white/[0.06] overflow-hidden">
       <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--surface)] border-b border-white/[0.06]">
         <span className="text-[10px] text-[var(--text-disabled)] font-mono uppercase">{language}</span>
-        <button onClick={() => copyText(children)} aria-label="Copy code" className="text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors" title="Copy">
+        <button onClick={() => copyText(children)} aria-label={t('references.copyCode', 'Copy')} className="text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors" title={t('references.copyCode', 'Copy')}>
           {copied === id ? <Check size={12} className="text-[var(--emerald)]" /> : <Copy size={12} />}
         </button>
       </div>
@@ -32,66 +37,55 @@ function CodeBlock({ id, language, children }: { id: string; language: string; c
   );
 }
 
-const SCIENTIFIC_REFERENCES = [
-  { id: 'fpp3', icon: <BrainCircuit size={16} />, title: 'Forecasting: Principles and Practice (3rd ed.)', authors: 'Hyndman, R.J. & Athanasopoulos, G.', year: 2021, publisher: 'OTexts, Melbourne', doi: 'https://otexts.com/fpp3', tags: ['time-series', 'forecasting', 'exponential-smoothing'] },
-  { id: 'm5', icon: <BarChart3 size={16} />, title: 'M5 Accuracy Competition — Forecasting at Scale', authors: 'Makridakis, S., Spiliotis, E. & Assimakopoulos, V.', year: 2020, publisher: 'International Journal of Forecasting 38(2), 583–602', tags: ['forecasting', 'ensemble', 'competition'] },
-  { id: 'holt', icon: <TrendUp size={16} />, title: 'Exponential smoothing — The state of the art', authors: 'Gardner, E.S.', year: 2006, publisher: 'International Journal of Forecasting 22(4), 637–666', tags: ['exponential-smoothing', 'damping'] },
-  { id: 'boxjenkins', icon: <BarChart3 size={16} />, title: 'Time Series Analysis: Forecasting and Control (4th ed.)', authors: 'Box, G.E.P., Jenkins, G.M. & Reinsel, G.C.', year: 2008, publisher: 'Wiley', tags: ['time-series', 'arima', 'confidence-intervals'] },
-  { id: 'shewhart', icon: <ShieldCheck size={16} />, title: 'Economic Control of Quality of Manufactured Product', authors: 'Shewhart, W.A.', year: 1931, publisher: 'Van Nostrand, New York', tags: ['spc', 'control-limits', 'quality'] },
-  { id: 'montgomery', icon: <ShieldCheck size={16} />, title: 'Introduction to Statistical Quality Control (6th ed.)', authors: 'Montgomery, D.C.', year: 2009, publisher: 'Wiley', tags: ['spc', 'ewma', 'process-capability', 'cv'] },
-  { id: 'iso5725', icon: <FileText size={16} />, title: 'ISO 5725-1:1994 — Accuracy of measurement methods and results', authors: 'International Organization for Standardization', year: 1994, publisher: 'ISO, Geneva', tags: ['standard', 'measurement-error', 'repeatability'] },
-  { id: 'iso27001', icon: <ShieldCheck size={16} />, title: 'ISO/IEC 27001:2022 — Information security management systems', authors: 'ISO/IEC', year: 2022, publisher: 'ISO, Geneva', tags: ['standard', 'security', 'data-quality'] },
-  { id: 'iso13381', icon: <Wrench size={16} />, title: 'ISO 13381-1:2015 — Condition monitoring — Prognostics', authors: 'International Organization for Standardization', year: 2015, publisher: 'ISO, Geneva', tags: ['standard', 'predictive-maintenance', 'prognostics'] },
-  { id: 'iso13849', icon: <ShieldCheck size={16} />, title: 'ISO 13849-1:2015 — Safety of machinery — Control systems', authors: 'International Organization for Standardization', year: 2015, publisher: 'ISO, Geneva', tags: ['standard', 'safety', 'validation'] },
-  { id: 'ieee1451', icon: <Cpu size={16} />, title: 'IEEE 1451.2-1997 — Smart Transducer Interface', authors: 'IEEE', year: 1997, publisher: 'IEEE, New York', tags: ['standard', 'sensor', 'transducer'] },
-  { id: 'iglewicz', icon: <Beaker size={16} />, title: 'How to Detect and Handle Outliers', authors: 'Iglewicz, B. & Hoaglin, D.C.', year: 1993, publisher: 'ASQC Basic References in Quality Control, Vol. 16', tags: ['outliers', 'mad', 'z-score'] },
-  { id: 'hampel', icon: <FlaskConical size={16} />, title: 'The influence curve and its role in robust estimation', authors: 'Hampel, F.R.', year: 1974, publisher: 'J. Amer. Statist. Assoc. 69(346), 383–393', tags: ['robust-estimation', 'mad', 'outliers'] },
-  { id: 'tukey', icon: <BookOpen size={16} />, title: 'Exploratory Data Analysis', authors: 'Tukey, J.W.', year: 1977, publisher: 'Addison-Wesley, Reading, MA', tags: ['eda', 'box-plot', 'outlier'] },
-  { id: 'roberts', icon: <BarChart3 size={16} />, title: 'Control chart tests based on geometric moving averages', authors: 'Roberts, S.W.', year: 1959, publisher: 'Technometrics 1(3), 239–250', tags: ['ewma', 'exponential-smoothing', 'spc'] },
-  { id: 'fuller', icon: <BarChart3 size={16} />, title: 'Measurement Error Models', authors: 'Fuller, W.A.', year: 1987, publisher: 'Wiley, New York', tags: ['measurement-error', 'regression'] },
-  { id: 'pearson', icon: <BrainCircuit size={16} />, title: 'Mathematical contributions to the theory of evolution. III. Regression, heredity, and panmixia', authors: 'Pearson, K.', year: 1895, publisher: 'Phil. Trans. R. Soc. Lond. A 187, 253–318', tags: ['correlation', 'statistics', 'split-half'] },
-  { id: 'wheeler', icon: <ShieldCheck size={16} />, title: 'Understanding Statistical Process Control (2nd ed.)', authors: 'Wheeler, D.J. & Chambers, D.S.', year: 1992, publisher: 'SPC Press, Knoxville', tags: ['spc', 'runs-tests', 'control-charts'] },
-  { id: 'ashrae55', icon: <Globe size={16} />, title: 'ASHRAE Standard 55-2023 — Thermal Environmental Conditions for Human Occupancy', authors: 'ASHRAE', year: 2023, publisher: 'ASHRAE, Atlanta', tags: ['standard', 'thermal-comfort', 'hvac'] },
-  { id: 'whoaq', icon: <Globe size={16} />, title: 'WHO Global Air Quality Guidelines 2021', authors: 'World Health Organization', year: 2021, publisher: 'WHO, Geneva', tags: ['standard', 'air-quality', 'pm25', 'no2'] },
-  { id: 'whoiaq', icon: <Globe size={16} />, title: 'WHO Guidelines for Indoor Air Quality: Selected Pollutants', authors: 'World Health Organization', year: 2010, publisher: 'WHO Regional Office for Europe', tags: ['standard', 'indoor-air', 'guidelines'] },
-  { id: 'whodw', icon: <Globe size={16} />, title: 'Guidelines for Drinking-water Quality (4th ed.)', authors: 'World Health Organization', year: 2017, publisher: 'WHO, Geneva', tags: ['standard', 'water-quality', 'drinking-water'] },
-  { id: 'usepaaqi', icon: <Globe size={16} />, title: 'Technical Assistance Document for the Reporting of Daily Air Quality — AQI', authors: 'US Environmental Protection Agency', year: 2024, publisher: 'EPA-454/B-24-002', tags: ['standard', 'aqi', 'air-quality'] },
-  { id: 'nsfwqi', icon: <Beaker size={16} />, title: 'A Water Quality Index — Do We Dare?', authors: 'Brown, R.M., McClelland, N.I., Deininger, R.A. & Tozer, R.G.', year: 1970, publisher: 'Water & Sewage Works 117(10), 339–343', tags: ['wqi', 'water-quality', 'index'] },
-  { id: 'iso7243', icon: <FlaskConical size={16} />, title: 'ISO 7243:2017 — Ergonomics — Heat stress — WBGT estimation', authors: 'International Organization for Standardization', year: 2017, publisher: 'ISO, Geneva', tags: ['standard', 'heat-stress', 'wbgt'] },
-  { id: 'steadman', icon: <FlaskConical size={16} />, title: 'The assessment of sultriness. Part I: A temperature-humidity index', authors: 'Steadman, R.G.', year: 1979, publisher: 'J. Appl. Meteorol. 18(7), 861–873', tags: ['humidex', 'heat-index', 'thermal'] },
-  { id: 'parsons', icon: <BookOpen size={16} />, title: 'Human Thermal Environments (2nd ed.)', authors: 'Parsons, K.C.', year: 2003, publisher: 'Taylor & Francis, London', tags: ['thermal-comfort', 'heat-stress', 'ergonomics'] },
-  { id: 'apha', icon: <BookMarked size={16} />, title: 'Standard Methods for the Examination of Water and Wastewater (24th ed.)', authors: 'APHA, AWWA, WEF', year: 2023, publisher: 'American Public Health Association, Washington DC', tags: ['standard', 'water-quality', 'laboratory'] },
-  { id: 'cdcniosh', icon: <ShieldCheck size={16} />, title: 'NIOSH Criteria for a Recommended Standard: Occupational Exposure to Heat', authors: 'CDC / NIOSH', year: 2016, publisher: 'DHHS (NIOSH) Publication 2016-106', tags: ['standard', 'heat-stress', 'occupational'] },
-  { id: 'makridakis1993', icon: <BrainCircuit size={16} />, title: 'Accuracy measures: theoretical and practical concerns', authors: 'Makridakis, S.', year: 1993, publisher: 'International Journal of Forecasting 9(4), 527–529', tags: ['forecasting', 'smape', 'error-metrics'] },
-  { id: 'armstrong', icon: <BarChart3 size={16} />, title: 'Error measures for generalizing about forecasting methods', authors: 'Armstrong, J.S. & Collopy, F.', year: 1992, publisher: 'International Journal of Forecasting 8(1), 69–80', tags: ['forecasting', 'error-metrics', 'mape'] },
-  { id: 'diebold', icon: <BrainCircuit size={16} />, title: 'Comparing predictive accuracy', authors: 'Diebold, F.X. & Mariano, R.S.', year: 1995, publisher: 'J. Business & Economic Statistics 13(3), 253–263', tags: ['forecasting', 'hypothesis-test', 'comparison'] },
-  { id: 'wei', icon: <BookOpen size={16} />, title: 'Time Series Analysis: Univariate and Multivariate Methods (2nd ed.)', authors: 'Wei, W.W.S.', year: 2006, publisher: 'Pearson, Boston', tags: ['time-series', 'trend', 'decomposition'] },
-  { id: 'venkat', icon: <FlaskConical size={16} />, title: 'A review of process fault detection and diagnosis', authors: 'Venkatasubramanian, V., Rengaswamy, R., Yin, K. & Kavuri, S.N.', year: 2003, publisher: 'Computers & Chemical Engineering 27(3), 293–346', tags: ['fault-detection', 'diagnosis', 'sensor-validation'] },
-  { id: 'russell', icon: <BrainCircuit size={16} />, title: 'Artificial Intelligence: A Modern Approach (4th ed.)', authors: 'Russell, S. & Norvig, P.', year: 2021, publisher: 'Pearson, Boston', tags: ['ai', 'llm', 'prompting'] },
-  { id: 'brown2020', icon: <BrainCircuit size={16} />, title: 'Language Models are Few-Shot Learners', authors: 'Brown, T.B. et al.', year: 2020, publisher: 'NeurIPS 2020', tags: ['ai', 'llm', 'in-context-learning'] },
+const KIND_TONE: Record<ReferenceKind, 'blue' | 'cyan' | 'violet' | 'emerald'> = {
+  standard: 'blue',
+  guideline: 'cyan',
+  research: 'violet',
+  method: 'emerald',
+};
 
-  // ── Virtual Sensor Estimators & Indices ──
-  { id: 'alduchov1996', icon: <Thermometer size={16} />, title: 'Improved Magnus form approximation of saturation vapor pressure', authors: 'Alduchov, O.A. & Eskridge, R.E.', year: 1996, publisher: 'J. Appl. Meteor. 35(4), 601–609', tags: ['vapor-pressure', 'dew-point', 'magnus-formula'] },
-  { id: 'buck1981', icon: <Thermometer size={16} />, title: 'New equations for computing vapor pressure and enhancement factor', authors: 'Buck, A.L.', year: 1981, publisher: 'J. Appl. Meteor. 20(12), 1527–1532', tags: ['vapor-pressure', 'humidity', 'psychrometrics'] },
-  { id: 'stull2011', icon: <Thermometer size={16} />, title: 'Wet-bulb temperature from relative humidity and air temperature', authors: 'Stull, R.', year: 2011, publisher: 'J. Appl. Meteor. Climatol. 50(11), 2267–2269', tags: ['wbgt', 'wet-bulb', 'heat-stress'] },
-  { id: 'rothfusz1990', icon: <Thermometer size={16} />, title: 'The Heat Index equation (NOAA NWS SR/SSD 90-23)', authors: 'Rothfusz, L.P.', year: 1990, publisher: 'NOAA NWS Southern Region, Fort Worth, TX', tags: ['heat-index', 'thermal-comfort', 'noaa'] },
-  { id: 'fao56', icon: <Sprout size={16} />, title: 'Crop evapotranspiration — Guidelines for computing crop water requirements (FAO 56)', authors: 'Allen, R.G., Pereira, L.S., Raes, D. & Smith, M.', year: 1998, publisher: 'FAO Irrigation & Drainage Paper 56, Rome', tags: ['evapotranspiration', 'vpd', 'crop-water', 'fao'] },
-  { id: 'hargreaves1985', icon: <Sprout size={16} />, title: 'Reference crop evapotranspiration from temperature', authors: 'Hargreaves, G.H. & Samani, Z.A.', year: 1985, publisher: 'Trans. ASAE 1(2), 96–99', tags: ['evapotranspiration', 'hargreaves', 'temperature'] },
-  { id: 'cie087', icon: <Sun size={16} />, title: 'CIE 087:2005 Characterization of UV / CIE 085:1989 Solar Spectral Irradiance', authors: 'Commission Internationale de l\'Éclairage', year: 2005, publisher: 'CIE, Vienna', tags: ['uv-index', 'solar-radiation', 'luminous-efficacy'] },
-  { id: 'inada1976', icon: <Sun size={16} />, title: 'Spectral luminous efficacy in photosynthesis', authors: 'Inada, K.', year: 1976, publisher: 'J. Agric. Meteorol. 32(3), 113–123', tags: ['ppfd', 'photosynthesis', 'lux-conversion'] },
-  { id: 'mq135', icon: <FlaskConical size={16} />, title: 'MQ-135 Gas Sensor Datasheet — NH₃, NOx, CO₂, Smoke detection', authors: 'Hanwei Electronics', year: 2015, publisher: 'Zhengzhou Winsen Electronics, China', tags: ['gas-sensor', 'mq135', 'semiconductor'] },
-  { id: 'ashrae62', icon: <Home size={16} />, title: 'ASHRAE Standard 62.1-2022 — Ventilation for Acceptable Indoor Air Quality', authors: 'ASHRAE', year: 2022, publisher: 'ASHRAE, Atlanta', tags: ['standard', 'ventilation', 'indoor-air', 'co2'] },
-  { id: 'stumm1996', icon: <Droplets size={16} />, title: 'Aquatic Chemistry: Chemical Equilibria and Rates in Natural Waters (3rd ed.)', authors: 'Stumm, W. & Morgan, J.J.', year: 1996, publisher: 'Wiley, New York', tags: ['aquatic-chemistry', 'ph', 'carbonate', 'water-quality'] },
-  { id: 'emerson1975', icon: <Droplets size={16} />, title: 'Aqueous ammonia equilibrium calculations', authors: 'Emerson, K., Russo, R.C., Lund, R.E. & Thurston, R.V.', year: 1975, publisher: 'J. Fish. Res. Board Can. 32(12), 2379–2383', tags: ['ammonia', 'nh3', 'equilibrium', 'aquaculture'] },
-  { id: 'usgsTWRI', icon: <BookMarked size={16} />, title: 'USGS TWRI Book 9 — Handbooks for Water-Resources Investigations', authors: 'US Geological Survey', year: 1979, publisher: 'USGS, Reston, VA', tags: ['water-quality', 'tds', 'turbidity', 'field-methods'] },
-  { id: 'willmott2005', icon: <BarChart3 size={16} />, title: 'Advantages of MAE over RMSE in assessing average model performance', authors: 'Willmott, C.J. & Matsuura, K.', year: 2005, publisher: 'Climate Research 30(1), 79–82', tags: ['confidence', 'error-metrics', 'mae', 'rmse'] },
-  { id: 'moriasi2007', icon: <BarChart3 size={16} />, title: 'Model evaluation guidelines for systematic quantification of accuracy in watershed simulations', authors: 'Moriasi, D.N. et al.', year: 2007, publisher: 'Trans. ASABE 50(3), 885–900', tags: ['confidence', 'model-evaluation', 'r-squared'] },
-  { id: 'oecd1982', icon: <Waves size={16} />, title: 'Eutrophication of Waters: Monitoring, Assessment and Control', authors: 'OECD', year: 1982, publisher: 'OECD, Paris', tags: ['eutrophication', 'water-quality', 'nutrients'] },
-  { id: 'iso9223', icon: <ShieldCheck size={16} />, title: 'ISO 9223:2012 — Corrosion of metals — Corrosivity of atmospheres — Classification', authors: 'International Organization for Standardization', year: 2012, publisher: 'ISO, Geneva', tags: ['standard', 'corrosion', 'infrastructure'] },
-  { id: 'epacorrosion', icon: <ShieldCheck size={16} />, title: 'Corrosion in Water Distribution Systems (EPA/625/R-95/001)', authors: 'US Environmental Protection Agency', year: 1994, publisher: 'EPA Office of Research & Development', tags: ['corrosion', 'water-distribution', 'lsi'] },
-  { id: 'faosoil', icon: <Sprout size={16} />, title: 'Standard Operating Procedure for Soil pH, EC, and Moisture', authors: 'FAO', year: 2023, publisher: 'FAO, Rome', tags: ['soil', 'ph', 'moisture', 'agriculture'] },
-  { id: 'usdanrcs', icon: <Sprout size={16} />, title: 'USDA-NRCS Soil Survey Manual (Handbook 18)', authors: 'USDA Natural Resources Conservation Service', year: 2019, publisher: 'USDA, Washington DC', tags: ['soil', 'agriculture', 'crop-growth', 'temperature'] },
-];
+const USAGE_TONE: Record<string, 'emerald' | 'cyan' | 'violet' | 'amber' | 'slate'> = {
+  domain: 'cyan',
+  sensor: 'emerald',
+  estimator: 'violet',
+};
+
+/** Map a reference id to human-readable usage locations across the platform. */
+function usageFor(id: string, t: (k: string, f: string) => string): Array<{ kind: 'domain' | 'sensor' | 'estimator'; label: string }> {
+  const out: Array<{ kind: 'domain' | 'sensor' | 'estimator'; label: string }> = [];
+  for (const u of getReferenceUsage(id)) {
+    out.push({ kind: u.kind, label: u.kind === 'domain' ? `${t('references.usedBy.domain', 'Domain')} · ${u.label}` : `${t('references.usedBy.sensor', 'Sensor')} · ${u.label}` });
+  }
+  for (const [estId, refIds] of Object.entries(ESTIMATOR_REFS)) {
+    if (refIds.includes(id)) {
+      const meta = ESTIMATOR_METADATA.find(m => m.id === estId);
+      out.push({ kind: 'estimator', label: `${t('references.usedBy.estimator', 'Estimator')} · ${meta?.name || estId}` });
+    }
+  }
+  return out;
+}
+
+const ARTICLE_KEYS: Record<string, { title: string; summary: string }> = {
+  'air-quality-1': { title: 'knowledge.article.airQuality.title', summary: 'knowledge.article.airQuality.summary' },
+  'ehi-1': { title: 'knowledge.article.ehi.title', summary: 'knowledge.article.ehi.summary' },
+  'predictive-1': { title: 'knowledge.article.predictive.title', summary: 'knowledge.article.predictive.summary' },
+  'sensors-1': { title: 'knowledge.article.sensors.title', summary: 'knowledge.article.sensors.summary' },
+  'automation-1': { title: 'knowledge.article.automation.title', summary: 'knowledge.article.automation.summary' },
+  'troubleshooting-1': { title: 'knowledge.article.troubleshooting.title', summary: 'knowledge.article.troubleshooting.summary' },
+  'health-score-1': { title: 'knowledge.article.healthScore.title', summary: 'knowledge.article.healthScore.summary' },
+  'rssi-pathloss-1': { title: 'knowledge.article.rssi.title', summary: 'knowledge.article.rssi.summary' },
+  'uncertainty-1': { title: 'knowledge.article.uncertainty.title', summary: 'knowledge.article.uncertainty.summary' },
+};
+
+const CATEGORY_KEYS: Record<string, string> = {
+  'Air Quality': 'knowledge.category.airQuality',
+  Metrics: 'knowledge.category.metrics',
+  Analytics: 'knowledge.category.analytics',
+  Hardware: 'knowledge.category.hardware',
+  Automation: 'knowledge.category.automation',
+  Troubleshooting: 'knowledge.category.troubleshooting',
+  Networks: 'knowledge.category.networks',
+};
 
 const KNOWLEDGE_ARTICLES = [
   {
@@ -149,6 +143,50 @@ const KNOWLEDGE_ARTICLES = [
 **Data Gaps:** Check battery, transmission intervals, database capacity, API rate limits.`,
     tags: ['troubleshooting', 'maintenance', 'debugging'],
   },
+  {
+    id: 'health-score-1', title: 'How the Device Health Score is Calculated', category: 'Metrics',
+    summary: 'The weighted 0–100 composite and the R²-validated trend and RUL models behind fleet health.',
+    content: `The **Device Health Score** is a weighted composite of three subsystems:
+
+**Score = 0.40 · Signal + 0.35 · Memory + 0.25 · Uptime**
+
+- **Signal (RSSI):** scaled 0–100 over the −90…−30 dBm usable window (IEEE 802.11).
+- **Memory (free heap):** scored against ESP32-class budgets — ≥200 KB healthy, <10 KB critical (Espressif TRM / ESP-IDF).
+- **Uptime:** sustained operation earns 100; frequent resets score low (ISO 17359 condition monitoring).
+
+**Trends** are fitted with ordinary least squares (Gauss 1809) and validated with **R²** (Moriasi et al. 2007); the **Theil–Sen** median slope (Sen 1968) is robust to outliers and an **EWMA** (Roberts 1959) smooths the raw signal.
+
+**Remaining Useful Life (RUL)** extrapolates the degrading health slope to the critical threshold (score < 40), a linear degradation model consistent with **ISO 13381-1:2015** prognostics. RUL and trend estimates carry a qualitative confidence derived from fit R², sample count and observation span.`,
+    tags: ['health', 'score', 'rssi', 'rul', 'formula'],
+  },
+  {
+    id: 'rssi-pathloss-1', title: 'RSSI, Path Loss & Estimating Distance', category: 'Networks',
+    summary: 'How the log-distance path-loss model turns received signal strength into an approximate device distance.',
+    content: `Received signal strength (RSSI) is the power a receiver observes from a transmitter. In open air the **Friis transmission equation** (Friis 1946) governs free-space loss, but indoors reflections and obstructions raise the path-loss exponent (ITU-R P.1238-11).
+
+**Log-distance path-loss model:**
+d = d₀ · 10^((P₀ − RSSI) / (10·n))
+
+- d₀ = reference distance (1 m)
+- P₀ = expected RSSI at d₀ (≈ −45 dBm)
+- n = path-loss exponent (2.0 free space; 2–4 indoors)
+
+Because walls and furniture vary, distance from RSSI is **approximate** — always report it with its uncertainty and treat it as a coarse geolocation aid, not a measurement.`,
+    tags: ['rssi', 'path-loss', 'distance', 'wifi', 'network'],
+  },
+  {
+    id: 'uncertainty-1', title: 'Measurement Uncertainty & Confidence', category: 'Metrics',
+    summary: 'GUM-style type-B uncertainty: turning a sensor accuracy spec into a defensible confidence interval.',
+    content: `Every sensor reports a value with limited accuracy. The **Guide to the Expression of Uncertainty in Measurement (GUM, JCGM 100:2008)** standardizes how to propagate that into a defensible statement.
+
+For a declared relative accuracy of p% of reading, assuming a **rectangular** distribution over ±p%:
+u = (value · p/100) / √3
+
+**Expanded uncertainty** applies a coverage factor k. With **k = 2** the interval covers ≈95% of likely values — the convention recommended for reporting.
+
+**Example:** an RSSI of −60 dBm with ±3% declared accuracy gives u ≈ 1.04 dBm and a 95% interval of roughly −62…−58 dBm. Confidence statements on this platform always state their coverage factor and distributional assumption.`,
+    tags: ['uncertainty', 'gum', 'metrology', 'confidence', 'accuracy'],
+  },
 ];
 
 const API_ENDPOINTS = [
@@ -160,6 +198,9 @@ const API_ENDPOINTS = [
   { method: 'GET', path: '/api/alerts', desc: 'List active alerts' },
   { method: 'POST', path: '/api/alerts', desc: 'Create a new alert rule' },
   { method: 'POST', path: '/api/alerts/:id/acknowledge', desc: 'Acknowledge an alert' },
+  { method: 'GET', path: '/api/alerts/rules', desc: 'List alert rules' },
+  { method: 'POST', path: '/api/alerts/rules', desc: 'Create / update an alert rule' },
+  { method: 'DELETE', path: '/api/alerts/rules/:id', desc: 'Delete an alert rule' },
   { method: 'GET', path: '/api/thresholds', desc: 'List configured sensor thresholds' },
   { method: 'POST', path: '/api/thresholds', desc: 'Save or update a threshold' },
 ];
@@ -168,40 +209,49 @@ const METHOD_COLORS: Record<string, string> = { GET: 'text-[var(--emerald)]', PO
 
 const fadeUp = { hidden: { opacity: 0, y: 16 }, visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, type: 'spring' as const, stiffness: 70 } }) };
 
-function TrendUp(props: { size?: number; className?: string }) {
-  return <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 16} height={props.size || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
-}
-
-function BarChart3(props: { size?: number; className?: string }) {
-  return <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 16} height={props.size || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>;
+function downloadFile(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export default function ReferencesPage() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'references' | 'articles' | 'api' | 'quickstart'>('references');
   const [searchRef, setSearchRef] = useState('');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
 
-  const filteredRefs = SCIENTIFIC_REFERENCES.filter(r => {
-    const matchesSearch = !searchRef || r.title.toLowerCase().includes(searchRef.toLowerCase()) || r.authors.toLowerCase().includes(searchRef.toLowerCase()) || r.tags.some(t => t.includes(searchRef.toLowerCase()));
-    const matchesTags = selectedTags.size === 0 || r.tags.some(t => selectedTags.has(t));
-    return matchesSearch && matchesTags;
-  });
+  const filteredRefs = useMemo(() => {
+    return REFERENCES.filter(r => {
+      const matchesSearch = !searchRef || r.title.toLowerCase().includes(searchRef.toLowerCase()) || r.authors.toLowerCase().includes(searchRef.toLowerCase()) || r.publisher.toLowerCase().includes(searchRef.toLowerCase()) || r.tags.some(tag => tag.includes(searchRef.toLowerCase()));
+      const matchesTags = selectedTags.size === 0 || r.tags.some(tag => selectedTags.has(tag));
+      return matchesSearch && matchesTags;
+    });
+  }, [searchRef, selectedTags]);
 
-  const allTags = Array.from(new Set(SCIENTIFIC_REFERENCES.flatMap(r => r.tags))).sort();
+  const allTags = useMemo(() => Array.from(new Set(REFERENCES.flatMap(r => r.tags))).sort(), []);
 
   const tabs = [
-    { id: 'references' as const, label: 'Scientific References', icon: <Quote size={14} /> },
-    { id: 'articles' as const, label: 'Knowledge Articles', icon: <BookOpen size={14} /> },
-    { id: 'api' as const, label: 'API Reference', icon: <Code size={14} /> },
-    { id: 'quickstart' as const, label: 'Quick Start', icon: <Zap size={14} /> },
+    { id: 'references' as const, label: t('references.tab.references', 'Scientific References'), icon: <Quote size={14} /> },
+    { id: 'articles' as const, label: t('references.tab.articles', 'Knowledge Articles'), icon: <BookOpen size={14} /> },
+    { id: 'api' as const, label: t('references.tab.api', 'API Reference'), icon: <Code size={14} /> },
+    { id: 'quickstart' as const, label: t('references.tab.quickstart', 'Quick Start'), icon: <Zap size={14} /> },
   ];
 
   return (
     <motion.div variants={fadeUp} initial="hidden" animate="visible" className="max-w-[1100px] mx-auto">
       <PageHeader
-        title="References"
-        subtitle="Scientific citations · Knowledge articles · API reference · Quick-start guides"
-        right={<Pill tone="emerald">v2.7</Pill>}
+        title={t('references.title', 'References')}
+        subtitle={t('references.subtitle', 'Scientific citations · Knowledge articles · API reference · Quick-start guides')}
+        right={<div className="flex items-center gap-2">
+          <Pill tone="emerald">{REFERENCES.length} {t('references.sources', 'sources')}</Pill>
+        </div>}
       />
 
       {/* Tab Navigation */}
@@ -221,21 +271,25 @@ export default function ReferencesPage() {
             <Card hover={false}>
               <SectionTitle>
                 <Quote size={14} className="inline mr-2 text-[var(--emerald)]" />
-                Scientific References
+                {t('references.section.scientific', 'Scientific References')}
               </SectionTitle>
               <p className="text-sm text-[var(--text-tertiary)] leading-relaxed mb-5">
-                All algorithms and methodologies used in the PERN platform are grounded in peer-reviewed
-                scientific literature and international standards. Each reference is cited in the source
-                code via JSDoc headers with numbered tags (<code className="text-[11px] bg-white/[0.06] px-1 rounded">[1]</code>,
-                <code className="text-[11px] bg-white/[0.06] px-1 rounded">[2]</code>, …) that trace directly to the
-                relevant equation, threshold, or design decision.
+                {t('references.scientific.description', 'All algorithms and methodologies used in the PERN platform are grounded in peer-reviewed scientific literature and international standards. Every reference below is a real standard, guideline, or publication traced directly to the equation, threshold, or design decision it backs.')}
               </p>
 
-              {/* Search */}
+              {/* Search + export */}
               <div className="flex flex-col sm:flex-row gap-3 mb-4">
                 <div className="relative flex-1">
-                  <Quote size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
-                  <input type="text" value={searchRef} onChange={e => setSearchRef(e.target.value)} placeholder="Search references by title, author, or tag..." className="w-full pl-10 pr-4 py-2 border border-[var(--border)] rounded-[var(--radius-sm)] text-sm bg-[var(--bg-primary)] text-[var(--text-primary)]" />
+                  <Quote size={14} className="absolute left-3 rtl:left-auto rtl:right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                  <input type="text" value={searchRef} onChange={e => setSearchRef(e.target.value)} placeholder={t('references.searchPlaceholder', 'Search references by title, author, publisher, or tag...')} className="w-full pl-10 rtl:pl-4 pr-4 rtl:pr-10 py-2 border border-[var(--border)] rounded-[var(--radius-sm)] text-sm bg-[var(--bg-primary)] text-[var(--text-primary)]" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Btn variant="ghost" size="sm" disabled={filteredRefs.length === 0} onClick={() => downloadFile('pern-references.bib', toBibTeXCollection(filteredRefs), 'text/plain')}>
+                    <FileDown size={12} /> BibTeX
+                  </Btn>
+                  <Btn variant="ghost" size="sm" disabled={filteredRefs.length === 0} onClick={() => downloadFile('pern-references.csv', toReferenceCSV(filteredRefs), 'text/csv')}>
+                    <FileSpreadsheet size={12} /> CSV
+                  </Btn>
                 </div>
               </div>
 
@@ -244,7 +298,7 @@ export default function ReferencesPage() {
                 {allTags.map(tag => (
                   <button key={tag} onClick={() => {
                     const next = new Set(selectedTags);
-                    next.has(tag) ? next.delete(tag) : next.add(tag);
+                    if (next.has(tag)) next.delete(tag); else next.add(tag);
                     setSelectedTags(next);
                   }} className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
                     selectedTags.has(tag) ? 'bg-[var(--emerald)]/15 text-[var(--emerald)] border-[var(--emerald)]/30' : 'bg-white/[0.03] text-[var(--text-tertiary)] border-white/[0.08] hover:text-[var(--text-secondary)]'
@@ -255,22 +309,44 @@ export default function ReferencesPage() {
               </div>
 
               <div className="space-y-1">
-                {filteredRefs.map((ref, i) => (
-                  <a key={ref.id} href={ref.doi || '#'} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] hover:bg-white/[0.03] transition-colors group">
-                    <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--emerald)]/10 text-[var(--emerald)] flex items-center justify-center text-[10px] font-bold mt-0.5">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--emerald)] transition-colors">{ref.title}</div>
-                      <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{ref.authors} ({ref.year})</div>
-                      <div className="text-[11px] text-[var(--text-disabled)]">{ref.publisher}</div>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {ref.tags.map(t => <span key={t} className="text-[9px] px-1.5 py-0.5 bg-white/[0.04] rounded text-[var(--text-disabled)]">#{t}</span>)}
+                {filteredRefs.map((ref, i) => {
+                  const usages = usageFor(ref.id, t);
+                  return (
+                    <div key={ref.id} className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] hover:bg-white/[0.03] transition-colors group">
+                      <span className="shrink-0 w-6 h-6 rounded-full bg-[var(--emerald)]/10 text-[var(--emerald)] flex items-center justify-center text-[10px] font-bold mt-0.5">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--emerald)] transition-colors">{ref.title}</span>
+                          <Pill tone={KIND_TONE[ref.kind]} className="!px-2 !py-0 !text-[9px] capitalize">{ref.kind}</Pill>
+                        </div>
+                        <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{ref.authors} ({ref.year})</div>
+                        <div className="text-[11px] text-[var(--text-disabled)]">{ref.publisher}</div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {ref.tags.map(tag => <span key={tag} className="text-[9px] px-1.5 py-0.5 bg-white/[0.04] rounded text-[var(--text-disabled)]">#{tag}</span>)}
+                        </div>
+                        {usages.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider mr-0.5">
+                              <Link2 size={9} /> {t('references.usedBy', 'Used by')}
+                            </span>
+                            {usages.map(u => (
+                              <span key={u.label} className={`text-[9px] px-1.5 py-0.5 rounded-full border ${USAGE_TONE[u.kind] === 'cyan' ? 'bg-[rgba(34,211,238,0.08)] text-[var(--cyan)] border-[rgba(34,211,238,0.2)]' : USAGE_TONE[u.kind] === 'emerald' ? 'bg-[var(--emerald-dim)] text-[var(--emerald)] border-[var(--emerald-glow)]' : 'bg-[rgba(167,139,250,0.1)] text-[var(--violet)] border-[rgba(167,139,250,0.25)]'}`}>
+                                {u.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
+                      {ref.url && (
+                        <a href={ref.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-[var(--text-disabled)] hover:text-[var(--emerald)] mt-1 transition-colors" title={t('references.openSource', 'Open source')}>
+                          <ExternalLink size={12} />
+                        </a>
+                      )}
                     </div>
-                    {ref.doi && <ExternalLink size={12} className="shrink-0 text-[var(--text-disabled)] mt-1" />}
-                  </a>
-                ))}
+                  );
+                })}
                 {filteredRefs.length === 0 && (
-                  <p className="text-sm text-[var(--text-tertiary)] text-center py-8">No references match your search.</p>
+                  <p className="text-sm text-[var(--text-tertiary)] text-center py-8">{t('references.noMatches', 'No references match your search.')}</p>
                 )}
               </div>
             </Card>
@@ -280,31 +356,37 @@ export default function ReferencesPage() {
         {/* ── Knowledge Articles Tab ── */}
         {activeTab === 'articles' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {KNOWLEDGE_ARTICLES.map(article => (
-              <Card key={article.id}>
-                <div className="flex items-start justify-between mb-2">
-                  <Pill tone="cyan">{article.category}</Pill>
-                  <Lightbulb size={14} className="text-[var(--amber)]" />
-                </div>
-                <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-1">{article.title}</h3>
-                <p className="text-xs text-[var(--text-secondary)] mb-3">{article.summary}</p>
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {article.tags.map(tag => (
-                    <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-tertiary)]">#{tag}</span>
-                  ))}
-                </div>
-                <details className="group">
-                  <summary className="text-xs text-[var(--emerald)] cursor-pointer hover:text-[var(--emerald-bright)] transition-colors list-none flex items-center gap-1">
-                    <span className="group-open:hidden">Read more</span>
-                    <span className="hidden group-open:inline">Collapse</span>
-                    <ExternalLink size={10} />
-                  </summary>
-                  <div className="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--text-secondary)] whitespace-pre-line prose prose-sm dark:prose-invert max-w-none">
-                    <Markdown remarkPlugins={[remarkGfm]}>{article.content}</Markdown>
+            {KNOWLEDGE_ARTICLES.map(article => {
+              const meta = ARTICLE_KEYS[article.id];
+              const title = meta ? t(meta.title, article.title) : article.title;
+              const summary = meta ? t(meta.summary, article.summary) : article.summary;
+              const category = t(CATEGORY_KEYS[article.category] ?? article.category, article.category);
+              return (
+                <Card key={article.id}>
+                  <div className="flex items-start justify-between mb-2">
+                    <Pill tone="cyan">{category}</Pill>
+                    <Lightbulb size={14} className="text-[var(--amber)]" />
                   </div>
-                </details>
-              </Card>
-            ))}
+                  <h3 className="font-semibold text-sm text-[var(--text-primary)] mb-1">{title}</h3>
+                  <p className="text-xs text-[var(--text-secondary)] mb-3">{summary}</p>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {article.tags.map(tag => (
+                      <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-[var(--bg-tertiary)] rounded text-[var(--text-tertiary)]">#{tag}</span>
+                    ))}
+                  </div>
+                  <details className="group">
+                    <summary className="text-xs text-[var(--emerald)] cursor-pointer hover:text-[var(--emerald-bright)] transition-colors list-none flex items-center gap-1">
+                      <span className="group-open:hidden">{t('references.readMore', 'Read more')}</span>
+                      <span className="hidden group-open:inline">{t('references.collapse', 'Collapse')}</span>
+                      <ExternalLink size={10} />
+                    </summary>
+                    <div className="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--text-secondary)] whitespace-pre-line prose prose-sm dark:prose-invert max-w-none">
+                      <Markdown remarkPlugins={[remarkGfm]}>{article.content}</Markdown>
+                    </div>
+                  </details>
+                </Card>
+              );
+            })}
           </div>
         )}
 
@@ -312,19 +394,17 @@ export default function ReferencesPage() {
         {activeTab === 'api' && (
           <div className="space-y-6">
             <Card hover={false}>
-              <SectionTitle>REST API Endpoints</SectionTitle>
+              <SectionTitle>{t('references.section.apiEndpoints', 'REST API Endpoints')}</SectionTitle>
               <p className="text-sm text-[var(--text-tertiary)] mb-4">
-                All endpoints are prefixed with <code className="text-[11px] bg-white/[0.06] px-1 rounded">/api</code>.
-                Requests require a <code className="text-[11px] bg-white/[0.06] px-1 rounded">Bearer</code> token
-                and an <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-Organization-Id</code> or <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-User-Id</code> header.
+                {t('references.api.intro', 'All endpoints are prefixed with')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">/api</code>. {t('references.api.auth', 'Requests require a')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">Bearer</code> {t('references.api.authSuffix', 'token and an')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-Organization-Id</code> {t('references.api.apiHeader', 'or')} <code className="text-[11px] bg-white/[0.06] px-1 rounded">X-User-Id</code> {t('references.api.headerSuffix', 'header.')}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-[var(--border)]">
-                      <th className="p-2.5 text-left text-[var(--text-disabled)] font-medium w-16">Method</th>
-                      <th className="p-2.5 text-left text-[var(--text-disabled)] font-medium">Endpoint</th>
-                      <th className="p-2.5 text-left text-[var(--text-disabled)] font-medium">Description</th>
+                      <th className="p-2.5 text-left rtl:text-right text-[var(--text-disabled)] font-medium w-16">{t('references.method', 'Method')}</th>
+                      <th className="p-2.5 text-left rtl:text-right text-[var(--text-disabled)] font-medium">{t('references.endpoint', 'Endpoint')}</th>
+                      <th className="p-2.5 text-left rtl:text-right text-[var(--text-disabled)] font-medium">{t('references.description', 'Description')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -332,7 +412,7 @@ export default function ReferencesPage() {
                       <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                         <td className="p-2.5 font-mono font-bold text-[11px]"><span className={METHOD_COLORS[ep.method] ?? 'text-[var(--text-secondary)]'}>{ep.method}</span></td>
                         <td className="p-2.5 font-mono text-[var(--text-secondary)]">{ep.path}</td>
-                        <td className="p-2.5 text-[var(--text-tertiary)]">{ep.desc}</td>
+                        <td className="p-2.5 text-[var(--text-tertiary)]">{t(`references.api.desc.${i}`, ep.desc)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -341,7 +421,7 @@ export default function ReferencesPage() {
             </Card>
 
             <Card hover={false}>
-              <SectionTitle>Request Format</SectionTitle>
+              <SectionTitle>{t('references.section.requestFormat', 'Request Format')}</SectionTitle>
               <CodeBlock id="headers" language="HTTP">{`Authorization: Bearer <your-token>
 Content-Type: application/json
 X-Organization-Id: org_cairo_01
@@ -349,7 +429,7 @@ X-User-Id: user_123`}</CodeBlock>
             </Card>
 
             <Card hover={false}>
-              <SectionTitle>Response Format</SectionTitle>
+              <SectionTitle>{t('references.section.responseFormat', 'Response Format')}</SectionTitle>
               <CodeBlock id="resp-s" language="JSON">{`{ "data": [...], "total": 42, "page": 1 }`}</CodeBlock>
               <div className="mt-3">
                 <CodeBlock id="resp-e" language="JSON">{`{ "error": "Unauthorized", "message": "Invalid or expired token" }`}</CodeBlock>
@@ -364,19 +444,19 @@ X-User-Id: user_123`}</CodeBlock>
             <Card hover={false}>
               <SectionTitle>
                 <Zap size={14} className="inline mr-2 text-[var(--emerald)]" />
-                Quick Start — Connect a New Device
+                {t('references.section.quickstart', 'Quick Start — Connect a New Device')}
               </SectionTitle>
               <div className="space-y-4">
                 {[
-                  { step: 1, title: 'Install dependencies',
+                  { step: 1, title: t('references.quickstart.step1', 'Install dependencies'),
                     code: `# Arduino IDE: Install PubSubClient library\n# PlatformIO: Add to platformio.ini\nlib_deps = knolleary/PubSubClient@^2.8` },
-                  { step: 2, title: 'Configure WiFi and MQTT broker',
+                  { step: 2, title: t('references.quickstart.step2', 'Configure WiFi and MQTT broker'),
                     code: `#define WIFI_SSID     "YourSSID"\n#define WIFI_PASS     "YourPassword"\n#define MQTT_BROKER   "your-server.com"\n#define MQTT_PORT     1883\n#define MQTT_TOPIC    "pern/sensors/esp32_01/data"` },
-                  { step: 3, title: 'Read sensors and publish data',
+                  { step: 3, title: t('references.quickstart.step3', 'Read sensors and publish data'),
                     code: `void publishSensorData() {\n  StaticJsonDocument<256> doc;\n  JsonObject sensors = doc.createNestedObject("sensors");\n  sensors["pm25"] = readPM25();\n  sensors["co2"]  = readCO2();\n  sensors["tmp"]  = readTemperature();\n  sensors["hum"]  = readHumidity();\n  doc["timestamp"] = millis();\n  char buffer[256];\n  serializeJson(doc, buffer);\n  client.publish(MQTT_TOPIC, buffer);\n}` },
-                  { step: 4, title: 'Register the device',
+                  { step: 4, title: t('references.quickstart.step4', 'Register the device'),
                     code: `curl -X POST https://your-server.com/api/devices \\\n  -H "Authorization: Bearer <token>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"name": "ESP32 Cairo 01", "type": "ESP32"}'` },
-                  { step: 5, title: 'Verify data flow',
+                  { step: 5, title: t('references.quickstart.step5', 'Verify data flow'),
                     code: `# Dashboard → Live Mode — verify real-time readings\n# Or via MQTT CLI:\nmosquitto_sub -h your-server.com -t "pern/sensors/#"` },
                 ].map(s => (
                   <div key={s.step}>
@@ -391,13 +471,15 @@ X-User-Id: user_123`}</CodeBlock>
             </Card>
 
             <Card hover={false}>
-              <SectionTitle>MQTT Topic Structure</SectionTitle>
+              <SectionTitle>{t('references.section.mqttStructure', 'MQTT Topic Structure')}</SectionTitle>
               <div className="space-y-3">
                 {[
-                  { topic: 'pern/sensors/{device_id}/data', desc: 'Sensor readings from devices (default 5s interval).', direction: 'Device → Broker' },
-                  { topic: 'pern/actuators/{device_id}/{actuator}/status', desc: 'Actuator state feedback (relays, pumps, fans).', direction: 'Device → Broker' },
-                  { topic: 'pern/devices/{device_id}/status', desc: 'Device online/offline announcements.', direction: 'Device → Broker' },
-                  { topic: 'pern/actuators/{device_id}/{actuator}/set', desc: 'Remote actuator control commands from dashboard.', direction: 'Broker → Device' },
+                  { topic: 'pern/sensors/{device_id}/data', desc: t('references.mqtt.desc.0', 'Sensor readings from devices (default 5s interval).'), direction: t('references.mqtt.deviceToBroker', 'Device → Broker') },
+                  { topic: 'pern/actuators/{device_id}/{actuator}/status', desc: t('references.mqtt.desc.1', 'Actuator state feedback (relays, pumps, fans).'), direction: t('references.mqtt.deviceToBroker', 'Device → Broker') },
+                  { topic: 'pern/devices/{device_id}/status', desc: t('references.mqtt.desc.2', 'Device online/offline announcements.'), direction: t('references.mqtt.deviceToBroker', 'Device → Broker') },
+                  { topic: 'pern/devices/{device_id}/actuators/{actuator}/command', desc: t('references.mqtt.desc.3', 'Remote actuator control commands from dashboard.'), direction: t('references.mqtt.brokerToDevice', 'Broker → Device') },
+                  { topic: 'pern/devices/{device_id}/config', desc: t('references.mqtt.desc.4', 'Runtime configuration pushed to a device.'), direction: t('references.mqtt.brokerToDevice', 'Broker → Device') },
+                  { topic: 'pern/devices/{device_id}/ota', desc: t('references.mqtt.desc.5', 'Firmware OTA updates pushed to a device.'), direction: t('references.mqtt.brokerToDevice', 'Broker → Device') },
                 ].map((e, i) => (
                   <div key={i} className="flex items-center justify-between px-3 py-2 rounded-[var(--radius-sm)] bg-white/[0.02] border border-white/[0.06]">
                     <code className="text-xs text-[var(--emerald)] font-mono">{e.topic}</code>

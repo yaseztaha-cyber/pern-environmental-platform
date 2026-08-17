@@ -41,11 +41,22 @@ const char* DEVICE_ID   = "Arduino-UNO-001";
 
 // Send interval (ms)
 const unsigned long SEND_INTERVAL = 5000;
+const int SENSOR_SAMPLES = 5;
+
+// Heartbeat interval (ms)
+const unsigned long HEARTBEAT_INTERVAL = 30000;
+
+// Actuator pins
+const int PIN_RELAY1 = 3;   // adjust to your wiring
+const int PIN_RELAY2 = 4;
+const int PIN_LED    = 5;
 // ========================================
 
 EthernetClient ethClient;
 PubSubClient mqtt(ethClient);
 unsigned long lastSend = 0;
+unsigned long lastHeartbeat = 0;
+unsigned long bootTime = 0;
 
 void connectNetwork() {
   Serial.print("Connecting Ethernet... ");
@@ -58,12 +69,39 @@ void connectNetwork() {
   }
 }
 
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  char msg[128];
+  unsigned int copyLen = length < sizeof(msg) - 1 ? length : sizeof(msg) - 1;
+  memcpy(msg, payload, copyLen);
+  msg[copyLen] = '\0';
+
+  String topicStr = String(topic);
+  if (topicStr.includes("/command")) {
+    StaticJsonDocument<96> cmd;
+    if (deserializeJson(cmd, msg) == DeserializationOk) {
+      const char* actuator = cmd["actuator"];
+      const char* action   = cmd["action"];
+      if (actuator && action) {
+        bool newState = (String(action) == "on" || String(action) == "1");
+        if (strcmp(actuator, "relay1") == 0) digitalWrite(PIN_RELAY1, newState ? HIGH : LOW);
+        if (strcmp(actuator, "relay2") == 0) digitalWrite(PIN_RELAY2, newState ? HIGH : LOW);
+        if (strcmp(actuator, "led") == 0)    digitalWrite(PIN_LED,    newState ? HIGH : LOW);
+        Serial.printf("[ACT] %s -> %s\n", actuator, newState ? "ON" : "OFF");
+      }
+    }
+  }
+}
+
 void connectMQTT() {
   Serial.print("Connecting MQTT... ");
   mqtt.setServer(MQTT_SERVER, MQTT_PORT);
+  mqtt.setCallback(mqttCallback);
   while (!mqtt.connected()) {
     if (mqtt.connect(DEVICE_ID)) {
       Serial.println("OK");
+      String cmdTopic = "pern/actuators/" + String(DEVICE_ID) + "/command";
+      mqtt.subscribe(cmdTopic.c_str());
+      Serial.println("[MQTT] Subscribed to: " + cmdTopic);
       return;
     }
     Serial.print(".");
@@ -71,13 +109,28 @@ void connectMQTT() {
   }
 }
 
+int readAvg(int pin, int samples) {
+  long sum = 0;
+  for (int i = 0; i < samples; i++) {
+    sum += analogRead(pin);
+    delay(2);
+  }
+  return sum / samples;
+}
+
 void readSensors(float &tmp, float &hum, int &pm25, int &mq, int &co2) {
-  // Replace these with your actual sensor reading logic
-  tmp  = analogRead(A0) * 0.488;    // LM35: 10mV/°C, 5V ref
-  hum  = map(analogRead(A1), 0, 1023, 0, 100);
-  pm25 = map(analogRead(A2), 0, 1023, 0, 500);
-  mq   = map(analogRead(A3), 0, 1023, 0, 100);
-  co2  = 400 + map(analogRead(A4), 0, 1023, 0, 1600);
+  int a0 = readAvg(A0, SENSOR_SAMPLES);  // LM35
+  int a1 = readAvg(A1, SENSOR_SAMPLES);  // analog humidity
+  int a2 = readAvg(A2, SENSOR_SAMPLES);  // MQ-135
+  int a3 = readAvg(A3, SENSOR_SAMPLES);  // gas
+  int a4 = readAvg(A4, SENSOR_SAMPLES);  // CO2
+
+  float v = a0 * (5.0 / 1024.0);
+  tmp  = v * 100.0;                         // LM35: 10mV/°C
+  hum  = map(a1, 0, 1023, 0, 100);          // 0-100%
+  pm25 = map(a2, 0, 1023, 0, 500);          // 0-500 AQI
+  mq   = map(a3, 0, 1023, 0, 100);          // 0-100 gas index
+  co2  = 400 + map(a4, 0, 1023, 0, 1600);   // 400-2000 ppm
 }
 
 void publishData() {
@@ -111,10 +164,29 @@ void publishData() {
   }
 }
 
+void publishHeartbeat() {
+  StaticJsonDocument<160> doc;
+  doc["device"]    = DEVICE_ID;
+  doc["uptime"]    = (millis() - bootTime) / 1000;
+  doc["rssi"]      = 0;  // Ethernet has no RSSI
+  doc["ip"]        = Ethernet.localIP().toString();
+  doc["fwVersion"] = "1.0.0";
+
+  char buf[160];
+  serializeJson(doc, buf, sizeof(buf));
+  String topic = "pern/devices/" + String(DEVICE_ID) + "/heartbeat";
+  mqtt.publish(topic.c_str(), buf);
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial) {}
+  bootTime = millis();
   Serial.println("\n=== PERN IoT - Arduino Uno + Ethernet ===");
+
+  pinMode(PIN_RELAY1, OUTPUT); digitalWrite(PIN_RELAY1, LOW);
+  pinMode(PIN_RELAY2, OUTPUT); digitalWrite(PIN_RELAY2, LOW);
+  pinMode(PIN_LED,    OUTPUT); digitalWrite(PIN_LED,    LOW);
 
   connectNetwork();
   connectMQTT();
@@ -131,5 +203,9 @@ void loop() {
   if (now - lastSend >= SEND_INTERVAL) {
     lastSend = now;
     publishData();
+  }
+  if (now - lastHeartbeat >= HEARTBEAT_INTERVAL) {
+    lastHeartbeat = now;
+    publishHeartbeat();
   }
 }

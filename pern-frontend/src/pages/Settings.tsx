@@ -6,10 +6,11 @@ import { useI18n } from '../lib/i18n';
 import { PageHeader, Card, Pill, Btn, SectionTitle, Toggle } from '../components/ui';
 import type { UserRole } from '../lib/roles';
 import { ROLE_LABELS } from '../lib/roles';
+import { useAnimationsEnabled } from '../hooks/useAnimationsEnabled';
 import {
-  Shield, Bell, Wifi, User, Palette, Database, Zap, Server,
-  Sun, Moon, MonitorSmartphone, RotateCcw, BarChart3, Timer,
-  Volume2, VolumeX, CheckCircle2, AlertTriangle, XCircle,
+  Shield, Bell, Wifi, User, Palette, Zap, Server,
+  Sun, Moon, MonitorSmartphone, BarChart3,
+  CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 
 import { apiClient } from '../lib/api-client';
@@ -81,7 +82,7 @@ export default function SettingsPage() {
   // ── Appearance ──
   const [theme, setTheme] = useState<ThemeChoice>(() => ls('pern_theme', 'dark'));
   const [compact, setCompact] = useState(() => ls('pern_compact', false));
-  const [animations, setAnimations] = useState(() => ls('pern_animations', true));
+  const { animationsEnabled, setAnimationsEnabled } = useAnimationsEnabled();
 
   // ── User Role ──
   const [currentRole, setCurrentRole] = useState<UserRole>(
@@ -129,7 +130,6 @@ export default function SettingsPage() {
       : v);
   };
   const toggleCompact = (v: boolean) => { setCompact(v); save('pern_compact', v); };
-  const toggleAnimations = (v: boolean) => { setAnimations(v); save('pern_animations', v); };
   const changeRefresh = (v: string) => { const n = Number(v); setRefreshInterval(n); save('pern_refresh_interval', n); };
   const changeChart = (v: string) => { setChartType(v as ChartChoice); save('pern_chart_type', v); };
   const changeMaxPoints = (v: string) => { const n = Number(v); setMaxDataPoints(n); save('pern_max_data_points', n); };
@@ -138,14 +138,14 @@ export default function SettingsPage() {
 
   const saveNtfyTopic = () => {
     localStorage.setItem('pern_ntfy_topic', ntfyTopic);
-    setTestResult(t('settings.toast.topicSaved'));
+    setTestResult(t('settings.toast.topicSaved', 'Topic saved successfully!'));
     setTimeout(() => setTestResult(''), 2000);
   };
 
   const handleTestNtfy = async () => {
-    setTestResult(t('settings.toast.sendingTest'));
+    setTestResult(t('settings.toast.sendingTest', 'Sending test notification...'));
     const success = await testNtfyNotification();
-    setTestResult(success ? t('settings.toast.testSuccess') : t('settings.toast.testFailed'));
+    setTestResult(success ? t('settings.toast.testSuccess', 'Test notification sent! Check your ntfy app.') : t('settings.toast.testFailed', 'Failed to send notification'));
     setTimeout(() => setTestResult(''), 4000);
   };
 
@@ -168,13 +168,13 @@ export default function SettingsPage() {
   return (
     <div className="max-w-[1200px] mx-auto">
       <PageHeader
-        title={t('settings.title')}
-        subtitle={t('settings.subtitle')}
+        title={t('settings.title', 'Settings')}
+        subtitle={t('settings.subtitle', 'Platform configuration, notifications, and integrations')}
         right={
           sysAll ? (
-            <Pill tone="emerald"><CheckCircle2 size={11} /> All Systems Operational</Pill>
+            <Pill tone="emerald"><CheckCircle2 size={11} /> {t('settings.allSystemsOperational', 'All Systems Operational')}</Pill>
           ) : (
-            <Pill tone="amber"><AlertTriangle size={11} /> Degraded</Pill>
+            <Pill tone="amber"><AlertTriangle size={11} /> {t('settings.status.degraded', 'Degraded')}</Pill>
           )
         }
       />
@@ -185,10 +185,10 @@ export default function SettingsPage() {
         <Card hover={false}>
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={Palette} bg="bg-[var(--violet)]/10" />
-            <SectionTitle>{t('settings.section.appearance')}</SectionTitle>
+            <SectionTitle>{t('settings.section.appearance', 'Appearance')}</SectionTitle>
           </div>
           <div className="space-y-2.5">
-            <Row label={t('settings.label.theme')}>
+            <Row label={t('settings.label.theme', 'Theme')}>
               <div className="flex gap-1">
                 {([
                   { v: 'dark', icon: Moon },
@@ -207,11 +207,11 @@ export default function SettingsPage() {
                 ))}
               </div>
             </Row>
-            <Row label={t('settings.label.compactMode')}>
+            <Row label={t('settings.label.compactMode', 'Compact Mode')}>
               <Toggle checked={compact} onChange={toggleCompact} />
             </Row>
-            <Row label={t('settings.label.animations')}>
-              <Toggle checked={animations} onChange={toggleAnimations} />
+            <Row label={t('settings.label.animations', 'Animations')}>
+              <Toggle checked={animationsEnabled} onChange={setAnimationsEnabled} />
             </Row>
           </div>
         </Card>
@@ -220,7 +220,7 @@ export default function SettingsPage() {
         <Card hover={false}>
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={User} bg="bg-[var(--cyan-dim)]" />
-            <SectionTitle>{t('settings.section.userRole')}</SectionTitle>
+            <SectionTitle>{t('settings.section.userRole', 'User Role (Demo)')}</SectionTitle>
           </div>
           <div className="space-y-1.5">
             {Object.keys(ROLE_LABELS).map((role) => (
@@ -234,24 +234,24 @@ export default function SettingsPage() {
               </Btn>
             ))}
           </div>
-          <div className="text-[10px] text-[var(--text-disabled)] mt-2">{t('settings.role.description')}</div>
+          <div className="text-[10px] text-[var(--text-disabled)] mt-2">{t('settings.role.description', 'Current role affects visible features in demo.')}</div>
         </Card>
 
         {/* ── 3. Data Preferences ── */}
         <Card hover={false}>
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={BarChart3} bg="bg-[var(--blue-dim)]" />
-            <SectionTitle>{t('settings.section.dataPreferences')}</SectionTitle>
+            <SectionTitle>{t('settings.section.dataPreferences', 'Data Preferences')}</SectionTitle>
           </div>
           <div className="space-y-2.5">
-            <Row label={t('settings.label.refreshInterval')}>
+            <Row label={t('settings.label.refreshInterval', 'Refresh Interval')}>
               <Select
                 value={refreshInterval}
                 onChange={changeRefresh}
                 options={REFRESH_OPTIONS.map(o => ({ value: o.value, label: t(o.labelKey) }))}
               />
             </Row>
-            <Row label={t('settings.label.chartType')}>
+            <Row label={t('settings.label.chartType', 'Default Chart Type')}>
               <div className="flex gap-1">
                 {CHART_OPTIONS.map(c => (
                   <Btn
@@ -265,7 +265,7 @@ export default function SettingsPage() {
                 ))}
               </div>
             </Row>
-            <Row label={t('settings.label.maxDataPoints')}>
+            <Row label={t('settings.label.maxDataPoints', 'Max Data Points')}>
               <Select
                 value={maxDataPoints}
                 onChange={changeMaxPoints}
@@ -277,16 +277,16 @@ export default function SettingsPage() {
                 ]}
               />
             </Row>
-            <Row label={t('settings.label.dataRetention')}>
+            <Row label={t('settings.label.dataRetention', 'Data Retention')}>
               <Select
                 value={dataRetention}
                 onChange={changeRetention}
                 options={[
-                  { value: 7, label: '7 days' },
-                  { value: 14, label: '14 days' },
-                  { value: 30, label: '30 days' },
-                  { value: 90, label: '90 days' },
-                  { value: 365, label: '1 year' },
+                  { value: 7, label: t('settings.retention7', '7 days') },
+                  { value: 14, label: t('settings.retention14', '14 days') },
+                  { value: 30, label: t('settings.retention30', '30 days') },
+                  { value: 90, label: t('settings.retention90', '90 days') },
+                  { value: 365, label: t('settings.retention365', '1 year') },
                 ]}
               />
             </Row>
@@ -297,11 +297,11 @@ export default function SettingsPage() {
         <Card hover={false}>
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={Bell} bg="bg-[var(--amber-dim)]" />
-            <SectionTitle>{t('settings.section.pushNotifications')}</SectionTitle>
+            <SectionTitle>{t('settings.section.pushNotifications', 'Push Notifications (ntfy.sh)')}</SectionTitle>
           </div>
           <div className="space-y-3">
             <div>
-              <label className="text-[11px] text-[var(--text-disabled)] uppercase tracking-wider">{t('settings.label.notificationTopic')}</label>
+              <label className="text-[11px] text-[var(--text-disabled)] uppercase tracking-wider">{t('settings.label.notificationTopic', 'Notification Topic')}</label>
               <div className="flex gap-2 mt-1.5">
                 <input
                   value={ntfyTopic}
@@ -309,15 +309,15 @@ export default function SettingsPage() {
                   className="flex-1 bg-[var(--surface)] px-3 py-2.5 rounded-[var(--radius-xs)] text-sm font-mono border border-[var(--border)] focus:outline-none focus:border-[var(--emerald)]"
                 />
                 <Btn onClick={saveNtfyTopic} variant="primary" size="sm">
-                  {t('settings.button.save')}
+                  {t('settings.button.save', 'Save')}
                 </Btn>
               </div>
               <div className="text-[10px] mt-1.5 text-[var(--text-disabled)]">
-                {t('settings.label.subscribe')}<span className="font-mono">https://ntfy.sh/{ntfyTopic}</span>
+                {t('settings.label.subscribe', 'Subscribe: ')}<span className="font-mono">https://ntfy.sh/{ntfyTopic}</span>
               </div>
             </div>
             <Btn onClick={handleTestNtfy} variant="ghost" className="w-full">
-              {t('settings.button.sendTestNotification')}
+              {t('settings.button.sendTestNotification', 'Send Test Notification')}
             </Btn>
             {testResult && <div className="text-xs text-center text-[var(--emerald)]">{testResult}</div>}
           </div>
@@ -327,23 +327,23 @@ export default function SettingsPage() {
         <Card hover={false}>
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={Zap} bg="bg-[var(--rose-dim)]" />
-            <SectionTitle>{t('settings.section.alertPreferences')}</SectionTitle>
+            <SectionTitle>{t('settings.section.alertPreferences', 'Alert Preferences')}</SectionTitle>
           </div>
           <div className="space-y-2.5">
-            <Row label={t('settings.label.alertCooldown')}>
+            <Row label={t('settings.label.alertCooldown', 'Alert Cooldown')}>
               <Select
                 value={alertCooldown}
                 onChange={changeCooldown}
                 options={COOLDOWN_OPTIONS.map(o => ({ value: o.value, label: t(o.labelKey) }))}
               />
             </Row>
-            <Row label={t('settings.label.soundAlerts')}>
+            <Row label={t('settings.label.soundAlerts', 'Sound Alerts')}>
               <Toggle
                 checked={soundAlerts}
                 onChange={v => { setSoundAlerts(v); save('pern_sound_alerts', v); }}
               />
             </Row>
-            <Row label={t('settings.label.autoAcknowledge')}>
+            <Row label={t('settings.label.autoAcknowledge', 'Auto-Acknowledge')}>
               <Toggle
                 checked={autoAck}
                 onChange={v => { setAutoAck(v); save('pern_auto_ack', v); }}
@@ -356,18 +356,18 @@ export default function SettingsPage() {
         <Card hover={false}>
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={Wifi} bg="bg-[var(--indigo)]/10" />
-            <SectionTitle>{t('settings.section.mqttIot')}</SectionTitle>
+            <SectionTitle>{t('settings.section.mqttIot', 'MQTT & IoT')}</SectionTitle>
           </div>
           <div className="space-y-2.5 text-xs">
-            <Row label={t('settings.label.broker')}>
+            <Row label={t('settings.label.broker', 'Broker: ')}>
               <span className="font-mono text-[var(--emerald)]">ws://localhost:9001</span>
             </Row>
-            <Row label={t('settings.label.topics')}>
+            <Row label={t('settings.label.topics', 'Topics: ')}>
               <span className="font-mono">pern/sensors/+/data</span>
             </Row>
-            <Row label={t('settings.label.status')}>
+            <Row label={t('settings.label.status', 'Status')}>
               <Pill tone={mqttOk ? 'emerald' : 'rose'}>
-                {mqttOk ? t('settings.status.healthy') : t('settings.status.down')}
+                {mqttOk ? t('settings.status.healthy', 'Healthy') : t('settings.status.down', 'Down')}
               </Pill>
             </Row>
           </div>
@@ -377,22 +377,22 @@ export default function SettingsPage() {
         <Card hover={false}>
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={Shield} bg="bg-[var(--emerald-dim)]" />
-            <SectionTitle>{t('settings.section.authentication')}</SectionTitle>
+            <SectionTitle>{t('settings.section.authentication', 'Authentication (Logto OIDC)')}</SectionTitle>
           </div>
           <div className="space-y-2.5 text-xs">
-            <Row label="Provider">
+            <Row label={t('settings.provider', 'Provider')}>
               <Pill tone={isLogtoConfigured ? 'emerald' : 'slate'}>
-                {isLogtoConfigured ? 'Logto OIDC' : 'Demo Mode'}
+                {isLogtoConfigured ? t('settings.provider.logto', 'Logto OIDC') : t('settings.provider.demo', 'Demo Mode')}
               </Pill>
             </Row>
-            <Row label="Status">
+            <Row label={t('settings.label.status', 'Status')}>
               <span className="text-[var(--text-secondary)] font-medium">
-                {user ? `${user.name || user.email || user.id}` : 'Not authenticated'}
+                {user ? `${user.name || user.email || user.id}` : t('settings.notAuthenticated', 'Not authenticated')}
               </span>
             </Row>
-            <Row label="Mode">
+            <Row label={t('settings.label.mode', 'Mode')}>
               <span className="text-[var(--text-secondary)]">
-                {isLogtoConfigured ? 'Real authentication required' : 'Demo login (no backend auth)'}
+                {isLogtoConfigured ? t('settings.mode.real', 'Real authentication required') : t('settings.mode.demo', 'Demo login (no backend auth)')}
               </span>
             </Row>
           </div>
@@ -402,41 +402,41 @@ export default function SettingsPage() {
         <Card hover={false} className="lg:col-span-2">
           <div className="flex items-center gap-2.5 mb-4">
             <SectionIcon icon={Server} bg="bg-[var(--surface)]" />
-            <SectionTitle>{t('settings.section.systemInfo')}</SectionTitle>
+            <SectionTitle>{t('settings.section.systemInfo', 'System Information')}</SectionTitle>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
             <div className="py-3 px-4 rounded-[var(--radius-sm)] bg-[var(--surface)] text-center">
-              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.version')}</div>
+              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.version', 'Version')}</div>
               <Pill tone="emerald">v2.7</Pill>
             </div>
             <div className="py-3 px-4 rounded-[var(--radius-sm)] bg-[var(--surface)] text-center">
-              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.uptime')}</div>
+              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.uptime', 'Uptime')}</div>
               <span className="text-sm font-semibold">{health ? formatUptime(uptime) : '—'}</span>
             </div>
             <div className="py-3 px-4 rounded-[var(--radius-sm)] bg-[var(--surface)] text-center">
-              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.dbStatus')}</div>
+              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.dbStatus', 'Database')}</div>
               <Pill tone={dbOk ? 'emerald' : 'rose'}>
-                {dbOk ? t('settings.status.healthy') : t('settings.status.down')}
+                {dbOk ? t('settings.status.healthy', 'Healthy') : t('settings.status.down', 'Down')}
               </Pill>
             </div>
             <div className="py-3 px-4 rounded-[var(--radius-sm)] bg-[var(--surface)] text-center">
-              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.apiStatus')}</div>
+              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.apiStatus', 'API')}</div>
               <Pill tone={apiOk ? 'emerald' : 'rose'}>
-                {apiOk ? t('settings.status.healthy') : t('settings.status.down')}
+                {apiOk ? t('settings.status.healthy', 'Healthy') : t('settings.status.down', 'Down')}
               </Pill>
             </div>
             <div className="py-3 px-4 rounded-[var(--radius-sm)] bg-[var(--surface)] text-center">
-              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.mqttStatus')}</div>
+              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.mqttStatus', 'MQTT')}</div>
               <Pill tone={mqttOk ? 'emerald' : 'rose'}>
-                {mqttOk ? t('settings.status.healthy') : t('settings.status.down')}
+                {mqttOk ? t('settings.status.healthy', 'Healthy') : t('settings.status.down', 'Down')}
               </Pill>
             </div>
             <div className="py-3 px-4 rounded-[var(--radius-sm)] bg-[var(--surface)] text-center">
-              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">Overall</div>
+              <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider mb-1.5">{t('settings.label.overall', 'Overall')}</div>
               <Pill tone={sysAll ? 'emerald' : 'amber'}>
                 {sysAll
-                  ? <><CheckCircle2 size={10} /> {t('settings.status.healthy')}</>
-                  : <><AlertTriangle size={10} /> {t('settings.status.degraded')}</>
+                  ? <><CheckCircle2 size={10} /> {t('settings.status.healthy', 'Healthy')}</>
+                  : <><AlertTriangle size={10} /> {t('settings.status.degraded', 'Degraded')}</>
                 }
               </Pill>
             </div>

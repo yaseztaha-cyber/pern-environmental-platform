@@ -2,14 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateAQI,
   calculateWQI,
-  calculateEnvironmentalRisk,
-  calculateThermalComfort,
-  calculateIndoorAirScore,
-  calculateCorrosionIndex,
   calculateBOD,
-  calculateAgriculturalSuitability,
-  calculateEutrophicationRisk,
-  calculateHumanExposureIndex,
   computeDynamicVirtualSensors,
   downsampleTelemetryData,
 } from '../lib/virtual-sensors';

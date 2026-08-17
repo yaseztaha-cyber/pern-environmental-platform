@@ -3,13 +3,15 @@ import { useData } from '../lib/data-provider';
 import { apiClient } from '../lib/api-client';
 import { useDevice } from '../lib/device-context';
 import { useI18n } from '../lib/i18n';
+import { SENSOR_TYPES } from '../lib/constants';
 import { PageHeader, SectionTitle, Card, Pill, Btn, fmt } from '../components/ui';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   BarChart, Bar, Legend
 } from 'recharts';
-import { Download, TrendingUp, Globe } from 'lucide-react';
+import { ChartGrid, ChartTooltip, CHART_CURSOR, CHART_TICK } from '../components/charts';
+import { Download, Globe } from 'lucide-react';
 
 function EmptyChart({ message }: { message: string }) {
   return (
@@ -57,11 +59,17 @@ export default function AnalyticsPage() {
   }, [ehiHistory]);
 
   const radarData = useMemo(() => {
-    return (data.virtualSensors || []).map(vs => ({
-      subject: vs.name.length > 12 ? vs.name.substring(0, 10) + '…' : vs.name,
-      value: vs.value,
-      fullMark: 100,
-    }));
+    return (data.virtualSensors || []).map(vs => {
+      const cfg = SENSOR_TYPES[vs.id as keyof typeof SENSOR_TYPES];
+      const [lo, hi] = cfg?.safeRange ?? [0, 100];
+      const span = Math.max(hi - lo, 1e-9);
+      const pct = Math.min(100, Math.max(0, ((Number(vs.value) - lo) / span) * 100));
+      return {
+        subject: vs.name.length > 12 ? vs.name.substring(0, 10) + '…' : vs.name,
+        value: Math.round(pct * 10) / 10,
+        fullMark: 100,
+      };
+    });
   }, [data.virtualSensors]);
 
   const stats = useMemo(() => {
@@ -74,79 +82,73 @@ export default function AnalyticsPage() {
     return { mean: mean.toFixed(1), min: min.toFixed(1), max: max.toFixed(1), std: Math.sqrt(variance).toFixed(1), count: values.length };
   }, [ehiHistory]);
 
-  const tooltipStyle = {
-    background: 'var(--bg-3)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    color: 'var(--text-primary)',
-  };
-
   return (
     <div className="max-w-[1300px] mx-auto">
       <PageHeader
-        title={t('analytics.title')}
-        subtitle={t('analytics.subtitle')}
+        title={t('analytics.title', 'Advanced Analytics')}
+        subtitle={t('analytics.subtitle', 'Trends • Radar • Distribution • Correlations')}
         right={<div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-white/[0.04] rounded-lg p-0.5 border border-[var(--border)]">
             {DAY_RANGES.map(d => (
               <button key={d} onClick={() => setDays(d)} className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${days === d ? 'bg-[var(--emerald)] text-white shadow-sm' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}>{d}d</button>
             ))}
           </div>
-          {noRealData ? <Pill tone="amber">Awaiting real data</Pill> : undefined}
-          <Btn variant="ghost" size="sm" onClick={() => { const url = apiClient.exportReadingsCSV(); const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); }} aria-label="Export analytics data">
-            <Download size={12} /> Export CSV
+          {noRealData ? <Pill tone="amber">{t('analytics.awaitingRealData', 'Awaiting real data')}</Pill> : undefined}
+          <Btn variant="ghost" size="sm" onClick={() => apiClient.downloadCSV(apiClient.exportReadingsCSV(500, selectedDevice?.id), 'readings.csv').catch(() => {})} aria-label={t('analytics.exportAria', 'Export analytics data')}>
+            <Download size={12} /> {t('analytics.exportCsv', 'Export CSV')}
           </Btn>
         </div>}
       />
 
       <div className="grid lg:grid-cols-2 gap-6 grid-entrance">
         <Card>
-          <SectionTitle>{t('analytics.chart.ehiTrendTitle')}</SectionTitle>
+          <SectionTitle>{t('analytics.chart.ehiTrendTitle', 'Environmental Health Index Trend (12h)')}</SectionTitle>
           {trendData.length >= 2 ? (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="t" stroke="var(--text-tertiary)" tick={false} />
-                  <YAxis domain={[0, 100]} stroke="var(--text-tertiary)" />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Line type="natural" dataKey="ehi" stroke="var(--emerald)" strokeWidth={2} dot={false} />
+                  <ChartGrid />
+                  <XAxis dataKey="t" tick={false} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip />} cursor={CHART_CURSOR} />
+                  <Line type="natural" dataKey="ehi" name="EHI" stroke="var(--emerald)" strokeWidth={2.5} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <EmptyChart message={noRealData ? 'Awaiting real EHI data from connected devices…' : 'Not enough history yet — keep Live Mode running to build the trend.'} />
+            <EmptyChart message={noRealData ? t('analytics.empty.ehiAwaiting', 'Awaiting real EHI data from connected devices…') : t('analytics.empty.ehiHistory', 'Not enough history yet — keep Live Mode running to build the trend.')} />
           )}
         </Card>
 
         <Card>
-          <SectionTitle>{t('analytics.chart.virtualSensorProfile')}</SectionTitle>
+          <SectionTitle>{t('analytics.chart.virtualSensorProfile', 'Virtual Sensor Profile')}</SectionTitle>
           {radarData.length > 0 ? (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
-                  <PolarGrid stroke="var(--border)" />
-                  <PolarAngleAxis dataKey="subject" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} />
-                  <PolarRadiusAxis domain={[0, 100]} stroke="var(--border)" />
-                  <Radar name="Value" dataKey="value" stroke="var(--emerald)" fill="var(--emerald)" fillOpacity={0.3} />
+                  <PolarGrid stroke="var(--border)" strokeOpacity={0.5} />
+                  <PolarAngleAxis dataKey="subject" stroke="var(--text-secondary)" tick={CHART_TICK} />
+                  <PolarRadiusAxis domain={[0, 100]} stroke="var(--border)" tick={CHART_TICK} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Radar name={t('analytics.radarValue', 'Value')} dataKey="value" stroke="var(--emerald)" fill="var(--emerald)" fillOpacity={0.35} strokeWidth={2} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <EmptyChart message={noRealData ? 'No virtual sensors yet — connect a device sending real readings.' : 'No virtual sensor data available.'} />
+            <EmptyChart message={noRealData ? t('analytics.empty.radarAwaiting', 'No virtual sensors yet — connect a device sending real readings.') : t('analytics.empty.radarEmpty', 'No virtual sensor data available.')} />
           )}
         </Card>
 
         {stats && (
           <Card className="lg:col-span-2">
-            <SectionTitle>Real Data Statistics (7 days)</SectionTitle>
+            <SectionTitle>{t('analytics.realDataStats', 'Real Data Statistics ({days} days)', { days })}</SectionTitle>
             <div className="grid grid-cols-5 gap-4 text-center">
               {[
-                { label: 'Readings', value: String(stats.count) },
-                { label: 'Mean EHI', value: stats.mean },
-                { label: 'Min', value: stats.min },
-                { label: 'Max', value: stats.max },
-                { label: 'Std Dev', value: stats.std },
+                { label: t('analytics.stat.readings', 'Readings'), value: String(stats.count) },
+                { label: t('analytics.meanEhi', 'Mean EHI'), value: stats.mean },
+                { label: t('analytics.stat.min', 'Min'), value: stats.min },
+                { label: t('analytics.stat.max', 'Max'), value: stats.max },
+                { label: t('analytics.stat.stdDev', 'Std Dev'), value: stats.std },
               ].map(s => (
                 <div key={s.label}>
                   <div className="text-[10px] text-[var(--text-disabled)] uppercase tracking-wider">{s.label}</div>
@@ -160,25 +162,25 @@ export default function AnalyticsPage() {
         {/* Compliance Trends */}
         {complianceTrends.length > 0 && (
           <Card className="lg:col-span-2">
-            <SectionTitle><span className="flex items-center gap-2"><Globe size={16} className="text-[var(--violet)]" />Compliance Trends by Country</span></SectionTitle>
+            <SectionTitle><span className="flex items-center gap-2"><Globe size={16} className="text-[var(--violet)]" />{t('analytics.complianceByCountry', 'Compliance Trends by Country')}</span></SectionTitle>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={complianceTrends} margin={{ top: 5, right: 10, left: -10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="country" stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} angle={-15} textAnchor="end" height={40} />
-                  <YAxis domain={[0, 100]} stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }} />
+                  <ChartGrid />
+                  <XAxis dataKey="country" tick={CHART_TICK} axisLine={false} tickLine={false} angle={-15} textAnchor="end" height={40} />
+                  <YAxis domain={[0, 100]} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-hover)' }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="compliance" name="Compliance %" fill="var(--violet)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="compliance" name={t('analytics.compliancePct', 'Compliance %')} fill="var(--violet)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
         )}
         <Card className="lg:col-span-2" hover={false}>
-          <SectionTitle>Computed from real inputs only</SectionTitle>
+          <SectionTitle>{t('analytics.realOnlyTitle', 'Computed from real inputs only')}</SectionTitle>
           <div className="h-20 flex items-center justify-center text-center text-[var(--text-disabled)] text-sm px-6">
-            All analytics above are computed exclusively from real sensor inputs. No simulated or estimated values are shown in Live Mode.
+            {t('analytics.realOnlyBody', 'All analytics above are computed exclusively from real sensor inputs. No simulated or estimated values are shown in Live Mode.')}
           </div>
         </Card>
       </div>

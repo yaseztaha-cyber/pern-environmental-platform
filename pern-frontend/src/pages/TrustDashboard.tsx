@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, StatCard, SectionTitle, Btn, Pill } from '../components/ui';
-import { ShieldCheck, AlertTriangle, RefreshCw, Activity, BarChart3 } from 'lucide-react';
+import { PageHeader, Card, StatCard, SectionTitle, Btn, Pill } from '../components/ui';
+import { AlertTriangle, RefreshCw, Activity, BarChart3 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
+import { ChartTooltip, CHART_TICK } from '../components/charts';
+import { useI18n } from '../lib/i18n';
 
 interface ConfidenceScore {
   overall: number;
@@ -25,6 +27,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 export default function TrustDashboard() {
+  const { t } = useI18n();
   const [scores, setScores] = useState<Record<string, ConfidenceScore>>({});
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +50,7 @@ export default function TrustDashboard() {
   const handleRecalibrate = async () => {
     setCalibrating(true);
     try {
-      const result = await fetch('/api/v3/trust/recalibrate', {
+      await fetch('/api/v3/trust/recalibrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ readings: [] }),
@@ -64,42 +67,33 @@ export default function TrustDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <ShieldCheck size={18} className="text-[var(--emerald)]" />
-            Trust & Calibration Dashboard
-          </h2>
-          <p className="text-xs text-slate-500">
-            Spatial cross-validation confidence scores for all data sources
-          </p>
-        </div>
-        <Btn variant="primary" size="sm" loading={calibrating} onClick={handleRecalibrate}>
-          <RefreshCw size={14} /> Recalibrate
-        </Btn>
-      </div>
+      <PageHeader
+        title={t('trust.title', 'Trust & Calibration Dashboard')}
+        subtitle={t('trust.subtitle', 'Spatial cross-validation confidence scores for all data sources')}
+        right={<Btn variant="primary" size="sm" loading={calibrating} onClick={handleRecalibrate}>
+          <RefreshCw size={14} /> {t('trust.recalibrate', 'Recalibrate')}
+        </Btn>}
+      />
 
       {loading ? (
-        <div className="flex items-center justify-center h-48 text-slate-400">Loading trust data...</div>
+        <div className="flex items-center justify-center h-48 text-slate-400">{t('trust.loading', 'Loading trust data...')}</div>
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Source Types" value={Object.keys(scores).length} accent="emerald" icon={<Activity size={18} />} />
-            <StatCard label="Anomalies" value={anomalies.length} accent={anomalies.length > 0 ? 'rose' : 'emerald'} icon={<AlertTriangle size={18} />} />
-            <StatCard label="Avg Trust Score" value={chartData.length ? Math.round(chartData.reduce((a, b) => a + b.score, 0) / chartData.length) : 0} unit="%" accent="cyan" icon={<BarChart3 size={18} />} />
-            <StatCard label="Last Evaluation" value={Object.values(scores)[0]?.evaluated_at ? new Date(Object.values(scores)[0].evaluated_at).toLocaleTimeString() : '—'} accent="blue" icon={<RefreshCw size={18} />} />
+            <StatCard label={t('trust.stat.sourceTypes', 'Source Types')} value={Object.keys(scores).length} accent="emerald" icon={<Activity size={18} />} />
+            <StatCard label={t('trust.stat.anomalies', 'Anomalies')} value={anomalies.length} accent={anomalies.length > 0 ? 'rose' : 'emerald'} icon={<AlertTriangle size={18} />} />
+            <StatCard label={t('trust.stat.avgTrustScore', 'Avg Trust Score')} value={chartData.length ? Math.round(chartData.reduce((a, b) => a + b.score, 0) / chartData.length) : 0} unit="%" accent="cyan" icon={<BarChart3 size={18} />} />
+            <StatCard label={t('trust.stat.lastEvaluation', 'Last Evaluation')} value={Object.values(scores)[0]?.evaluated_at ? new Date(Object.values(scores)[0].evaluated_at).toLocaleTimeString() : '—'} accent="blue" icon={<RefreshCw size={18} />} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="p-4">
-              <SectionTitle>Confidence Scores by Source</SectionTitle>
+              <SectionTitle>{t('trust.section.bySource', 'Confidence Scores by Source')}</SectionTitle>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={chartData} layout="vertical" margin={{ left: 80 }}>
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} width={90} />
-                  <Tooltip
-                    contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-                  />
+                  <XAxis type="number" domain={[0, 100]} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} width={90} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface-hover)' }} />
                   <Bar dataKey="score" radius={[0, 4, 4, 0]}>
                     {chartData.map((_, i) => <Cell key={i} fill={_.fill} />)}
                   </Bar>
@@ -108,10 +102,10 @@ export default function TrustDashboard() {
             </Card>
 
             <Card className="p-4">
-              <SectionTitle>Source Details</SectionTitle>
+              <SectionTitle>{t('trust.section.sourceDetails', 'Source Details')}</SectionTitle>
               <div className="mt-2 space-y-2 max-h-[250px] overflow-y-auto">
                 {Object.entries(scores).length === 0 ? (
-                  <p className="text-sm text-slate-500 text-center py-8">No scores yet — run recalibration</p>
+                  <p className="text-sm text-slate-500 text-center py-8">{t('trust.noScores', 'No scores yet — run recalibration')}</p>
                 ) : (
                   Object.entries(scores).map(([key, val]) => (
                     <div key={key} className="p-3 rounded-xl bg-white/5 border border-white/10">
@@ -122,11 +116,11 @@ export default function TrustDashboard() {
                         </Pill>
                       </div>
                       <div className="grid grid-cols-5 gap-1 text-[10px] text-slate-500">
-                        <div>Base: {(val.factors.baseTrust * 100).toFixed(0)}%</div>
-                        <div>Fresh: {(val.factors.freshness * 100).toFixed(0)}%</div>
-                        <div>Space: {(val.factors.spatialConsistency * 100).toFixed(0)}%</div>
-                        <div>Hist: {(val.factors.historicalAccuracy * 100).toFixed(0)}%</div>
-                        <div>Cal: {(val.factors.calibrationStatus * 100).toFixed(0)}%</div>
+                        <div>{t('trust.factor.base', 'Base:')} {(val.factors.baseTrust * 100).toFixed(0)}%</div>
+                        <div>{t('trust.factor.freshness', 'Fresh:')} {(val.factors.freshness * 100).toFixed(0)}%</div>
+                        <div>{t('trust.factor.spatial', 'Space:')} {(val.factors.spatialConsistency * 100).toFixed(0)}%</div>
+                        <div>{t('trust.factor.historical', 'Hist:')} {(val.factors.historicalAccuracy * 100).toFixed(0)}%</div>
+                        <div>{t('trust.factor.calibration', 'Cal:')} {(val.factors.calibrationStatus * 100).toFixed(0)}%</div>
                       </div>
                     </div>
                   ))
@@ -136,9 +130,9 @@ export default function TrustDashboard() {
           </div>
 
           <Card className="p-4">
-            <SectionTitle>Detected Anomalies</SectionTitle>
+            <SectionTitle>{t('trust.section.anomalies', 'Detected Anomalies')}</SectionTitle>
             {anomalies.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-6">No anomalies detected</p>
+              <p className="text-sm text-slate-500 text-center py-6">{t('trust.noAnomalies', 'No anomalies detected')}</p>
             ) : (
               <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
                 {anomalies.map(a => (

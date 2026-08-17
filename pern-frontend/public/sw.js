@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ehi-v2';
+const CACHE_NAME = 'ehi-v4';
 const PRECACHE = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
@@ -22,15 +22,14 @@ self.addEventListener('fetch', (event) => {
   if (request.url.includes('/api/') || request.url.includes('/mqtt') || request.url.includes('hot-update')) return;
 
   event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
-      return fetch(request).then(response => {
-        if (response.ok && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone).catch(() => {}));
-        }
-        return response;
-      }).catch(() => cached || new Response('', { status: 503, statusText: 'Offline' }));
-    }).catch(() => fetch(request).catch(() => new Response('', { status: 503, statusText: 'Offline' })))
+    fetch(request).then(response => {
+      if (response.ok && response.type === 'basic') {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(request, clone).catch(() => {}));
+      }
+      return response;
+    }).catch(() =>
+      caches.match(request).then(cached => cached || new Response('', { status: 503, statusText: 'Offline' }))
+    )
   );
 });

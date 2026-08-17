@@ -445,18 +445,98 @@ export function computeAllVirtualSensors(physicalReadings: Record<string, number
   return computeDynamicVirtualSensors(physicalReadings);
 }
 
-export const VIRTUAL_SENSOR_DEFINITIONS = [
-  { id: 'aqi', name: 'Air Quality Index', icon: 'Wind', description: 'EPA-based composite air quality' },
-  { id: 'wqi', name: 'Water Quality Index', icon: 'Droplet', description: 'Weighted water health score' },
-  { id: 'risk', name: 'Environmental Risk', icon: 'AlertTriangle', description: 'Overall ecosystem risk' },
-  { id: 'indoor', name: 'Indoor Air Score', icon: 'Home', description: 'Indoor environment quality' },
-  { id: 'thermal', name: 'Thermal Comfort', icon: 'ThermometerSun', description: 'Heat stress & comfort' },
-  { id: 'corrosion', name: 'Corrosion Index', icon: 'Shield', description: 'Water infrastructure corrosion risk' },
-  { id: 'bod', name: 'Biological Oxygen Demand', icon: 'FlaskConical', description: 'Estimated organic pollution' },
-  { id: 'agri', name: 'Agricultural Suitability', icon: 'Sprout', description: 'Soil & crop viability' },
-  { id: 'eutro', name: 'Eutrophication Risk', icon: 'Waves', description: 'Algal bloom potential' },
-  { id: 'exposure', name: 'Human Exposure Index', icon: 'Users', description: 'Human health exposure level' },
+// ==================== METADATA & HELPERS ====================
+
+export interface VirtualSensorMeta {
+  id: string;
+  name: string;
+  icon: string;
+  category: 'air' | 'water' | 'environmental' | 'agricultural' | 'health';
+  description: string;
+  typicalRange: [number, number];
+  unit: string;
+  requiredInputs: string[];
+  improvementTip: string;
+}
+
+export const VIRTUAL_SENSOR_METADATA: VirtualSensorMeta[] = [
+  { id: 'aqi', name: 'Air Quality Index', icon: 'Wind', category: 'air', unit: '',
+    description: 'EPA multi-pollutant composite air quality index', typicalRange: [0, 500],
+    requiredInputs: ['pm25', 'pm10', 'no2', 'o3', 'so2', 'co'],
+    improvementTip: 'Reduce PM2.5 & NO₂ emissions; improve ventilation' },
+  { id: 'wqi', name: 'Water Quality Index', icon: 'Droplet', category: 'water', unit: '',
+    description: 'Weighted water health score from pH, TDS, turbidity & DO', typicalRange: [5, 100],
+    requiredInputs: ['ph', 'tds', 'tb', 'dO'],
+    improvementTip: 'Neutralize pH; reduce TDS via filtration; aerate to raise DO' },
+  { id: 'risk', name: 'Environmental Risk', icon: 'AlertTriangle', category: 'environmental', unit: '',
+    description: 'Overall ecosystem risk combining air & water hazards', typicalRange: [5, 140],
+    requiredInputs: ['pm25', 'ph', 'mq', 'co2'],
+    improvementTip: 'Mitigate pollution sources; improve waste management' },
+  { id: 'indoor', name: 'Indoor Air Score', icon: 'Home', category: 'air', unit: '',
+    description: 'Indoor environment quality based on CO₂, VOC, temp & humidity', typicalRange: [12, 100],
+    requiredInputs: ['co2', 'voc', 'tmp', 'hum'],
+    improvementTip: 'Increase ventilation; use air purifiers; control humidity' },
+  { id: 'thermal', name: 'Thermal Comfort', icon: 'ThermometerSun', category: 'environmental', unit: '',
+    description: 'Heat stress index from Rothfusz regression (temp + humidity)', typicalRange: [60, 125],
+    requiredInputs: ['tmp', 'hum'],
+    improvementTip: 'Use HVAC shading; reduce humidity; schedule outdoor work wisely' },
+  { id: 'corrosion', name: 'Corrosion Index', icon: 'Shield', category: 'water', unit: '',
+    description: 'Water infrastructure corrosion risk from pH, TDS, DO & temp', typicalRange: [5, 95],
+    requiredInputs: ['ph', 'tds', 'dO', 'wT'],
+    improvementTip: 'Maintain pH 7–8; reduce TDS; monitor dissolved oxygen' },
+  { id: 'bod', name: 'Biological Oxygen Demand', icon: 'FlaskConical', category: 'water', unit: 'mg/L',
+    description: 'Estimated organic pollution from DO deficit', typicalRange: [0.5, 18],
+    requiredInputs: ['dO', 'wT', 'tds'],
+    improvementTip: 'Reduce organic runoff; aerate water bodies' },
+  { id: 'agri', name: 'Agricultural Suitability', icon: 'Sprout', category: 'agricultural', unit: '%',
+    description: 'Soil & crop viability from moisture, pH & temperature', typicalRange: [20, 100],
+    requiredInputs: ['sm', 'ph', 'tmp'],
+    improvementTip: 'Irrigate to maintain 20–60% moisture; amend soil pH' },
+  { id: 'eutro', name: 'Eutrophication Risk', icon: 'Waves', category: 'water', unit: '',
+    description: 'Algal bloom potential from TDS, pH, water temp & DO', typicalRange: [5, 95],
+    requiredInputs: ['tds', 'ph', 'wT', 'dO'],
+    improvementTip: 'Reduce nutrient runoff; control TDS; maintain DO > 6 mg/L' },
+  { id: 'exposure', name: 'Human Exposure Index', icon: 'Users', category: 'health', unit: '',
+    description: 'Human health exposure level from PM2.5, gas, CO₂, VOC & temp', typicalRange: [15, 180],
+    requiredInputs: ['pm25', 'mq', 'co2', 'voc'],
+    improvementTip: 'Use personal protective equipment; improve air filtration' },
 ];
+
+/** Legacy alias — use VIRTUAL_SENSOR_METADATA for richer data */
+export const VIRTUAL_SENSOR_DEFINITIONS = VIRTUAL_SENSOR_METADATA.map(
+  m => ({ id: m.id, name: m.name, icon: m.icon, description: m.description })
+);
+
+/** Get which physical sensors are needed for a given computed sensor */
+export function getRequiredInputsFor(sensorId: string): string[] {
+  const meta = VIRTUAL_SENSOR_METADATA.find(m => m.id === sensorId);
+  return meta ? meta.requiredInputs : [];
+}
+
+/** Get aggregate summary across computed virtual sensors */
+export function getComputedSensorSummary(results: VirtualSensorResult[]): {
+  total: number; avgConfidence: number; highConf: number;
+  byCategory: Record<string, number>; available: number; missing: number;
+} {
+  const total = results.length;
+  const avgConfidence = total > 0
+    ? Math.round(results.reduce((s, r) => s + r.confidence, 0) / total)
+    : 0;
+  const highConf = results.filter(r => r.confidence >= 70).length;
+  const byCategory: Record<string, number> = {};
+  for (const r of results) byCategory[r.category] = (byCategory[r.category] || 0) + 1;
+  return { total, avgConfidence, highConf, byCategory, available: total, missing: VIRTUAL_SENSOR_METADATA.length - total };
+}
+
+/**
+ * Calibrates confidence based on input data noise.
+ * Higher noise = lower confidence. Call after computeDynamicVirtualSensors.
+ */
+export function calibrateConfidence(result: VirtualSensorResult, noiseFactor = 0): VirtualSensorResult {
+  if (noiseFactor <= 0) return result;
+  const reduction = Math.min(20, Math.round(noiseFactor * 15));
+  return { ...result, confidence: Math.max(25, result.confidence - reduction) };
+}
 
 /**
  * Downsamples telemetry data array for smooth chart rendering.

@@ -6,6 +6,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const rateLimiter = require('../middleware/rate-limiter');
+const { generateApiKey, sha256 } = require('../middleware/device-auth');
+const { normalizeDeviceConfig, DEFAULT_CONFIG } = require('../services/device-config');
+const { buildOtaMessages, publishOta } = require('../services/mqtt-ota');
+const { sendError } = require('../middleware/error-handler');
 const limiter = rateLimiter(60000, 60);
 
 // Static routes MUST come before /:id to avoid shadowing
@@ -66,7 +70,7 @@ router.post('/', limiter, async (req, res) => {
   try {
     await db.upsertDevice({ id, name: name || id, type: type || 'Generic', status: status || 'online', lastSeen: Date.now() });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.put('/:id', limiter, async (req, res) => {
@@ -74,14 +78,14 @@ router.put('/:id', limiter, async (req, res) => {
     const { id: _id, ...body } = req.body;
     await db.upsertDevice({ id: req.params.id, ...body, lastSeen: Date.now() });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
     await db.deleteDevice(req.params.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 router.get('/:id/readings', async (req, res) => {
@@ -104,7 +108,7 @@ router.post('/:id/metadata', limiter, async (req, res) => {
     const { device_id: _did, ...metaBody } = req.body;
     await db.upsertDeviceMetadata({ device_id: req.params.id, ...metaBody });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // Set device location (lat/lng)
@@ -125,7 +129,32 @@ router.put('/:id/location', limiter, async (req, res) => {
       config: existing?.config || {},
     });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
+});
+
+// Device API key — issue a key (returned exactly once, stored hashed)
+router.post('/:id/api-key', limiter, async (req, res) => {
+  try {
+    const key = generateApiKey();
+    await db.storeDeviceApiKey(req.params.id, sha256(key));
+    res.json({ success: true, deviceId: req.params.id, apiKey: key, note: 'Store this key securely — it is shown only once.' });
+  } catch (err) { sendError(res, err); }
+});
+
+// Device API key — revoke
+router.post('/:id/api-key/revoke', limiter, async (req, res) => {
+  try {
+    await db.revokeDeviceApiKey(req.params.id);
+    res.json({ success: true });
+  } catch (err) { sendError(res, err); }
+});
+
+// Device API key — status (whether a key is configured, never the key itself)
+router.get('/:id/api-key-status', async (req, res) => {
+  try {
+    const hasKey = await db.deviceHasApiKey(req.params.id);
+    res.json({ deviceId: req.params.id, hasKey, enforcementEnabled: process.env.ENFORCE_DEVICE_AUTH === 'true' });
+  } catch { res.json({ deviceId: req.params.id, hasKey: false, enforcementEnabled: process.env.ENFORCE_DEVICE_AUTH === 'true' }); }
 });
 
 // Device health
@@ -145,22 +174,100 @@ router.get('/:id/health/history', async (req, res) => {
 });
 
 // Actuator command (publishes via MQTT if available)
+// Canonical topic: pern/devices/{deviceId}/actuators/{actuator}/command
+// Payload: { device, actuator, command: 'on'|'off'|'set', params, source, timestamp }
 router.post('/:id/actuator', limiter, async (req, res) => {
-  const { actuator, action } = req.body;
-  if (!actuator || !action) {
-    return res.status(400).json({ error: 'actuator and action required' });
+  const { actuator, action, command, params } = req.body;
+  const cmd = action || command;
+  if (!actuator || !cmd) {
+    return res.status(400).json({ error: 'actuator and action/command required' });
+  }
+  if (cmd === 'set' && (params == null || params.value == null)) {
+    return res.status(400).json({ error: 'params.value required for set command' });
   }
   try {
     const mqttClient = req.app.get('mqttClient');
-    if (mqttClient) {
-      const topic = `pern/actuators/${req.params.id}/command`;
-      const payload = JSON.stringify({ actuator, action, source: 'api', timestamp: Date.now() });
-      mqttClient.publish(topic, payload);
-      res.json({ success: true, topic, payload: JSON.parse(payload) });
-    } else {
-      res.status(503).json({ error: 'MQTT not available' });
+    if (!mqttClient) {
+      return res.status(503).json({ error: 'MQTT not available' });
     }
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const topic = `pern/devices/${req.params.id}/actuators/${actuator}/command`;
+    const payload = {
+      device: req.params.id,
+      actuator,
+      command: cmd,
+      params: params || {},
+      source: 'api',
+      timestamp: Date.now(),
+    };
+    mqttClient.publish(topic, JSON.stringify(payload));
+    res.json({ success: true, topic, payload });
+  } catch (err) { sendError(res, err); }
+});
+
+// Desired runtime config for a device (stored in device_metadata.config)
+router.get('/:id/config', async (req, res) => {
+  try {
+    const meta = await db.getDeviceMetadata(req.params.id);
+    const stored = meta?.config || {};
+    const config = {
+      ...DEFAULT_CONFIG,
+      ...stored,
+      sensors: { ...DEFAULT_CONFIG.sensors, ...(stored.sensors || {}) },
+    };
+    res.json({
+      deviceId: req.params.id,
+      config,
+      lastConfigPush: meta?.last_config_push || null,
+    });
+  } catch {
+    res.json({ deviceId: req.params.id, config: DEFAULT_CONFIG, lastConfigPush: null });
+  }
+});
+
+// Push a new runtime config to the device via MQTT (pern/devices/{id}/config)
+router.post('/:id/config', limiter, async (req, res) => {
+  const { config, error } = normalizeDeviceConfig(req.body);
+  if (error) return res.status(400).json({ error });
+  const mqttClient = req.app.get('mqttClient');
+  if (!mqttClient) return res.status(503).json({ error: 'MQTT not available' });
+  const topic = `pern/devices/${req.params.id}/config`;
+  const payload = { ...config, source: 'api', timestamp: Date.now() };
+  const ok = mqttClient.publish(topic, JSON.stringify(payload));
+  if (!ok) return res.status(503).json({ error: 'MQTT publish failed' });
+
+  const existing = await db.getDeviceMetadata(req.params.id).catch(() => null);
+  await db.upsertDeviceMetadata({
+    device_id: req.params.id,
+    firmware_version: existing?.firmware_version || '',
+    location_lat: existing?.location_lat || null,
+    location_lng: existing?.location_lng || null,
+    description: existing?.description || '',
+    tags: existing?.tags || [],
+    config: { ...(existing?.config || {}), ...config, lastUpdatedAt: Date.now() },
+  });
+  await db.updateDeviceConfigPush(req.params.id);
+
+  res.json({ success: true, topic, payload, delivered: true });
+});
+
+// OTA push — chunks base64 firmware over MQTT (pern/devices/{id}/ota)
+router.post('/:id/ota', limiter, async (req, res) => {
+  const { firmware, version } = req.body || {};
+  const built = buildOtaMessages(firmware, { version });
+  if (built.error) return res.status(400).json({ error: built.error });
+  const mqttClient = req.app.get('mqttClient');
+  const result = await publishOta(mqttClient, req.params.id, built.messages);
+  if (!result.success) {
+    return res.status(503).json({ error: result.error, sentIndex: result.sentIndex });
+  }
+  res.json({
+    success: true,
+    deviceId: req.params.id,
+    totalChunks: result.totalChunks,
+    decodedBytes: built.decodedBytes,
+    version: version || null,
+    topic: `pern/devices/${req.params.id}/ota`,
+  });
 });
 
 module.exports = router;

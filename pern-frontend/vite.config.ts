@@ -1,18 +1,74 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
+import { copyFile, readFile, writeFile } from 'node:fs/promises'
+import type { Plugin } from 'vite'
 
-// https://vite.dev/config/
+const landingFile = fileURLToPath(new URL('public/landing.html', import.meta.url))
+
+// Serves the standalone landing page at the site root (/) and keeps the PERN
+// app reachable at /app.html (dev) and dist/app.html (prod).
+function landingAtRoot(): Plugin {
+  return {
+    name: 'landing-at-root',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const pathname = (req.url || '').split('?')[0]
+        if (pathname === '/') {
+          try {
+            const html = await readFile(landingFile, 'utf-8')
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'text/html; charset=utf-8')
+            res.end(html)
+            return
+          } catch {
+            /* fall through */
+          }
+        } else if (pathname === '/app.html') {
+          res.statusCode = 302
+          res.setHeader('Location', '/index.html')
+          res.end()
+          return
+        }
+        next()
+      })
+    },
+    async closeBundle() {
+      const appHtml = fileURLToPath(new URL('dist/index.html', import.meta.url))
+      const appTarget = fileURLToPath(new URL('dist/app.html', import.meta.url))
+      try {
+        await copyFile(appHtml, appTarget)
+        const landing = await readFile(landingFile, 'utf-8')
+        await writeFile(appHtml, landing)
+      } catch (err) {
+        this.error(`landing-at-root: ${(err as Error).message}`)
+      }
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), landingAtRoot()],
   resolve: {
     dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },
   server: {
     port: 5174,
+    allowedHosts: ['.trycloudflare.com', '.loca.lt', '.serveo.net', '.ngrok-free.dev', '.ngrok.app'],
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://localhost:8081',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/mqtt': {
+        target: 'ws://localhost:9001',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },
