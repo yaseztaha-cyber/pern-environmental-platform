@@ -38,6 +38,64 @@ function makeGlowTexture(): THREE.CanvasTexture | null {
   return new THREE.CanvasTexture(canvas);
 }
 
+function OrbitRing({
+  radius,
+  color,
+  speed = 0.15,
+  tiltX = Math.PI / 2,
+  tiltY = 0,
+}: {
+  radius: number;
+  color: string;
+  speed?: number;
+  tiltX?: number;
+  tiltY?: number;
+}) {
+  const ref = useRef<THREE.Line>(null);
+  useFrame((state) => {
+    if (ref.current) ref.current.rotation.z = state.clock.elapsedTime * speed;
+  });
+  const geo = useMemo(() => {
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 128; i++) {
+      const a = (i / 128) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0));
+    }
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  }, [radius]);
+  return (
+    <line ref={ref as never} geometry={geo} rotation={[tiltX, tiltY, 0]}>
+      <lineBasicMaterial color={color} transparent opacity={0.15} depthWrite={false} />
+    </line>
+  );
+}
+
+function PulseRing({ baseRadius, color }: { baseRadius: number; color: string }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime;
+    const cycle = (t * 0.4) % 1;
+    const r = baseRadius + cycle * 1.5;
+    ref.current.scale.setScalar(r);
+    const mat = ref.current.material as THREE.MeshBasicMaterial;
+    mat.opacity = (1 - cycle) * 0.18;
+  });
+  return (
+    <mesh ref={ref} rotation={[Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[0.97, 1.0, 64]} />
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.15}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </mesh>
+  );
+}
+
 function GlassOrb({
   progress,
   progressRef,
@@ -52,6 +110,7 @@ function GlassOrb({
   const core = useRef<THREE.Sprite>(null);
   const halo = useRef<THREE.Sprite>(null);
   const smog = useRef<THREE.Group>(null);
+  const rim = useRef<THREE.Mesh>(null);
   const tmp = useRef(new THREE.Color());
 
   const glowTex = useMemo(makeGlowTexture, []);
@@ -143,6 +202,13 @@ function GlassOrb({
       wm.color.copy(mat);
     }
 
+    // Fresnel rim
+    if (rim.current) {
+      const rm = rim.current.material as THREE.MeshBasicMaterial;
+      rm.opacity = 0.12 + p * 0.15;
+      rm.color.copy(mat).multiplyScalar(1.4);
+    }
+
     if (core.current) {
       core.current.material.color.copy(mat);
       core.current.material.opacity = 0.55 + p * 0.4;
@@ -197,6 +263,29 @@ function GlassOrb({
           depthWrite={false}
         />
       </mesh>
+
+      {/* Fresnel rim sphere */}
+      <mesh ref={rim}>
+        <sphereGeometry args={[1.5, 32, 32]} />
+        <meshBasicMaterial
+          color="#2DD4BF"
+          transparent
+          opacity={0.12}
+          side={THREE.BackSide}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+      {/* Orbit rings */}
+      <OrbitRing radius={1.8} color="#2DD4BF" tiltX={1.3} tiltY={0.2} />
+      <OrbitRing radius={2.1} color="#0EA5E9" speed={-0.1} tiltX={0.9} tiltY={0.5} />
+      <OrbitRing radius={2.4} color="#A78BFA" speed={0.08} tiltX={1.5} tiltY={-0.3} />
+
+      {/* Pulse rings */}
+      <PulseRing baseRadius={1.5} color="#2DD4BF" />
+      <PulseRing baseRadius={1.5} color="#0EA5E9" />
+
       <sprite ref={halo}>
         <spriteMaterial
           map={glowTex}

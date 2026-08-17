@@ -1,4 +1,4 @@
-import { memo, useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Float, Sphere } from "@react-three/drei";
 import * as THREE from "three";
@@ -7,6 +7,24 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useSceneGate } from "../../hooks/useSceneGate";
 import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
 import { WarmFrame } from "./WarmFrame";
+
+function makeGlowTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.2, "rgba(255,255,255,0.8)");
+  g.addColorStop(0.5, "rgba(255,255,255,0.2)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
 
 function ParticleHalo({ color, chaos }: { color: string; chaos: number }) {
   const ref = useRef<THREE.Points>(null);
@@ -73,14 +91,40 @@ function ParticleHalo({ color, chaos }: { color: string; chaos: number }) {
   );
 }
 
+function OrbitRing({ color, radius, tilt }: { color: string; radius: number; tilt: [number, number, number] }) {
+  const ref = useRef<THREE.Line>(null);
+  useFrame((state) => {
+    if (ref.current) ref.current.rotation.z = state.clock.elapsedTime * 0.15;
+  });
+  const points = useMemo(() => {
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 128; i++) {
+      const a = (i / 128) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0));
+    }
+    return pts;
+  }, [radius]);
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry().setFromPoints(points);
+    return g;
+  }, [points]);
+  return (
+    <line ref={ref as never} geometry={geo} rotation={tilt}>
+      <lineBasicMaterial color={color} transparent opacity={0.2} depthWrite={false} />
+    </line>
+  );
+}
+
 function SphereGroup({
   position,
   color,
   chaos,
+  glowTex,
 }: {
   position: [number, number, number];
   color: string;
   chaos: number;
+  glowTex: THREE.CanvasTexture | null;
 }) {
   const inner = useRef<THREE.Group>(null);
   useFrame((state) => {
@@ -113,10 +157,86 @@ function SphereGroup({
             toneMapped={false}
           />
         </Sphere>
+        {glowTex && (
+          <sprite scale={[0.9, 0.9, 1]}>
+            <spriteMaterial
+              map={glowTex}
+              color={color}
+              transparent
+              opacity={0.5}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </sprite>
+        )}
+        <OrbitRing color={color} radius={1.3} tilt={[1.2, chaos * 0.5, 0]} />
+        <OrbitRing color={color} radius={1.6} tilt={[0.8, 0.3 + chaos * 0.3, 0.5]} />
         <ParticleHalo color={color} chaos={chaos} />
         <pointLight color={color} intensity={1.4} distance={4} />
       </group>
     </Float>
+  );
+}
+
+function ConnectingArcs({ positions }: { positions: [number, number, number][] }) {
+  const linesRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!linesRef.current) return;
+    const t = state.clock.elapsedTime;
+    linesRef.current.children.forEach((child, i) => {
+      const mat = (child as THREE.Line).material as THREE.LineBasicMaterial;
+      mat.opacity = 0.08 + Math.sin(t * 0.5 + i * 1.2) * 0.06;
+    });
+  });
+
+  const arcs = useMemo(() => {
+    const result: { points: Float32Array; color: string }[] = [];
+    const colors = ["#00D4AA", "#F59E0B", "#0EA5E9"];
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const [x1, y1, z1] = positions[i];
+        const [x2, y2, z2] = positions[j];
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2 + 1.2;
+        const mz = (z1 + z2) / 2;
+        const pts: number[] = [];
+        for (let k = 0; k <= 40; k++) {
+          const t = k / 40;
+          const u = 1 - t;
+          pts.push(
+            u * u * x1 + 2 * u * t * mx + t * t * x2,
+            u * u * y1 + 2 * u * t * my + t * t * y2,
+            u * u * z1 + 2 * u * t * mz + t * t * z2
+          );
+        }
+        result.push({
+          points: new Float32Array(pts),
+          color: colors[(i + j) % colors.length],
+        });
+      }
+    }
+    return result;
+  }, [positions]);
+
+  return (
+    <group ref={linesRef}>
+      {arcs.map((arc, i) => {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(arc.points, 3));
+        return (
+          <line key={i} geometry={g}>
+            <lineBasicMaterial
+              color={arc.color}
+              transparent
+              opacity={0.1}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </line>
+        );
+      })}
+    </group>
   );
 }
 
@@ -125,6 +245,16 @@ export const ERISpheres = memo(function ERISpheres() {
   const { inView, warm } = useSceneGate(ref, "400px", 2000);
   const isMobile = useMediaQuery("(max-width: 767px)");
   const reducedMotion = usePrefersReducedMotion();
+  const glowTex = useMemo(makeGlowTexture, []);
+
+  const spherePositions: [number, number, number][] = useMemo(
+    () => [
+      isMobile ? [-2.2, 0, 0] : [-2.8, 0, 0],
+      [0, 0.15, 0],
+      isMobile ? [2.2, 0, 0] : [2.8, 0, 0],
+    ],
+    [isMobile]
+  );
 
   return (
     <div ref={ref} className="h-[300px] w-full sm:h-[420px]">
@@ -140,16 +270,19 @@ export const ERISpheres = memo(function ERISpheres() {
         >
           <ambientLight intensity={0.35} />
           <SphereGroup
-            position={isMobile ? [-2.2, 0, 0] : [-2.8, 0, 0]}
+            position={spherePositions[0]}
             color="#10B981"
             chaos={0.2}
+            glowTex={glowTex}
           />
-          <SphereGroup position={[0, 0.15, 0]} color="#F59E0B" chaos={0.7} />
+          <SphereGroup position={spherePositions[1]} color="#F59E0B" chaos={0.7} glowTex={glowTex} />
           <SphereGroup
-            position={isMobile ? [2.2, 0, 0] : [2.8, 0, 0]}
+            position={spherePositions[2]}
             color="#EF4444"
             chaos={1.4}
+            glowTex={glowTex}
           />
+          <ConnectingArcs positions={spherePositions} />
           <WarmFrame />
         </Canvas>
       )}
